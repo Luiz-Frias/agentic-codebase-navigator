@@ -145,7 +145,7 @@ class RLM:
         Setup the system prompt for the RLM. Also include metadata about the prompt and build
         up the initial message history.
         """
-        metadata = QueryMetadata(prompt)
+        metadata = QueryMetadata.from_context(prompt)
         message_history = build_rlm_system_prompt(
             system_prompt=self.system_prompt, query_metadata=metadata
         )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import textwrap
 
-from rlm._legacy.core.types import QueryMetadata
+from rlm.domain.models.query_metadata import QueryMetadata
 
 # System prompt for the REPL environment with explicit final answer checking
 RLM_SYSTEM_PROMPT = textwrap.dedent(
