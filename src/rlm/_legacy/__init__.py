@@ -10,4 +10,6 @@ depending on `_legacy` over time.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from rlm._legacy.core.rlm import RLM
+
+__all__ = ["RLM"]
