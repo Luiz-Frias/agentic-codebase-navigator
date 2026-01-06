@@ -1,0 +1,212 @@
+# =============================================================================
+# CodeRabbit Configuration (2025)
+# =============================================================================
+# AI-powered code review configuration for ODS template repository
+# Docs: https://docs.coderabbit.ai/reference/configuration
+# =============================================================================
+
+# Global Settings
+language: "en-US"
+early_access: true
+enable_free_tier: false
+
+# Custom tone instruction for reviews
+tone_instructions: |
+  - Be constructive and educational
+  - Focus on security, performance, and maintainability
+  - Suggest improvements following DRY, SOLID & KISS principles
+
+# =============================================================================
+# Reviews Configuration
+# =============================================================================
+reviews:
+  # Review style: "chill" (friendly) or "assertive" (strict)
+  profile: "assertive" # Production-grade quality bar (DRY, SOLID & KISS) bar
+
+  # Request changes workflow
+  request_changes_workflow: true
+
+  # High-level summary of PR changes
+  high_level_summary: true
+
+  # Generate poem (fun touch for completed PRs)
+  poem: false
+
+  # Review-level summary
+  review_status: true
+
+  # Collapse walkthrough sections
+  collapse_walkthrough: false
+
+  # Automatic review settings
+  auto_review:
+    enabled: true
+
+    # Ignore specific file patterns
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT REVIEW"
+      - "[skip ci]"
+
+    # Auto-review drafts
+    drafts: false
+
+    # Path-based filtering
+    path_filters:
+      # Exclude generated/vendor code from reviews
+      - "!**/*.lock"
+      - "!**/*.min.js"
+      - "!**/*.min.css"
+      - "!**/vendor/**"
+      - "!**/node_modules/**"
+      - "!**/.venv/**"
+      - "!**/target/**" # Rust build artifacts
+      - "!**/dist/**"
+      - "!**/build/**"
+
+      # Focus on source code
+      - "**/*.py"
+      - "**/*.rs"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.go"
+      - "**/*.c"
+      - "**/*.cpp"
+      - "**/*.sh"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "**/*.toml"
+      - "**/*.md"
+
+  # Tool integrations (linters, security scanners)
+  tools:
+    # Security & Secret Scanning
+    gitleaks:
+      enabled: true
+
+    # Shellcheck for bash scripts
+    shellcheck:
+      enabled: true
+
+    # YAML linting
+    yamllint:
+      enabled: true
+
+    # Markdown linting
+    markdownlint:
+      enabled: true
+
+    # Language-specific tools run via pre-commit (not duplicated here)
+    # ruff, mypy, clippy, prettier, eslint handled by .pre-commit-config.yaml
+
+  # Path-specific instructions
+  path_instructions:
+    - path: "scripts/**"
+      instructions: |
+        - Ensure scripts have proper error handling (set -euo pipefail)
+        - Check for security vulnerabilities (injection, path traversal)
+        - Verify logging to appropriate locations
+        - Confirm pre-flight/post-flight check patterns
+
+    - path: "templates/**"
+      instructions: |
+        - Verify pattern quality meets "production grade in top 0.001%" bar
+        - Check for security best practices
+        - Ensure comprehensive inline documentation
+        - Validate template is language-agnostic where applicable
+
+    - path: "**/*.py"
+      instructions: |
+        - Follow PEP 8 and type hints required
+        - Check for proper error handling and logging
+        - Verify SOLID principles
+        - Ensure DRY (extract repeated code)
+
+    - path: "**/*.rs"
+      instructions: |
+        - Follow Rust API guidelines
+        - Check for proper error handling (Result<T, E>)
+        - Verify memory safety and ownership
+        - Ensure idiomatic Rust patterns
+
+    - path: "**/*.{ts,tsx}"
+      instructions: |
+        - Follow TypeScript best practices
+        - Check for proper error handling
+        - Verify type safety (avoid 'any')
+        - Ensure functional programming patterns where appropriate
+
+    - path: ".pre-commit-config.yaml"
+      instructions: |
+        - Validate all hook repos are accessible
+        - Check for version pinning (no 'latest')
+        - Ensure hooks are idempotent
+        - Verify manual stages for experimental hooks
+
+    - path: "mise.toml"
+      instructions: |
+        - Validate tool versions are pinned
+        - Check for security in environment variables
+        - Ensure tasks have proper error handling
+        - Verify PATH modifications are safe
+
+    - path: "docs/**"
+      instructions: |
+        - Verify markdown formatting
+        - Check for broken links
+        - Ensure code examples are correct and tested
+        - Validate cross-references to other docs
+
+  # Code generation settings
+  finishing_touches:
+    generate_docstrings:
+      enabled: true
+      style: "google" # Google-style docstrings for Python
+
+    generate_unit_tests:
+      enabled: false # Disabled (tests manually written for quality)
+
+# =============================================================================
+# Chat Configuration
+# =============================================================================
+chat:
+  auto_reply: true
+
+# =============================================================================
+# Knowledge Base
+# =============================================================================
+knowledge_base:
+  # Organizational coding guidelines
+  code_guidelines:
+    enabled: true
+
+  # Share learnings across PRs
+  learnings:
+    scope: "local" # Learn from this repo only (not global)
+
+# =============================================================================
+# Ignored Files/Patterns
+# =============================================================================
+# These are never reviewed by CodeRabbit
+ignore:
+  - "**/*.lock"
+  - "**/*.min.*"
+  - "**/vendor/**"
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/target/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/__pycache__/**"
+  - "**/*.pyc"
+  - "**/coverage/**"
+  - "**/.pytest_cache/**"
+  - "**/.mypy_cache/**"
+  - "**/.ruff_cache/**"
+
+# =============================================================================
+# Abort Review Conditions
+# =============================================================================
+# CodeRabbit will abort review if these conditions are met
+abort_on_changes_requested: false
+abort_on_close: true
