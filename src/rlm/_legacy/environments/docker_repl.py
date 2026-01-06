@@ -178,7 +178,7 @@ class DockerREPL(NonIsolatedEnv):
 
     def __init__(
         self,
-        image: str = "python:3.11-slim",
+        image: str = "python:3.12-slim",
         lm_handler_address: tuple[str, int] | None = None,
         context_payload: dict | list | str | None = None,
         setup_code: str | None = None,

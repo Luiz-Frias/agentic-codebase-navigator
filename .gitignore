@@ -38,5 +38,8 @@ $RECYCLE.BIN/
 .env.test.local
 .env.production.local
 
+# Logs
+logs/
+
 # Local References
 references/
