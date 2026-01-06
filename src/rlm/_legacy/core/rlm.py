@@ -269,7 +269,7 @@ class RLM:
         """
         current_prompt = message_history + [
             {
-                "role": "assistant",
+                "role": "user",
                 "content": "Please provide a final answer to the user's question based on the information provided.",
             }
         ]
