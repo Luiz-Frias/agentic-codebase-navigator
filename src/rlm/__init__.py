@@ -9,5 +9,6 @@ modular monolith.
 from __future__ import annotations
 
 from rlm._meta import __version__
+from rlm.api.rlm import RLM
 
-__all__ = ["__version__"]
+__all__ = ["RLM", "__version__"]
