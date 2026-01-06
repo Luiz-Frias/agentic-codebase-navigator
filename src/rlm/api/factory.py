@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from rlm.api.rlm import RLM
-from rlm.application.config import RLMConfig
+from rlm.application.config import EnvironmentName, RLMConfig
 from rlm.domain.ports import LLMPort
 
 
 def create_rlm(
     llm: LLMPort,
     *,
-    environment: str = "local",
+    environment: EnvironmentName = "local",
     environment_kwargs: dict[str, Any] | None = None,
     max_depth: int = 1,
     max_iterations: int = 30,

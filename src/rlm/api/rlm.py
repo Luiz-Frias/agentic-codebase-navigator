@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rlm.application.config import EnvironmentName
 from rlm.application.services.legacy_orchestrator import LegacyOrchestratorService
 from rlm.domain.ports import LLMPort, Prompt
 
@@ -19,7 +20,7 @@ class RLM:
         self,
         llm: LLMPort,
         *,
-        environment: str = "local",
+        environment: EnvironmentName = "local",
         environment_kwargs: dict[str, Any] | None = None,
         max_depth: int = 1,
         max_iterations: int = 30,

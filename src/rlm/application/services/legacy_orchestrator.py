@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from rlm.adapters.legacy.llm import _as_legacy_client
+from rlm.application.config import EnvironmentName
 from rlm.domain.ports import LLMPort, Prompt
 
 
@@ -22,7 +23,7 @@ class LegacyOrchestratorService:
         self,
         llm: LLMPort,
         *,
-        environment: str = "local",
+        environment: EnvironmentName = "local",
         environment_kwargs: dict[str, Any] | None = None,
         max_depth: int = 1,
         max_iterations: int = 30,
@@ -57,7 +58,7 @@ class LegacyOrchestratorService:
             legacy = legacy_rlm_mod.RLM(
                 backend="openai",
                 backend_kwargs={"model_name": self._llm.model_name},
-                environment=self._environment,  # type: ignore[arg-type]
+                environment=self._environment,
                 environment_kwargs=self._environment_kwargs,
                 max_depth=self._max_depth,
                 max_iterations=self._max_iterations,

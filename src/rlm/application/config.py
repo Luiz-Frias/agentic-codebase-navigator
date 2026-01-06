@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+EnvironmentName = Literal["local", "modal", "docker", "prime"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,7 +24,7 @@ class LLMConfig:
 class EnvironmentConfig:
     """Minimal environment configuration (Phase 1)."""
 
-    environment: str
+    environment: EnvironmentName
     environment_kwargs: dict[str, Any] = field(default_factory=dict)
 
 

@@ -29,3 +29,18 @@ This keeps **dependencies pointing inward** for the new layers (`domain/` remain
 - **No runtime imports from** `references/**` (the upstream snapshot stays read-only).
 - **Domain must not import outer layers** (`adapters/`, `infrastructure/`, `api/`, `application/`, `_legacy/`) or third-party deps.
 
+## Type mapping (Phase 2 / domain models)
+
+Phase 2 introduces **domain-owned, dependency-free dataclasses** under `src/rlm/domain/models/`.
+These normalize naming (drop `RLM*` prefixes, prefer clear nouns) while keeping the same core semantics.
+
+| Legacy type (`rlm._legacy.core.types`) | Domain type (`rlm.domain.models`) | Notes |
+|---|---|---|
+| `ModelUsageSummary` | `ModelUsageSummary` | Same fields; domain defaults to zeroed totals. |
+| `UsageSummary` | `UsageSummary` | Same field name `model_usage_summaries`. |
+| `RLMChatCompletion` | `ChatCompletion` | Same payload; domain `prompt` remains `Any` until ports are tightened. |
+| `REPLResult` | `ReplResult` | Same core fields; `llm_calls` becomes a list of domain `ChatCompletion`. |
+| `CodeBlock` | `CodeBlock` | Same structure: `(code, result)`. |
+| `RLMIteration` | `Iteration` | Same semantics; `final_answer` is `str | None` in domain. |
+
+Serialization helpers (`to_dict`/`from_dict`) will be implemented in `p2_m1_t03`.

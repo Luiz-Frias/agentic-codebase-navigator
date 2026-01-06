@@ -182,12 +182,15 @@ class DockerREPL(NonIsolatedEnv):
         lm_handler_address: tuple[str, int] | None = None,
         context_payload: dict | list | str | None = None,
         setup_code: str | None = None,
+        *,
+        subprocess_timeout_s: float = 300,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.image = image
         self.lm_handler_address = lm_handler_address
+        self.subprocess_timeout_s = subprocess_timeout_s
         self.container_id: str | None = None
         self.proxy_server: HTTPServer | None = None
         self.proxy_thread: threading.Thread | None = None
@@ -246,6 +249,7 @@ class DockerREPL(NonIsolatedEnv):
                 ],
                 capture_output=True,
                 text=True,
+                timeout=self.subprocess_timeout_s,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"Failed to start container: {result.stderr}")
@@ -265,7 +269,12 @@ class DockerREPL(NonIsolatedEnv):
                     "requests",
                 ],
                 capture_output=True,
+                timeout=self.subprocess_timeout_s,
             )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(
+                f"Failed to start container: docker command timed out after {self.subprocess_timeout_s}s"
+            ) from e
         except Exception:
             self.cleanup()
             raise
@@ -310,11 +319,35 @@ class DockerREPL(NonIsolatedEnv):
             self.pending_calls.clear()
 
         script = _build_exec_script(code, self.proxy_port)
-        result = subprocess.run(
-            ["docker", "exec", self.container_id, "python", "-c", script],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["docker", "exec", self.container_id, "python", "-c", script],
+                capture_output=True,
+                text=True,
+                timeout=self.subprocess_timeout_s,
+            )
+        except subprocess.TimeoutExpired as e:
+            # Best-effort: stop the container so we don't leave a runaway python process behind.
+            with self._calls_lock:
+                calls = self.pending_calls.copy()
+                self.pending_calls.clear()
+
+            try:
+                self.cleanup()
+            except Exception:
+                pass
+
+            stderr = (
+                e.stderr or ""
+            ) + f"\nTimeoutExpired: docker exec exceeded {self.subprocess_timeout_s}s"
+            stdout = e.stdout or ""
+            return REPLResult(
+                stdout=stdout,
+                stderr=stderr,
+                locals={},
+                execution_time=time.perf_counter() - start,
+                rlm_calls=calls,
+            )
 
         with self._calls_lock:
             calls = self.pending_calls.copy()
