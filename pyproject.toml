@@ -1,7 +1,69 @@
 [project]
 name = "agentic-codebase-navigator"
 version = "0.1.0"
-description = "Add your description here"
+description = "Agentic codebase navigator built on Recursive Language Model (RLM) patterns."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+
+[project.optional-dependencies]
+# LLM/provider adapters (installed only when needed)
+llm-openai = ["openai>=2.14.0"]
+llm-anthropic = ["anthropic>=0.75.0"]
+llm-gemini = ["google-genai>=1.56.0"]
+llm-portkey = ["portkey-ai>=2.1.0"]
+llm-litellm = ["litellm>=1.0.0"]
+llm-azure-openai = ["openai>=2.14.0"]
+
+# Environment adapters (installed only when needed)
+env-modal = ["modal>=0.73.0", "dill>=0.3.7"]
+# Docker uses the local Docker CLI; no Python dependency is required, but we keep an explicit extra.
+env-docker = []
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["rlm", "rlm.*"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.10",
+    "ty>=0.0.7",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["references", ".git", "__pycache__", "*.egg-info"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
