@@ -166,13 +166,13 @@ class RLM:
             root_prompt: We allow the RLM's root LM to see a (small) prompt that the user specifies. A common example of this
             is if the user is asking the RLM to answer a question, we can pass the question as the root prompt.
         Returns:
-            A final answer as a string.
+            An `RLMChatCompletion` containing the final answer in `.response`.
         """
         time_start = time.perf_counter()
 
         # If we're at max depth, the RLM is an LM, so we fallback to the regular LM.
         if self.depth >= self.max_depth:
-            return self._fallback_answer(prompt)
+            return self._fallback_answer(prompt, time_start=time_start)
 
         with self._spawn_completion_context(prompt) as (lm_handler, environment):
             message_history = self._setup_prompt(prompt)
@@ -287,10 +287,38 @@ class RLM:
 
         return response
 
-    def _fallback_answer(self, message: str | dict[str, Any]) -> str:
+    def _fallback_answer(
+        self,
+        message: str | dict[str, Any],
+        *,
+        time_start: float,
+    ) -> RLMChatCompletion:
         """
         Fallback behavior if the RLM is actually at max depth, and should be treated as an LM.
         """
         client: BaseLM = get_client(self.backend, self.backend_kwargs)
-        response = client.completion(message)
-        return response
+        raw = client.completion(message)
+        time_end = time.perf_counter()
+
+        # If the model follows the RLM protocol (FINAL(...)), preserve the legacy
+        # contract that `.response` contains the extracted final answer.
+        final_answer = find_final_answer(raw)
+        response = final_answer if final_answer is not None else raw
+
+        usage = client.get_last_usage()
+        self.verbose.print_final_answer(response)
+        self.verbose.print_summary(0, time_end - time_start, usage.to_dict())
+
+        model_name = (
+            self.backend_kwargs.get("model_name")
+            if self.backend_kwargs and "model_name" in self.backend_kwargs
+            else client.model_name
+        )
+
+        return RLMChatCompletion(
+            root_model=model_name,
+            prompt=message,
+            response=response,
+            usage_summary=usage,
+            execution_time=time_end - time_start,
+        )
