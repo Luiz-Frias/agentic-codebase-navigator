@@ -8,6 +8,9 @@ from rlm.domain.ports import LLMPort, Prompt
 
 
 class _DummyLLM:
+    # TODO(phase4/phase5): Replace/augment this dummy with a real provider adapter call
+    # (e.g. OpenAIAdapter hitting an OpenAI-compatible endpoint) in an opt-in test.
+    # Keep unit tests hermetic by default.
     def __init__(self) -> None:
         self.model_name = "dummy"
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})

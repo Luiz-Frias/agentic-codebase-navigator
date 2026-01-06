@@ -9,6 +9,9 @@ from rlm._legacy.core.types import ModelUsageSummary, UsageSummary
 class _DummyLM(BaseLM):
     """Deterministic LM for boundary testing (no network)."""
 
+    # TODO(phase4/phase5): Add an opt-in test that runs the legacy boundary path with a real
+    # provider client (or adapter) to validate end-to-end behavior without monkeypatching.
+
     def __init__(self) -> None:
         super().__init__(model_name="dummy")
         self._last_usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})

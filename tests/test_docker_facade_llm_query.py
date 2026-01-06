@@ -28,6 +28,9 @@ def _prompt_to_text(prompt: Prompt) -> str:
 class _DockerLLMQueryLLM:
     """LLM script that triggers an in-container `llm_query()` subcall."""
 
+    # TODO(phase4/phase5): Add a live-provider version of this test where the subcall
+    # is routed to a real adapter (OpenAI-compatible endpoint) instead of scripted strings.
+
     def __init__(self) -> None:
         self.model_name = "dummy"
         self.root_calls = 0

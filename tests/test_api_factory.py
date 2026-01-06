@@ -9,6 +9,8 @@ from rlm.domain.ports import LLMPort, Prompt
 
 
 class _DummyLLM:
+    # TODO(phase4/phase5): Add an opt-in integration test variant that uses a real
+    # provider adapter selected by config (registry) instead of this dummy.
     def __init__(self) -> None:
         self.model_name = "dummy"
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})

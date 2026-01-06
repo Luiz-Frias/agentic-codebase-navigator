@@ -34,6 +34,9 @@ class _ScriptedLLM:
     - Call 2: asserts the next prompt includes evidence of code execution, then FINALs.
     """
 
+    # TODO(phase4/phase5): Add a parallel boundary test that uses a real provider adapter
+    # (opt-in via env vars) to validate the same facade wiring without scripted responses.
+
     def __init__(self) -> None:
         self.model_name = "dummy"
         self._calls = 0

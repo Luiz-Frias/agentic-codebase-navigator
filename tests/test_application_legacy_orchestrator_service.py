@@ -8,6 +8,8 @@ from rlm.domain.ports import LLMPort, Prompt
 
 
 class _ScriptLLM:
+    # TODO(phase4/phase5): Add an opt-in integration test that runs this service with a
+    # real provider adapter (no mocks), gated by env vars/extras so CI stays hermetic.
     def __init__(self) -> None:
         self.model_name = "dummy"
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})

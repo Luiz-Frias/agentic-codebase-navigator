@@ -196,7 +196,12 @@ class DockerREPL(NonIsolatedEnv):
         self.pending_calls: list[RLMChatCompletion] = []
         self._calls_lock = threading.Lock()
 
-        self.setup()
+        try:
+            self.setup()
+        except Exception:
+            # Ensure we don't leak a proxy thread or temp dir if docker startup fails.
+            self.cleanup()
+            raise
 
         if context_payload:
             self.load_context(context_payload)
@@ -205,50 +210,65 @@ class DockerREPL(NonIsolatedEnv):
 
     def setup(self):
         """Start the proxy server and Docker container."""
-        # Start LLM proxy server
-        handler = type(
-            "Handler",
-            (LLMProxyHandler,),
-            {
-                "lm_handler_address": self.lm_handler_address,
-                "pending_calls": self.pending_calls,
-                "lock": self._calls_lock,
-            },
-        )
-        self.proxy_server = HTTPServer(("127.0.0.1", 0), handler)
-        self.proxy_port = self.proxy_server.server_address[1]
-        self.proxy_thread = threading.Thread(target=self.proxy_server.serve_forever, daemon=True)
-        self.proxy_thread.start()
+        try:
+            # Start LLM proxy server
+            handler = type(
+                "Handler",
+                (LLMProxyHandler,),
+                {
+                    "lm_handler_address": self.lm_handler_address,
+                    "pending_calls": self.pending_calls,
+                    "lock": self._calls_lock,
+                },
+            )
+            self.proxy_server = HTTPServer(("127.0.0.1", 0), handler)
+            self.proxy_port = self.proxy_server.server_address[1]
+            self.proxy_thread = threading.Thread(
+                target=self.proxy_server.serve_forever, daemon=True
+            )
+            self.proxy_thread.start()
 
-        # Start Docker container
-        result = subprocess.run(
-            [
-                "docker",
-                "run",
-                "-d",
-                "--rm",
-                "-v",
-                f"{self.temp_dir}:/workspace",
-                "--add-host",
-                "host.docker.internal:host-gateway",
-                self.image,
-                "tail",
-                "-f",
-                "/dev/null",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Failed to start container: {result.stderr}")
+            # Start Docker container
+            result = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "-d",
+                    "--rm",
+                    "-v",
+                    f"{self.temp_dir}:/workspace",
+                    "--add-host",
+                    "host.docker.internal:host-gateway",
+                    self.image,
+                    "tail",
+                    "-f",
+                    "/dev/null",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to start container: {result.stderr}")
 
-        self.container_id = result.stdout.strip()
+            self.container_id = result.stdout.strip()
 
-        # Install dependencies
-        subprocess.run(
-            ["docker", "exec", self.container_id, "pip", "install", "-q", "dill", "requests"],
-            capture_output=True,
-        )
+            # Install dependencies
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    self.container_id,
+                    "pip",
+                    "install",
+                    "-q",
+                    "dill",
+                    "requests",
+                ],
+                capture_output=True,
+            )
+        except Exception:
+            self.cleanup()
+            raise
 
     def load_context(self, context_payload: dict | list | str):
         """
@@ -282,6 +302,8 @@ class DockerREPL(NonIsolatedEnv):
         )
 
     def execute_code(self, code: str) -> REPLResult:
+        if not self.container_id:
+            raise RuntimeError("Docker container not running (container_id is missing)")
         start = time.perf_counter()
 
         with self._calls_lock:
@@ -318,16 +340,58 @@ class DockerREPL(NonIsolatedEnv):
             )
 
     def cleanup(self):
-        if self.container_id:
-            subprocess.run(["docker", "stop", self.container_id], capture_output=True)
-            self.container_id = None
-        if self.proxy_server:
-            self.proxy_server.shutdown()
-            self.proxy_server = None
-        if os.path.exists(self.temp_dir):
-            import shutil
+        # Cleanup must be idempotent and tolerate partial initialization.
+        container_id = getattr(self, "container_id", None)
+        proxy_server = getattr(self, "proxy_server", None)
+        proxy_thread = getattr(self, "proxy_thread", None)
+        temp_dir = getattr(self, "temp_dir", None)
 
-            shutil.rmtree(self.temp_dir, ignore_errors=True)
+        try:
+            if container_id:
+                # Don't block indefinitely on docker stop.
+                subprocess.run(
+                    ["docker", "stop", "-t", "2", container_id],
+                    capture_output=True,
+                    timeout=5,
+                )
+        except Exception:
+            pass
+        finally:
+            try:
+                self.container_id = None
+            except Exception:
+                pass
+
+        try:
+            if proxy_server is not None:
+                proxy_server.shutdown()
+                proxy_server.server_close()
+        except Exception:
+            pass
+        finally:
+            try:
+                self.proxy_server = None
+            except Exception:
+                pass
+
+        try:
+            if proxy_thread is not None and proxy_thread.is_alive():
+                proxy_thread.join(timeout=2)
+        except Exception:
+            pass
+        finally:
+            try:
+                self.proxy_thread = None
+            except Exception:
+                pass
+
+        try:
+            if temp_dir and os.path.exists(temp_dir):
+                import shutil
+
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
 
     def __enter__(self):
         return self
@@ -337,4 +401,8 @@ class DockerREPL(NonIsolatedEnv):
         return False
 
     def __del__(self):
-        self.cleanup()
+        try:
+            self.cleanup()
+        except Exception:
+            # Best-effort cleanup; never raise from finalizer.
+            pass

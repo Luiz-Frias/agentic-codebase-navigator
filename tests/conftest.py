@@ -28,6 +28,9 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "unit: unit tests (fast, hermetic)")
     config.addinivalue_line("markers", "integration: integration tests (may use Docker)")
     config.addinivalue_line("markers", "docker: requires a working local Docker daemon")
+    # TODO(phase4/phase5): Add a `live_llm` marker + opt-in env gate (no CI by default)
+    # for integration tests that exercise real provider adapters (e.g. OpenAIAdapter)
+    # against either a local OpenAI-compatible endpoint or real APIs via env vars.
 
 
 @pytest.fixture(scope="session")
