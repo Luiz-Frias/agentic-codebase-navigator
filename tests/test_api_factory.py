@@ -52,3 +52,27 @@ def test_create_rlm_from_config_requires_llm_in_phase1() -> None:
     )
     with pytest.raises(NotImplementedError):
         create_rlm_from_config(cfg)
+
+
+@pytest.mark.unit
+def test_create_rlm_from_config_can_build_llm_from_registry() -> None:
+    class _Registry:
+        def __init__(self) -> None:
+            self.seen: list[LLMConfig] = []
+
+        def build(self, config: LLMConfig, /) -> LLMPort:
+            self.seen.append(config)
+            return _DummyLLM()  # structural typing
+
+    registry = _Registry()
+    cfg = RLMConfig(
+        llm=LLMConfig(backend="dummy", model_name="dummy"),
+        env=EnvironmentConfig(environment="local"),
+        max_iterations=2,
+        verbose=False,
+    )
+
+    rlm = create_rlm_from_config(cfg, llm_registry=registry)
+    cc = rlm.completion("hi")
+    assert cc.response == "factory_ok"
+    assert registry.seen == [cfg.llm]
