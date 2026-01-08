@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from rlm._legacy.core.types import ModelUsageSummary, UsageSummary
 from rlm.api import create_rlm
-from rlm.domain.ports import LLMPort, Prompt
+from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
+from rlm.domain.ports import LLMPort
+from rlm.domain.types import Prompt
 
 
 def _prompt_to_text(prompt: Prompt) -> str:
@@ -36,21 +37,40 @@ class _DockerScriptedLLM:
         self._calls = 0
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})
 
-    def completion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
+    def complete(self, request: LLMRequest, /) -> ChatCompletion:
+        prompt = request.prompt
         self._calls += 1
         if self._calls == 1:
             # Produce stdout + stderr so we can verify both are captured.
-            return '```repl\nprint("HELLO_DOCKER")\n1/0\n```\n'
+            return ChatCompletion(
+                root_model=request.model or self.model_name,
+                prompt=prompt,
+                response='```repl\nprint("HELLO_DOCKER")\n1/0\n```\n',
+                usage_summary=self._usage,
+                execution_time=0.0,
+            )
         if self._calls == 2:
             text = _prompt_to_text(prompt)
             assert "Code executed:" in text
             assert "HELLO_DOCKER" in text
             assert "ZeroDivisionError" in text
-            return "FINAL(ok)"
-        return "FINAL(unexpected)"
+            return ChatCompletion(
+                root_model=request.model or self.model_name,
+                prompt=prompt,
+                response="FINAL(ok)",
+                usage_summary=self._usage,
+                execution_time=0.0,
+            )
+        return ChatCompletion(
+            root_model=request.model or self.model_name,
+            prompt=prompt,
+            response="FINAL(unexpected)",
+            usage_summary=self._usage,
+            execution_time=0.0,
+        )
 
-    async def acompletion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        return self.completion(prompt, model=model)
+    async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
+        return self.complete(request)
 
     def get_usage_summary(self):
         return self._usage
@@ -72,7 +92,8 @@ def test_facade_runs_docker_env_and_captures_stdout_and_stderr() -> None:
             max_iterations=3,
             verbose=False,
         )
-        assert rlm.completion("hello") == "ok"
+        cc = rlm.completion("hello")
+        assert cc.response == "ok"
     except RuntimeError as e:
         # Docker can be present but image pulls may fail in restricted environments.
         if "Failed to start container" in str(e):

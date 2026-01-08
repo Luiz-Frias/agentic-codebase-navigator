@@ -4,7 +4,9 @@ from contextlib import contextmanager
 from typing import Any
 
 from rlm.adapters.legacy.llm import _as_legacy_client
+from rlm.adapters.legacy.mappers import legacy_chat_completion_to_domain
 from rlm.application.config import EnvironmentName
+from rlm.domain.models import ChatCompletion
 from rlm.domain.ports import LLMPort, Prompt
 
 
@@ -51,7 +53,7 @@ class LegacyOrchestratorService:
         finally:
             legacy_rlm_mod.get_client = original_get_client  # type: ignore[assignment]
 
-    def completion(self, prompt: Prompt, *, root_prompt: str | None = None) -> str:
+    def completion(self, prompt: Prompt, *, root_prompt: str | None = None) -> ChatCompletion:
         import rlm._legacy.core.rlm as legacy_rlm_mod
 
         with self._patched_legacy_client_router():
@@ -65,4 +67,4 @@ class LegacyOrchestratorService:
                 verbose=self._verbose,
             )
             cc = legacy.completion(prompt, root_prompt=root_prompt)
-            return cc.response
+            return legacy_chat_completion_to_domain(cc)

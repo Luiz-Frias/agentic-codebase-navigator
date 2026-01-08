@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from abc import ABC, abstractmethod
 
 from rlm.domain.models import (
     BatchedLLMRequest,
@@ -11,65 +11,70 @@ from rlm.domain.models import (
     RunMetadata,
     UsageSummary,
 )
+from rlm.domain.ports import LLMPort
 from rlm.domain.types import ContextPayload
 
 
-class LLMPort(Protocol):
-    """Port for an LLM provider/client."""
+class BaseLLMAdapter(ABC):
+    """Optional ABC base for adapters implementing `LLMPort`."""
 
     @property
+    @abstractmethod
     def model_name(self) -> str: ...
 
+    @abstractmethod
     def complete(self, request: LLMRequest, /) -> ChatCompletion: ...
 
+    @abstractmethod
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion: ...
 
+    @abstractmethod
     def get_usage_summary(self) -> UsageSummary: ...
 
+    @abstractmethod
     def get_last_usage(self) -> UsageSummary: ...
 
 
-class BrokerPort(Protocol):
-    """Port for routing LLM requests (single + batched) to registered models."""
+class BaseBrokerAdapter(ABC):
+    """Optional ABC base for adapters implementing `BrokerPort`."""
 
+    @abstractmethod
     def register_llm(self, model_name: str, llm: LLMPort, /) -> None: ...
 
+    @abstractmethod
     def start(self) -> tuple[str, int]: ...
 
+    @abstractmethod
     def stop(self) -> None: ...
 
+    @abstractmethod
     def complete(self, request: LLMRequest, /) -> ChatCompletion: ...
 
+    @abstractmethod
     def complete_batched(self, request: BatchedLLMRequest, /) -> list[ChatCompletion]: ...
 
+    @abstractmethod
     def get_usage_summary(self) -> UsageSummary: ...
 
 
-class EnvironmentPort(Protocol):
-    """Port for an execution environment (local/docker/etc)."""
+class BaseEnvironmentAdapter(ABC):
+    """Optional ABC base for adapters implementing `EnvironmentPort`."""
 
+    @abstractmethod
     def load_context(self, context_payload: ContextPayload, /) -> None: ...
 
+    @abstractmethod
     def execute_code(self, code: str, /) -> ReplResult: ...
 
+    @abstractmethod
     def cleanup(self) -> None: ...
 
 
-class LoggerPort(Protocol):
-    """Port for capturing execution metadata/iterations/artifacts."""
+class BaseLoggerAdapter(ABC):
+    """Optional ABC base for adapters implementing `LoggerPort`."""
 
+    @abstractmethod
     def log_metadata(self, metadata: RunMetadata, /) -> None: ...
 
+    @abstractmethod
     def log_iteration(self, iteration: Iteration, /) -> None: ...
-
-
-class ClockPort(Protocol):
-    """Port for time measurement (injectable for deterministic tests)."""
-
-    def now(self) -> float: ...
-
-
-class IdGeneratorPort(Protocol):
-    """Port for generating correlation/run IDs (injectable for deterministic tests)."""
-
-    def new_id(self) -> str: ...

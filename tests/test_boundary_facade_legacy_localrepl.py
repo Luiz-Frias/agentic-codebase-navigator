@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from rlm._legacy.core.types import ModelUsageSummary, UsageSummary
 from rlm.api import create_rlm
+from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
 from rlm.domain.ports import LLMPort, Prompt
 
 
@@ -42,19 +42,38 @@ class _ScriptedLLM:
         self._calls = 0
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})
 
-    def completion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
+    def complete(self, request: LLMRequest, /) -> ChatCompletion:
+        prompt = request.prompt
         self._calls += 1
         if self._calls == 1:
-            return 'Let\'s run code first.\n\n```repl\nprint("HELLO_FROM_REPL")\nx = 123\n```\n'
+            return ChatCompletion(
+                root_model=request.model or self.model_name,
+                prompt=prompt,
+                response='Let\'s run code first.\n\n```repl\nprint("HELLO_FROM_REPL")\nx = 123\n```\n',
+                usage_summary=self._usage,
+                execution_time=0.0,
+            )
         if self._calls == 2:
             text = _prompt_to_text(prompt)
             assert "Code executed:" in text
             assert "HELLO_FROM_REPL" in text
-            return "FINAL(ok)"
-        return "FINAL(unexpected)"
+            return ChatCompletion(
+                root_model=request.model or self.model_name,
+                prompt=prompt,
+                response="FINAL(ok)",
+                usage_summary=self._usage,
+                execution_time=0.0,
+            )
+        return ChatCompletion(
+            root_model=request.model or self.model_name,
+            prompt=prompt,
+            response="FINAL(unexpected)",
+            usage_summary=self._usage,
+            execution_time=0.0,
+        )
 
-    async def acompletion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        return self.completion(prompt, model=model)
+    async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
+        return self.complete(request)
 
     def get_usage_summary(self):
         return self._usage
@@ -67,4 +86,9 @@ class _ScriptedLLM:
 def test_facade_boundary_runs_legacy_loop_and_executes_local_repl_code_block() -> None:
     llm: LLMPort = _ScriptedLLM()
     rlm = create_rlm(llm, environment="local", max_iterations=3, verbose=False)
-    assert rlm.completion("hello") == "ok"
+    cc = rlm.completion("hello")
+    assert isinstance(cc, ChatCompletion)
+    assert cc.response == "ok"
+    assert cc.root_model == "dummy"
+    assert cc.prompt == "hello"
+    assert cc.usage_summary.model_usage_summaries["dummy"].total_calls == 1

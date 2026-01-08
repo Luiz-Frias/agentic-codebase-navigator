@@ -1,10 +1,21 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from rlm.api.rlm import RLM
-from rlm.application.config import EnvironmentName, RLMConfig
+from rlm.application.config import EnvironmentName, LLMConfig, RLMConfig
 from rlm.domain.ports import LLMPort
+
+
+class LLMRegistry(Protocol):
+    """
+    Registry for selecting/building an `LLMPort` from configuration.
+
+    This is intentionally minimal in Phase 2; provider-specific registries and
+    lazy optional-dependency adapters arrive in later phases.
+    """
+
+    def build(self, config: LLMConfig, /) -> LLMPort: ...
 
 
 def create_rlm(
@@ -27,17 +38,26 @@ def create_rlm(
     )
 
 
-def create_rlm_from_config(config: RLMConfig, *, llm: LLMPort | None = None) -> RLM:
+def create_rlm_from_config(
+    config: RLMConfig,
+    *,
+    llm: LLMPort | None = None,
+    llm_registry: LLMRegistry | None = None,
+) -> RLM:
     """
     Construct an `RLM` from config.
 
-    Phase 1 requires passing a concrete `LLMPort` (provider registries arrive in Phase 4).
+    Phase 2 allows optionally providing an `llm_registry` to build an `LLMPort`
+    from `config.llm`. If neither `llm` nor `llm_registry` is provided, we fail
+    fast with a helpful message.
     """
     if llm is None:
-        raise NotImplementedError(
-            "Phase 1 factory requires an explicit `llm` instance. "
-            "Provider selection by `LLMConfig` will be implemented in Phase 4 adapters."
-        )
+        if llm_registry is None:
+            raise NotImplementedError(
+                "Phase 2 factory requires either an explicit `llm` instance or an "
+                "`llm_registry` to build one from `RLMConfig.llm`."
+            )
+        llm = llm_registry.build(config.llm)
 
     return create_rlm(
         llm,

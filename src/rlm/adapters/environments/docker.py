@@ -3,10 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from rlm._legacy.environments.docker_repl import DockerREPL
-from rlm.domain.ports import ContextPayload
+from rlm.adapters.base import BaseEnvironmentAdapter
+from rlm.adapters.legacy.mappers import legacy_repl_result_to_domain
+from rlm.domain.models import ReplResult
+from rlm.domain.types import ContextPayload
 
 
-class LegacyDockerEnvironmentAdapter:
+class LegacyDockerEnvironmentAdapter(BaseEnvironmentAdapter):
     """
     Adapter: legacy `DockerREPL` -> domain `EnvironmentPort`.
 
@@ -23,8 +26,9 @@ class LegacyDockerEnvironmentAdapter:
     def load_context(self, context_payload: ContextPayload, /) -> None:
         self._env.load_context(context_payload)  # type: ignore[arg-type]
 
-    def execute_code(self, code: str, /) -> Any:
-        return self._env.execute_code(code)
+    def execute_code(self, code: str, /) -> ReplResult:
+        legacy_result = self._env.execute_code(code)
+        return legacy_repl_result_to_domain(legacy_result)
 
     def cleanup(self) -> None:
         self._env.cleanup()

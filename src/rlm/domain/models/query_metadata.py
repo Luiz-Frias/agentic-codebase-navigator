@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Literal
 
-from rlm.domain.ports import ContextPayload
+from rlm.domain.types import ContextPayload
 
 ContextType = Literal["str", "dict", "list"]
 

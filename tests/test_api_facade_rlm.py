@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from rlm._legacy.core.types import ModelUsageSummary, UsageSummary
 from rlm.api.rlm import RLM
-from rlm.domain.ports import LLMPort, Prompt
+from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
+from rlm.domain.ports import LLMPort
 
 
 class _DummyLLM:
@@ -15,11 +15,17 @@ class _DummyLLM:
         self.model_name = "dummy"
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})
 
-    def completion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        return "FINAL(ok)"
+    def complete(self, request: LLMRequest, /) -> ChatCompletion:
+        return ChatCompletion(
+            root_model=request.model or self.model_name,
+            prompt=request.prompt,
+            response="FINAL(ok)",
+            usage_summary=self._usage,
+            execution_time=0.0,
+        )
 
-    async def acompletion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        return self.completion(prompt, model=model)
+    async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
+        return self.complete(request)
 
     def get_usage_summary(self):
         return self._usage
@@ -32,4 +38,5 @@ class _DummyLLM:
 def test_api_rlm_completion_returns_final_answer() -> None:
     llm: LLMPort = _DummyLLM()
     rlm = RLM(llm, max_iterations=2, verbose=False)
-    assert rlm.completion("hello") == "ok"
+    cc = rlm.completion("hello")
+    assert cc.response == "ok"

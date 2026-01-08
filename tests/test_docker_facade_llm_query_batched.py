@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from rlm._legacy.core.types import ModelUsageSummary, UsageSummary
 from rlm.api import create_rlm
-from rlm.domain.ports import LLMPort, Prompt
+from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
+from rlm.domain.ports import LLMPort
+from rlm.domain.types import Prompt
 
 
 def _prompt_to_text(prompt: Prompt) -> str:
@@ -37,31 +38,56 @@ class _DockerLLMQueryBatchedLLM:
         self.sub_calls = 0
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})
 
-    def completion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
+    def complete(self, request: LLMRequest, /) -> ChatCompletion:
+        prompt = request.prompt
         # Root calls are message lists/dicts; subcalls from the container are strings.
         if isinstance(prompt, str):
             self.sub_calls += 1
-            return f"sub:{prompt}"
+            return ChatCompletion(
+                root_model=request.model or self.model_name,
+                prompt=prompt,
+                response=f"sub:{prompt}",
+                usage_summary=self._usage,
+                execution_time=0.0,
+            )
 
         self.root_calls += 1
         if self.root_calls == 1:
-            return (
-                "```repl\n"
-                "prompts = ['a', 'b', 'c']\n"
-                "resps = llm_query_batched(prompts)\n"
-                "expected = [f'sub:{p}' for p in prompts]\n"
-                "print(resps)\n"
-                "print('ORDER_OK' if resps == expected else f'ORDER_BAD:{resps!r}')\n"
-                "```\n"
+            return ChatCompletion(
+                root_model=request.model or self.model_name,
+                prompt=prompt,
+                response=(
+                    "```repl\n"
+                    "prompts = ['a', 'b', 'c']\n"
+                    "resps = llm_query_batched(prompts)\n"
+                    "expected = [f'sub:{p}' for p in prompts]\n"
+                    "print(resps)\n"
+                    "print('ORDER_OK' if resps == expected else f'ORDER_BAD:{resps!r}')\n"
+                    "```\n"
+                ),
+                usage_summary=self._usage,
+                execution_time=0.0,
             )
         if self.root_calls == 2:
             text = _prompt_to_text(prompt)
             assert "ORDER_OK" in text, text
-            return "FINAL(ok)"
-        return "FINAL(unexpected)"
+            return ChatCompletion(
+                root_model=request.model or self.model_name,
+                prompt=prompt,
+                response="FINAL(ok)",
+                usage_summary=self._usage,
+                execution_time=0.0,
+            )
+        return ChatCompletion(
+            root_model=request.model or self.model_name,
+            prompt=prompt,
+            response="FINAL(unexpected)",
+            usage_summary=self._usage,
+            execution_time=0.0,
+        )
 
-    async def acompletion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        return self.completion(prompt, model=model)
+    async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
+        return self.complete(request)
 
     def get_usage_summary(self):
         return self._usage
@@ -84,7 +110,8 @@ def test_docker_env_llm_query_batched_preserves_order() -> None:
             max_iterations=3,
             verbose=False,
         )
-        assert rlm.completion("hello") == "ok"
+        cc = rlm.completion("hello")
+        assert cc.response == "ok"
     except RuntimeError as e:
         if "Failed to start container" in str(e):
             pytest.skip(str(e))

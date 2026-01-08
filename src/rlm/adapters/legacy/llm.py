@@ -1,12 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
+import time
 
 from rlm._legacy.clients.base_lm import BaseLM
-from rlm.domain.ports import LLMPort, Prompt
+from rlm.adapters.base import BaseLLMAdapter
+from rlm.adapters.legacy.mappers import (
+    domain_usage_summary_to_legacy,
+    legacy_usage_summary_to_domain,
+)
+from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
+from rlm.domain.ports import LLMPort
+from rlm.domain.types import Prompt
 
 
-class LegacyLLMPortAdapter:
+class LegacyLLMPortAdapter(BaseLLMAdapter):
     """
     Adapter: legacy `BaseLM` -> domain `LLMPort`.
 
@@ -21,18 +28,37 @@ class LegacyLLMPortAdapter:
     def model_name(self) -> str:
         return self._client.model_name
 
-    def completion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        # `model` selection is broker-level; ignore here.
-        return self._client.completion(prompt)  # type: ignore[arg-type]
+    def complete(self, request: LLMRequest, /) -> ChatCompletion:
+        start = time.perf_counter()
+        content = self._client.completion(request.prompt)  # type: ignore[arg-type]
+        end = time.perf_counter()
+        usage = legacy_usage_summary_to_domain(self._client.get_last_usage())
+        return ChatCompletion(
+            root_model=request.model or self._client.model_name,
+            prompt=request.prompt,
+            response=content,
+            usage_summary=usage,
+            execution_time=end - start,
+        )
 
-    async def acompletion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        return await self._client.acompletion(prompt)  # type: ignore[arg-type]
+    async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
+        start = time.perf_counter()
+        content = await self._client.acompletion(request.prompt)  # type: ignore[arg-type]
+        end = time.perf_counter()
+        usage = legacy_usage_summary_to_domain(self._client.get_last_usage())
+        return ChatCompletion(
+            root_model=request.model or self._client.model_name,
+            prompt=request.prompt,
+            response=content,
+            usage_summary=usage,
+            execution_time=end - start,
+        )
 
-    def get_usage_summary(self) -> Any:
-        return self._client.get_usage_summary()
+    def get_usage_summary(self) -> UsageSummary:
+        return legacy_usage_summary_to_domain(self._client.get_usage_summary())
 
-    def get_last_usage(self) -> Any:
-        return self._client.get_last_usage()
+    def get_last_usage(self) -> UsageSummary:
+        return legacy_usage_summary_to_domain(self._client.get_last_usage())
 
 
 class _PortBackedLegacyClient(BaseLM):
@@ -42,21 +68,23 @@ class _PortBackedLegacyClient(BaseLM):
         super().__init__(model_name=model_name)
         self._llm = llm
 
-    def completion(self, prompt: str | dict[str, Any]) -> str:
-        return self._llm.completion(prompt)  # type: ignore[arg-type]
+    def completion(self, prompt: Prompt) -> str:  # type: ignore[override]
+        cc = self._llm.complete(LLMRequest(prompt=prompt))
+        return cc.response
 
-    async def acompletion(self, prompt: str | dict[str, Any]) -> str:
-        return await self._llm.acompletion(prompt)  # type: ignore[arg-type]
+    async def acompletion(self, prompt: Prompt) -> str:  # type: ignore[override]
+        cc = await self._llm.acomplete(LLMRequest(prompt=prompt))
+        return cc.response
 
     def get_usage_summary(self):
-        return self._llm.get_usage_summary()
+        return domain_usage_summary_to_legacy(self._llm.get_usage_summary())
 
     def get_last_usage(self):
-        return self._llm.get_last_usage()
+        return domain_usage_summary_to_legacy(self._llm.get_last_usage())
 
 
-def _as_legacy_client(llm: LLMPort) -> BaseLM:
+def _as_legacy_client(llm: LLMPort, *, model_name: str | None = None) -> BaseLM:
     """
     Convert an `LLMPort` to a legacy `BaseLM` for use with `LMHandler`.
     """
-    return _PortBackedLegacyClient(llm, model_name=llm.model_name)
+    return _PortBackedLegacyClient(llm, model_name=model_name or llm.model_name)
