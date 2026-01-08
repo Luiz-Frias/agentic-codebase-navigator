@@ -21,10 +21,16 @@ class ModelUsageSummary:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ModelUsageSummary:
+        def _int_field(key: str) -> int:
+            value = data.get(key, 0)
+            if value is None:
+                value = 0
+            return int(value)
+
         return cls(
-            total_calls=int(data.get("total_calls", 0)),
-            total_input_tokens=int(data.get("total_input_tokens", 0)),
-            total_output_tokens=int(data.get("total_output_tokens", 0)),
+            total_calls=_int_field("total_calls"),
+            total_input_tokens=_int_field("total_input_tokens"),
+            total_output_tokens=_int_field("total_output_tokens"),
         )
 
 
