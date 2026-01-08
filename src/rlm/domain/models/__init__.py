@@ -10,16 +10,21 @@ from __future__ import annotations
 
 from rlm.domain.models.completion import ChatCompletion
 from rlm.domain.models.iteration import CodeBlock, Iteration
+from rlm.domain.models.llm_request import BatchedLLMRequest, LLMRequest
+from rlm.domain.models.query_metadata import QueryMetadata
 from rlm.domain.models.repl import ReplResult
+from rlm.domain.models.run_metadata import RunMetadata
 from rlm.domain.models.usage import ModelUsageSummary, UsageSummary
 
-# NOTE: QueryMetadata will be added in phase-two
-
 __all__ = [
+    "BatchedLLMRequest",
     "ChatCompletion",
     "CodeBlock",
     "Iteration",
+    "LLMRequest",
     "ModelUsageSummary",
+    "QueryMetadata",
     "ReplResult",
+    "RunMetadata",
     "UsageSummary",
 ]

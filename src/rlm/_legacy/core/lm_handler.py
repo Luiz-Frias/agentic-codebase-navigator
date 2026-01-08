@@ -32,7 +32,7 @@ class LMRequestHandler(StreamRequestHandler):
             handler: LMHandler = self.server.lm_handler  # type: ignore[attr-defined]
 
             if request.is_batched:
-                # Batched request: process multiple prompts concurrently
+                # Batched request: process multiple prompts.
                 response = self._handle_batched(request, handler)
             elif request.prompt:
                 # Single request: process one prompt
@@ -66,20 +66,34 @@ class LMRequestHandler(StreamRequestHandler):
         )
 
     def _handle_batched(self, request: LMRequest, handler: LMHandler) -> LMResponse:
-        """Handle a batched prompts request using async for concurrency."""
+        """Handle a batched prompts request.
+
+        NOTE: `BaseLM.get_last_usage()` is defined as "usage for the last call". Many
+        implementations store this as shared mutable state, which makes it unsafe
+        to call `acompletion()` concurrently and then try to attribute per-prompt
+        usage after the fact.
+
+        We therefore execute batched prompts sequentially to preserve correct
+        per-prompt usage accounting. If/when provider adapters expose a safe
+        per-call usage API, this can be revisited for concurrency.
+        """
         client = handler.get_client(request.model)
 
         start_time = time.perf_counter()
 
-        async def run_all():
-            tasks = [client.acompletion(prompt) for prompt in request.prompts]
-            return await asyncio.gather(*tasks)
+        async def run_all_with_usage():
+            outputs: list[tuple[str, UsageSummary]] = []
+            for prompt in request.prompts:
+                content = await client.acompletion(prompt)
+                # Defensive copy so later calls can't mutate earlier per-call usage objects.
+                usage = UsageSummary.from_dict(client.get_last_usage().to_dict())
+                outputs.append((content, usage))
+            return outputs
 
-        results = asyncio.run(run_all())
+        results_with_usage = asyncio.run(run_all_with_usage())
         end_time = time.perf_counter()
 
         total_time = end_time - start_time
-        usage_summary = client.get_last_usage()
 
         chat_completions = [
             RLMChatCompletion(
@@ -89,7 +103,9 @@ class LMRequestHandler(StreamRequestHandler):
                 usage_summary=usage_summary,
                 execution_time=total_time / len(request.prompts),  # approximate per-prompt time
             )
-            for prompt, content in zip(request.prompts, results, strict=True)
+            for prompt, (content, usage_summary) in zip(
+                request.prompts, results_with_usage, strict=True
+            )
         ]
 
         return LMResponse.batched_success_response(chat_completions=chat_completions)

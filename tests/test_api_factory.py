@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from rlm._legacy.core.types import ModelUsageSummary, UsageSummary
 from rlm.api import create_rlm, create_rlm_from_config
 from rlm.application.config import EnvironmentConfig, LLMConfig, RLMConfig
-from rlm.domain.ports import LLMPort, Prompt
+from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
+from rlm.domain.ports import LLMPort
 
 
 class _DummyLLM:
@@ -15,11 +15,17 @@ class _DummyLLM:
         self.model_name = "dummy"
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})
 
-    def completion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        return "FINAL(factory_ok)"
+    def complete(self, request: LLMRequest, /) -> ChatCompletion:
+        return ChatCompletion(
+            root_model=request.model or self.model_name,
+            prompt=request.prompt,
+            response="FINAL(factory_ok)",
+            usage_summary=self._usage,
+            execution_time=0.0,
+        )
 
-    async def acompletion(self, prompt: Prompt, /, *, model: str | None = None) -> str:
-        return self.completion(prompt, model=model)
+    async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
+        return self.complete(request)
 
     def get_usage_summary(self):
         return self._usage
@@ -32,7 +38,8 @@ class _DummyLLM:
 def test_create_rlm_factory() -> None:
     llm: LLMPort = _DummyLLM()
     rlm = create_rlm(llm, max_iterations=2, verbose=False)
-    assert rlm.completion("hi") == "factory_ok"
+    cc = rlm.completion("hi")
+    assert cc.response == "factory_ok"
 
 
 @pytest.mark.unit
@@ -45,3 +52,27 @@ def test_create_rlm_from_config_requires_llm_in_phase1() -> None:
     )
     with pytest.raises(NotImplementedError):
         create_rlm_from_config(cfg)
+
+
+@pytest.mark.unit
+def test_create_rlm_from_config_can_build_llm_from_registry() -> None:
+    class _Registry:
+        def __init__(self) -> None:
+            self.seen: list[LLMConfig] = []
+
+        def build(self, config: LLMConfig, /) -> LLMPort:
+            self.seen.append(config)
+            return _DummyLLM()  # structural typing
+
+    registry = _Registry()
+    cfg = RLMConfig(
+        llm=LLMConfig(backend="dummy", model_name="dummy"),
+        env=EnvironmentConfig(environment="local"),
+        max_iterations=2,
+        verbose=False,
+    )
+
+    rlm = create_rlm_from_config(cfg, llm_registry=registry)
+    cc = rlm.completion("hi")
+    assert cc.response == "factory_ok"
+    assert registry.seen == [cfg.llm]

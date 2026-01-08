@@ -1,14 +1,14 @@
-# Legacy → Hexagonal Mapping (Phase 1 / bridge)
+# Legacy → Hexagonal Mapping (Phase 2 / bridge)
 
 This repo is migrating an upstream snapshot (`references/rlm/**`) into a `src/`-layout package and refactoring toward a **hexagonal modular monolith**.
 
-In Phase 1, we intentionally keep **runtime behavior** delegated to the upstream loop via a **small bridge** so we can ship incremental structure + tests without a risky rewrite.
+In Phase 2, **runtime orchestration** is handled by the new domain orchestrator, but we still rely on legacy implementations for the broker and execution environments via adapters.
 
 ## Mapping table
 
 | Upstream / legacy module (mirrored under `src/rlm/_legacy/**`) | Hex layer responsibility | Current state (Phase 1) | Target end-state |
 |---|---|---|---|
-| `rlm._legacy.core.rlm.RLM` (iteration loop) | **Application / Domain orchestration** | Still the “engine” via bridge | Re-implemented as `domain/services/rlm_orchestrator.py` using ports only |
+| `rlm._legacy.core.rlm.RLM` (iteration loop) | **Application / Domain orchestration** | Kept only for regression/boundary comparisons | Re-implemented as `domain/services/rlm_orchestrator.py` using ports only |
 | `rlm._legacy.core.lm_handler.LMHandler` (TCP broker) | **Adapters (broker) + Infrastructure (protocol)** | Mirrored; optional legacy adapter exists | Replace with `infrastructure/comms/*` + `adapters/broker/TcpBrokerAdapter` |
 | `rlm._legacy.core.comms_utils` (wire protocol helpers) | **Infrastructure (protocol)** | Mirrored for legacy | Replace with strict DTOs/codec in `infrastructure/comms/` |
 | `rlm._legacy.environments.local_repl.LocalREPL` | **Adapters (environment)** | Mirrored; used by legacy loop | Replace with native env adapter (policy-driven) |
@@ -17,10 +17,13 @@ In Phase 1, we intentionally keep **runtime behavior** delegated to the upstream
 | `rlm._legacy.utils.prompts` | **Domain / Application** | Mirrored; used by legacy loop | Replace with injected templates + typed prompt builder |
 | `rlm._legacy.logger.*` | **Adapters (logger)** | Mirrored | Replace with logger adapters + stable JSONL schema |
 
-## The Phase 1 bridge
+## The Phase 2 bridge
 
 - **Public API**: `rlm.api.rlm.RLM` is a thin facade.
-- **Bridge service**: `rlm.application.services.legacy_orchestrator.LegacyOrchestratorService` runs the legacy loop but injects an `LLMPort` by patching the legacy `get_client()` router inside a call-scoped context manager.
+- **Use case**: `rlm.application.use_cases.run_completion.run_completion` manages broker+env lifecycle and invokes the domain orchestrator.
+- **Legacy adapters (temporary)**:
+  - `rlm.adapters.legacy.broker.LegacyBrokerAdapter` (legacy `LMHandler` behind `BrokerPort`)
+  - `rlm.adapters.legacy.environment.LegacyEnvironmentAdapter` (legacy `LocalREPL` / `DockerREPL` behind `EnvironmentPort`)
 
 This keeps **dependencies pointing inward** for the new layers (`domain/` remains dependency-free), while allowing the system to stay runnable and testable during the migration.
 

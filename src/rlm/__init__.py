@@ -10,5 +10,6 @@ from __future__ import annotations
 
 from rlm._meta import __version__
 from rlm.api.rlm import RLM
+from rlm.domain.models import ChatCompletion
 
-__all__ = ["RLM", "__version__"]
+__all__ = ["ChatCompletion", "RLM", "__version__"]

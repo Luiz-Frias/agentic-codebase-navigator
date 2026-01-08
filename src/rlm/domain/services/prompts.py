@@ -4,7 +4,8 @@ import textwrap
 
 from rlm.domain.models.query_metadata import QueryMetadata
 
-# System prompt for the REPL environment with explicit final answer checking
+# NOTE: This is intentionally copied from the upstream prompt to preserve behavior
+# during the migration. We will refine/shorten this later when Goal2 lands.
 RLM_SYSTEM_PROMPT = textwrap.dedent(
     """You are tasked with answering a query with associated context. You can access, transform, and analyze this context interactively in a REPL environment that can recursively query sub-LLMs, which you are strongly encouraged to use as much as possible. You will be queried iteratively until you provide a final answer.
 
@@ -22,7 +23,7 @@ You can use the REPL environment to help you understand your context, especially
 When you want to execute Python code in the REPL environment, wrap it in triple backticks with 'repl' language identifier. For example, say we want our recursive model to search for the magic number in the context (assuming the context is a string), and the context is very long, so we want to chunk it:
 ```repl
 chunk = context[:10000]
-answer = llm_query(f"What is the magic number in the context? Here is the chunk: {{chunk}}")
+answer = llm_query(f"What is the magic number in the context? Here is the chunk: {chunk}")
 print(answer)
 ```
 
@@ -31,11 +32,11 @@ As an example, suppose you're trying to answer a question about a book. You can 
 query = "In Harry Potter and the Sorcerer's Stone, did Gryffindor win the House Cup because they led?"
 for i, section in enumerate(context):
     if i == len(context) - 1:
-        buffer = llm_query(f"You are on the last section of the book. So far you know that: {{buffers}}. Gather from this last section to answer {{query}}. Here is the section: {{section}}")
-        print(f"Based on reading iteratively through the book, the answer is: {{buffer}}")
+        buffer = llm_query(f"You are on the last section of the book. So far you know that: {buffers}. Gather from this last section to answer {query}. Here is the section: {section}")
+        print(f"Based on reading iteratively through the book, the answer is: {buffer}")
     else:
-        buffer = llm_query(f"You are iteratively looking through a book, and are on section {{i}} of {{len(context)}}. Gather information to help answer {{query}}. Here is the section: {{section}}")
-        print(f"After section {{i}} of {{len(context)}}, you have tracked: {{buffer}}")
+        buffer = llm_query(f"You are iteratively looking through a book, and are on section {i} of {len(context)}. Gather information to help answer {query}. Here is the section: {section}")
+        print(f"After section {i} of {len(context)}, you have tracked: {buffer}")
 ```
 
 As another example, when the context isn't that long (e.g. >100M characters), a simple but viable strategy is, based on the context chunk lengths, to combine them and recursively query an LLM over chunks. For example, if the context is a List[str], we ask the same query over each chunk using `llm_query_batched` for concurrent processing:
@@ -52,11 +53,11 @@ for i in range(10):
     chunks.append(chunk_str)
 
 # Use batched query for concurrent processing - much faster than sequential calls!
-prompts = [f"Try to answer the following query: {{query}}. Here are the documents:\n{{chunk}}. Only answer if you are confident in your answer based on the evidence." for chunk in chunks]
+prompts = [f"Try to answer the following query: {query}. Here are the documents:\n{chunk}. Only answer if you are confident in your answer based on the evidence." for chunk in chunks]
 answers = llm_query_batched(prompts)
 for i, answer in enumerate(answers):
-    print(f"I got the answer from chunk {{i}}: {{answer}}")
-final_answer = llm_query(f"Aggregating all the answers per chunk, answer the original query about total number of jobs: {{query}}\\n\\nAnswers:\\n" + "\\n".join(answers))
+    print(f"I got the answer from chunk {i}: {answer}")
+final_answer = llm_query(f"Aggregating all the answers per chunk, answer the original query about total number of jobs: {query}\n\nAnswers:\n" + "\n".join(answers))
 ```
 
 As a final example, after analyzing the context and realizing its separated by Markdown headers, we can maintain state through buffers by chunking the context by headers, and iteratively querying an LLM over it:
@@ -68,9 +69,9 @@ buffers = []
 for i in range(1, len(sections), 2):
     header = sections[i]
     info = sections[i+1]
-    summary = llm_query(f"Summarize this {{header}} section: {{info}}")
-    buffers.append(f"{{header}}: {{summary}}")
-final_answer = llm_query(f"Based on these summaries, answer the original query: {{query}}\\n\\nSummaries:\\n" + "\\n".join(buffers))
+    summary = llm_query(f"Summarize this {header} section: {info}")
+    buffers.append(f"{header}: {summary}")
+final_answer = llm_query(f"Based on these summaries, answer the original query: {query}\n\nSummaries:\n" + "\n".join(buffers))
 ```
 In the next step, we can return FINAL_VAR(final_answer).
 
@@ -84,19 +85,15 @@ Think step by step carefully, plan, and execute this plan immediately in your re
 
 
 def build_rlm_system_prompt(
-    system_prompt: str,
-    query_metadata: QueryMetadata,
+    system_prompt: str, query_metadata: QueryMetadata, /
 ) -> list[dict[str, str]]:
     """
-    Build the initial system prompt for the REPL environment based on extra prompt metadata.
+    Build the initial prompt message history for an RLM run.
 
-    Args:
-        query_metadata: QueryMetadata object containing context metadata
-
-    Returns:
-        List of message dictionaries
+    Mirrors the upstream behavior:
+    - system prompt as a "system" role message
+    - a metadata hint as an "assistant" role message
     """
-
     context_lengths = query_metadata.context_lengths
     context_total_length = query_metadata.context_total_length
     context_type = query_metadata.context_type
@@ -117,19 +114,34 @@ def build_rlm_system_prompt(
     ]
 
 
-USER_PROMPT = """Think step-by-step on what to do using the REPL environment (which contains the context) to answer the prompt.\n\nContinue using the REPL environment, which has the `context` variable, and querying sub-LLMs by writing to ```repl``` tags, and determine your answer. Your next action:"""
-USER_PROMPT_WITH_ROOT = """Think step-by-step on what to do using the REPL environment (which contains the context) to answer the original prompt: \"{root_prompt}\".\n\nContinue using the REPL environment, which has the `context` variable, and querying sub-LLMs by writing to ```repl``` tags, and determine your answer. Your next action:"""
+_USER_PROMPT = (
+    "Think step-by-step on what to do using the REPL environment (which contains the context) "
+    "to answer the prompt.\n\nContinue using the REPL environment, which has the `context` "
+    "variable, and querying sub-LLMs by writing to ```repl``` tags, and determine your answer. "
+    "Your next action:"
+)
+
+_USER_PROMPT_WITH_ROOT = (
+    "Think step-by-step on what to do using the REPL environment (which contains the context) "
+    'to answer the original prompt: "{root_prompt}".\n\nContinue using the REPL environment, '
+    "which has the `context` variable, and querying sub-LLMs by writing to ```repl``` tags, and "
+    "determine your answer. Your next action:"
+)
 
 
-def build_user_prompt(root_prompt: str | None = None, iteration: int = 0) -> dict[str, str]:
+def build_user_prompt(*, root_prompt: str | None = None, iteration: int = 0) -> dict[str, str]:
     if iteration == 0:
-        safeguard = "You have not interacted with the REPL environment or seen your prompt / context yet. Your next action should be to look through and figure out how to answer the prompt, so don't just provide a final answer yet.\n\n"
+        safeguard = (
+            "You have not interacted with the REPL environment or seen your prompt / context yet. "
+            "Your next action should be to look through and figure out how to answer the prompt, "
+            "so don't just provide a final answer yet.\n\n"
+        )
         prompt = safeguard + (
-            USER_PROMPT_WITH_ROOT.format(root_prompt=root_prompt) if root_prompt else USER_PROMPT
+            _USER_PROMPT_WITH_ROOT.format(root_prompt=root_prompt) if root_prompt else _USER_PROMPT
         )
         return {"role": "user", "content": prompt}
-    else:
-        prompt = "The history before is your previous interactions with the REPL environment. " + (
-            USER_PROMPT_WITH_ROOT.format(root_prompt=root_prompt) if root_prompt else USER_PROMPT
-        )
-        return {"role": "user", "content": prompt}
+
+    prompt = "The history before is your previous interactions with the REPL environment. " + (
+        _USER_PROMPT_WITH_ROOT.format(root_prompt=root_prompt) if root_prompt else _USER_PROMPT
+    )
+    return {"role": "user", "content": prompt}
