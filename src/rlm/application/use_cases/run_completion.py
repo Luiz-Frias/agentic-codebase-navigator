@@ -6,6 +6,7 @@ from typing import Protocol
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
+from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
 from rlm.domain.services.rlm_orchestrator import RLMOrchestrator
 from rlm.domain.types import Prompt
 
@@ -36,11 +37,7 @@ class RunCompletionDeps:
     broker: BrokerPort
     environment_factory: EnvironmentFactory
     logger: LoggerPort | None = None
-    system_prompt: str = (
-        "You are a recursive language model (RLM). "
-        "You can use a `repl` tool to execute code and get results. "
-        "When you have a final answer, respond with FINAL(your answer)."
-    )
+    system_prompt: str = RLM_SYSTEM_PROMPT
 
 
 @dataclass(frozen=True, slots=True)
