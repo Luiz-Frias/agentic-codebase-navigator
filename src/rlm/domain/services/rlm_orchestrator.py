@@ -178,7 +178,7 @@ class RLMOrchestrator:
             # On the first iteration, load context and run the LLM call concurrently.
             if i == 0:
                 async with asyncio.TaskGroup() as tg:
-                    ctx_task = tg.create_task(
+                    tg.create_task(
                         asyncio.to_thread(self.environment.load_context, prompt)  # type: ignore[arg-type]
                     )
                     llm_task = tg.create_task(self.llm.acomplete(LLMRequest(prompt=current_prompt)))
