@@ -80,8 +80,9 @@ Interface shape:
 
 ## Transitional note (Phase 2 bridge)
 
-During Phase 2, the application layer still includes a small legacy bridge:
+During Phase 2, runtime orchestration uses the **domain** orchestrator, but the broker and environments are still backed by legacy implementations via adapters:
 
-- `src/rlm/application/services/legacy_orchestrator.py`
+- `rlm.adapters.legacy.broker.LegacyBrokerAdapter`
+- `rlm.adapters.legacy.environment.LegacyEnvironmentAdapter`
 
-This is intentionally allow-listed by architecture tests until the Phase 3 domain orchestrator replaces it.
+The legacy core loop (`rlm._legacy.core.rlm.RLM`) is kept for regression/boundary comparisons only.

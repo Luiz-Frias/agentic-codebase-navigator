@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from collections.abc import Callable
+from typing import Any
 
+from rlm.api.registries import (
+    DefaultEnvironmentRegistry,
+    DefaultLoggerRegistry,
+    EnvironmentRegistry,
+    LLMRegistry,
+    LoggerRegistry,
+)
 from rlm.api.rlm import RLM
-from rlm.application.config import EnvironmentName, LLMConfig, RLMConfig
-from rlm.domain.ports import LLMPort
-
-
-class LLMRegistry(Protocol):
-    """
-    Registry for selecting/building an `LLMPort` from configuration.
-
-    This is intentionally minimal in Phase 2; provider-specific registries and
-    lazy optional-dependency adapters arrive in later phases.
-    """
-
-    def build(self, config: LLMConfig, /) -> LLMPort: ...
+from rlm.application.config import EnvironmentName, RLMConfig
+from rlm.application.use_cases.run_completion import EnvironmentFactory
+from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
 
 
 def create_rlm(
@@ -26,6 +24,10 @@ def create_rlm(
     max_depth: int = 1,
     max_iterations: int = 30,
     verbose: bool = False,
+    broker_factory: Callable[[LLMPort], BrokerPort] | None = None,
+    environment_factory: EnvironmentFactory | None = None,
+    logger: LoggerPort | None = None,
+    system_prompt: str | None = None,
 ) -> RLM:
     """Convenience factory for the public `RLM` facade."""
     return RLM(
@@ -35,6 +37,10 @@ def create_rlm(
         max_depth=max_depth,
         max_iterations=max_iterations,
         verbose=verbose,
+        broker_factory=broker_factory,
+        environment_factory=environment_factory,
+        logger=logger,
+        system_prompt=system_prompt,
     )
 
 
@@ -43,6 +49,8 @@ def create_rlm_from_config(
     *,
     llm: LLMPort | None = None,
     llm_registry: LLMRegistry | None = None,
+    environment_registry: EnvironmentRegistry | None = None,
+    logger_registry: LoggerRegistry | None = None,
 ) -> RLM:
     """
     Construct an `RLM` from config.
@@ -59,6 +67,14 @@ def create_rlm_from_config(
             )
         llm = llm_registry.build(config.llm)
 
+    if environment_registry is None:
+        environment_registry = DefaultEnvironmentRegistry()
+    if logger_registry is None:
+        logger_registry = DefaultLoggerRegistry()
+
+    environment_factory = environment_registry.build(config.env)
+    logger = logger_registry.build(config.logger)
+
     return create_rlm(
         llm,
         environment=config.env.environment,
@@ -66,4 +82,6 @@ def create_rlm_from_config(
         max_depth=config.max_depth,
         max_iterations=config.max_iterations,
         verbose=config.verbose,
+        environment_factory=environment_factory,
+        logger=logger,
     )

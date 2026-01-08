@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 from rlm.domain.services.rlm_orchestrator import RLMOrchestrator
@@ -60,9 +61,17 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
     - runs the domain orchestrator
     - ensures cleanup (env + broker)
     """
-    broker_addr = deps.broker.start()
     try:
-        env = deps.environment_factory.build(broker_addr)
+        broker_addr = deps.broker.start()
+    except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+        raise BrokerError("Failed to start broker") from e
+
+    try:
+        try:
+            env = deps.environment_factory.build(broker_addr)
+        except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+            raise ExecutionError("Failed to build environment") from e
+
         try:
             orch = RLMOrchestrator(
                 llm=deps.llm,
@@ -70,13 +79,18 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 logger=deps.logger,
                 system_prompt=deps.system_prompt,
             )
-            return orch.completion(
-                request.prompt,
-                root_prompt=request.root_prompt,
-                max_depth=request.max_depth,
-                depth=0,
-                max_iterations=request.max_iterations,
-            )
+            try:
+                return orch.completion(
+                    request.prompt,
+                    root_prompt=request.root_prompt,
+                    max_depth=request.max_depth,
+                    depth=0,
+                    max_iterations=request.max_iterations,
+                )
+            except RLMError:
+                raise
+            except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+                raise RLMError("RLM run failed") from e
         finally:
             env.cleanup()
     finally:

@@ -63,11 +63,6 @@ def test_application_layer_does_not_depend_on_adapters_or_infra_except_bridge() 
     repo_root = Path(__file__).resolve().parents[1]
     application_root = repo_root / "src" / "rlm" / "application"
 
-    # Transitional bridge: Phase 2 still delegates to legacy via adapters.
-    allowlist = {
-        application_root / "services" / "legacy_orchestrator.py",
-    }
-
     offenders = _scan_forbidden_imports(
         application_root,
         forbidden_prefixes=(
@@ -78,7 +73,6 @@ def test_application_layer_does_not_depend_on_adapters_or_infra_except_bridge() 
             "references",
         ),
         forbidden_rlm_children=("adapters", "infrastructure", "api", "_legacy"),
-        allowlist_files=allowlist,
     )
     assert not offenders, "Application layer imports forbidden modules:\n" + "\n".join(offenders)
 
