@@ -8,6 +8,7 @@ from rlm.domain.models.completion import ChatCompletion
 from rlm.domain.models.iteration import CodeBlock, Iteration
 from rlm.domain.models.llm_request import LLMRequest
 from rlm.domain.models.query_metadata import QueryMetadata
+from rlm.domain.models.usage import UsageSummary, merge_usage_summaries
 from rlm.domain.ports import EnvironmentPort, LLMPort, LoggerPort
 from rlm.domain.services.parsing import (
     afind_final_answer,
@@ -48,10 +49,13 @@ class RLMOrchestrator:
         correlation_id: str | None = None,
     ) -> ChatCompletion:
         time_start = time.perf_counter()
+        usage_parts: list[UsageSummary] = []
+        cumulative_usage = UsageSummary(model_usage_summaries={})
 
         # Fallback: if we're at max depth, treat as a plain LM call.
         if depth >= max_depth:
             cc = self.llm.complete(LLMRequest(prompt=prompt))
+            usage_parts.append(cc.usage_summary)
             final_answer = find_final_answer(cc.response)
             response = final_answer if final_answer is not None else cc.response
             time_end = time.perf_counter()
@@ -59,7 +63,7 @@ class RLMOrchestrator:
                 root_model=cc.root_model,
                 prompt=prompt,
                 response=response,
-                usage_summary=self.llm.get_usage_summary(),
+                usage_summary=merge_usage_summaries(usage_parts),
                 execution_time=time_end - time_start,
             )
 
@@ -80,6 +84,7 @@ class RLMOrchestrator:
             ]
 
             llm_cc = self.llm.complete(LLMRequest(prompt=current_prompt))
+            usage_parts.append(llm_cc.usage_summary)
             response = llm_cc.response
 
             code_block_strs = find_code_blocks(response)
@@ -92,6 +97,16 @@ class RLMOrchestrator:
             final_answer = find_final_answer(response, environment=self.environment)
             iteration_time = time.perf_counter() - iter_start
 
+            # Usage for this iteration: orchestrator call + any nested `llm_query()` calls
+            # recorded by the environment in REPL results.
+            subcall_parts: list[UsageSummary] = []
+            for cb in code_blocks:
+                for sub_cc in cb.result.llm_calls:
+                    subcall_parts.append(sub_cc.usage_summary)
+            subcall_usage = merge_usage_summaries(subcall_parts)
+            iteration_usage = merge_usage_summaries([llm_cc.usage_summary, subcall_usage])
+            cumulative_usage = merge_usage_summaries([cumulative_usage, iteration_usage])
+
             iteration = Iteration(
                 correlation_id=correlation_id,
                 prompt=current_prompt,
@@ -99,6 +114,8 @@ class RLMOrchestrator:
                 code_blocks=code_blocks,
                 final_answer=final_answer,
                 iteration_time=iteration_time,
+                iteration_usage_summary=iteration_usage,
+                cumulative_usage_summary=cumulative_usage,
             )
 
             if self.logger is not None:
@@ -110,7 +127,7 @@ class RLMOrchestrator:
                     root_model=self.llm.model_name,
                     prompt=prompt,
                     response=final_answer,
-                    usage_summary=self.llm.get_usage_summary(),
+                    usage_summary=merge_usage_summaries(usage_parts),
                     execution_time=time_end - time_start,
                 )
 
@@ -125,13 +142,14 @@ class RLMOrchestrator:
             }
         ]
         last_cc = self.llm.complete(LLMRequest(prompt=final_prompt))
+        usage_parts.append(last_cc.usage_summary)
         extracted = find_final_answer(last_cc.response)
         time_end = time.perf_counter()
         return ChatCompletion(
             root_model=self.llm.model_name,
             prompt=prompt,
             response=extracted if extracted is not None else last_cc.response,
-            usage_summary=self.llm.get_usage_summary(),
+            usage_summary=merge_usage_summaries(usage_parts),
             execution_time=time_end - time_start,
         )
 
@@ -154,9 +172,12 @@ class RLMOrchestrator:
           while loading context / executing code.
         """
         time_start = time.perf_counter()
+        usage_parts: list[UsageSummary] = []
+        cumulative_usage = UsageSummary(model_usage_summaries={})
 
         if depth >= max_depth:
             cc = await self.llm.acomplete(LLMRequest(prompt=prompt))
+            usage_parts.append(cc.usage_summary)
             final_answer = await afind_final_answer(cc.response)
             response = final_answer if final_answer is not None else cc.response
             time_end = time.perf_counter()
@@ -164,7 +185,7 @@ class RLMOrchestrator:
                 root_model=cc.root_model,
                 prompt=prompt,
                 response=response,
-                usage_summary=self.llm.get_usage_summary(),
+                usage_summary=merge_usage_summaries(usage_parts),
                 execution_time=time_end - time_start,
             )
 
@@ -190,6 +211,7 @@ class RLMOrchestrator:
             else:
                 llm_cc = await self.llm.acomplete(LLMRequest(prompt=current_prompt))
 
+            usage_parts.append(llm_cc.usage_summary)
             response = llm_cc.response
             code_block_strs = find_code_blocks(response)
             code_blocks: list[CodeBlock] = []
@@ -202,6 +224,14 @@ class RLMOrchestrator:
             final_answer = await afind_final_answer(response, environment=self.environment)
             iteration_time = time.perf_counter() - iter_start
 
+            subcall_parts: list[UsageSummary] = []
+            for cb in code_blocks:
+                for sub_cc in cb.result.llm_calls:
+                    subcall_parts.append(sub_cc.usage_summary)
+            subcall_usage = merge_usage_summaries(subcall_parts)
+            iteration_usage = merge_usage_summaries([llm_cc.usage_summary, subcall_usage])
+            cumulative_usage = merge_usage_summaries([cumulative_usage, iteration_usage])
+
             iteration = Iteration(
                 correlation_id=correlation_id,
                 prompt=current_prompt,
@@ -209,6 +239,8 @@ class RLMOrchestrator:
                 code_blocks=code_blocks,
                 final_answer=final_answer,
                 iteration_time=iteration_time,
+                iteration_usage_summary=iteration_usage,
+                cumulative_usage_summary=cumulative_usage,
             )
             if self.logger is not None:
                 self.logger.log_iteration(iteration)
@@ -219,7 +251,7 @@ class RLMOrchestrator:
                     root_model=self.llm.model_name,
                     prompt=prompt,
                     response=final_answer,
-                    usage_summary=self.llm.get_usage_summary(),
+                    usage_summary=merge_usage_summaries(usage_parts),
                     execution_time=time_end - time_start,
                 )
 
@@ -232,12 +264,13 @@ class RLMOrchestrator:
             }
         ]
         last_cc = await self.llm.acomplete(LLMRequest(prompt=final_prompt))
+        usage_parts.append(last_cc.usage_summary)
         extracted = await afind_final_answer(last_cc.response)
         time_end = time.perf_counter()
         return ChatCompletion(
             root_model=self.llm.model_name,
             prompt=prompt,
             response=extracted if extracted is not None else last_cc.response,
-            usage_summary=self.llm.get_usage_summary(),
+            usage_summary=merge_usage_summaries(usage_parts),
             execution_time=time_end - time_start,
         )

@@ -49,6 +49,10 @@ def test_docker_env_llm_query_can_route_to_other_backend_by_model_name() -> None
 
     assert cc.response == "pong"
 
+    # Usage should include both the root LLM call and the nested docker subcall.
+    assert cc.usage_summary.model_usage_summaries["root"].total_calls == 1
+    assert cc.usage_summary.model_usage_summaries["sub"].total_calls == 1
+
     assert len(logger.iterations) == 1
     iter0 = logger.iterations[0]
     assert len(iter0.code_blocks) == 1

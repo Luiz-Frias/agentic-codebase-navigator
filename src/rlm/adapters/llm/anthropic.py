@@ -146,13 +146,15 @@ class AnthropicAdapter(BaseLLMAdapter):
 
         text = _extract_text(resp)
         in_tokens, out_tokens = _extract_usage_tokens(resp)
-        self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
+        last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
+        # Use the per-call usage returned by `record()` (race-free under concurrency).
+        last_usage = UsageSummary(model_usage_summaries={model: last})
 
         return ChatCompletion(
             root_model=model,
             prompt=request.prompt,
             response=text,
-            usage_summary=self._usage_tracker.get_last_usage(),
+            usage_summary=last_usage,
             execution_time=end - start,
         )
 
@@ -188,13 +190,15 @@ class AnthropicAdapter(BaseLLMAdapter):
 
         text = _extract_text(resp)
         in_tokens, out_tokens = _extract_usage_tokens(resp)
-        self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
+        last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
+        # Use the per-call usage returned by `record()` (race-free under concurrency).
+        last_usage = UsageSummary(model_usage_summaries={model: last})
 
         return ChatCompletion(
             root_model=model,
             prompt=request.prompt,
             response=text,
-            usage_summary=self._usage_tracker.get_last_usage(),
+            usage_summary=last_usage,
             execution_time=end - start,
         )
 

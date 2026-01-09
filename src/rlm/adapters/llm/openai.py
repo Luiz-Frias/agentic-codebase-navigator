@@ -103,8 +103,9 @@ class OpenAIAdapter(BaseLLMAdapter):
             raise LLMError(f"OpenAI response invalid: {e}") from None
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
-        self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
-        last_usage = self._usage_tracker.get_last_usage()
+        last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
+        # Use the per-call usage returned by `record()` (race-free under concurrency).
+        last_usage = UsageSummary(model_usage_summaries={model: last})
 
         return ChatCompletion(
             root_model=model,
@@ -136,8 +137,9 @@ class OpenAIAdapter(BaseLLMAdapter):
             raise LLMError(f"OpenAI response invalid: {e}") from None
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
-        self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
-        last_usage = self._usage_tracker.get_last_usage()
+        last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
+        # Use the per-call usage returned by `record()` (race-free under concurrency).
+        last_usage = UsageSummary(model_usage_summaries={model: last})
 
         return ChatCompletion(
             root_model=model,

@@ -4,7 +4,7 @@ import asyncio
 import concurrent.futures
 import time
 from socketserver import StreamRequestHandler, ThreadingTCPServer
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from typing import Any, Final
 
 from rlm.adapters.base import BaseBrokerAdapter
@@ -14,6 +14,7 @@ from rlm.domain.models import (
     ChatCompletion,
     LLMRequest,
     ModelSpec,
+    ModelUsageSummary,
     UsageSummary,
     build_routing_rules,
 )
@@ -201,6 +202,10 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         self._thread: Thread | None = None
         self._async_loop = _AsyncLoopThread()
 
+        # Per-broker usage totals (tracks only calls routed *through this broker*).
+        self._usage_lock = Lock()
+        self._usage = UsageSummary(model_usage_summaries={})
+
     # ---------------------------------------------------------------------
     # BrokerPort
     # ---------------------------------------------------------------------
@@ -260,29 +265,25 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
 
         # Preserve adapter timings when the LLM impl doesn't set execution_time.
         if cc.execution_time == 0.0:
-            return ChatCompletion(
+            cc = ChatCompletion(
                 root_model=cc.root_model,
                 prompt=cc.prompt,
                 response=cc.response,
                 usage_summary=cc.usage_summary,
                 execution_time=end - start,
             )
+
+        self._record_usage(cc.usage_summary)
         return cc
 
     def complete_batched(self, request: BatchedLLMRequest, /) -> list[ChatCompletion]:
         llm = self._select_llm(request.model)
 
-        async def _run() -> list[ChatCompletion]:
-            out = await _acomplete_prompts_batched(llm, request.prompts, llm.model_name)
-            results: list[ChatCompletion] = []
-            for item in out:
-                if isinstance(item, Exception):
-                    raise LLMError(_safe_error_message(item))
-                results.append(item)
-            return results
+        async def _run() -> list[ChatCompletion | Exception]:
+            return await _acomplete_prompts_batched(llm, request.prompts, llm.model_name)
 
         try:
-            return self._async_loop.run(
+            out = self._async_loop.run(
                 _run(),
                 timeout_s=self._timeouts.batched_completion_timeout_s,
                 cancellation=self._cancellation,
@@ -290,10 +291,19 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         except TimeoutError as exc:
             raise LLMError(str(exc)) from None
 
+        results: list[ChatCompletion] = []
+        # Record usage for all successful items, even if some items failed.
+        for item in out:
+            if isinstance(item, Exception):
+                raise LLMError(_safe_error_message(item))
+            self._record_usage(item.usage_summary)
+            results.append(item)
+        return results
+
     def get_usage_summary(self) -> UsageSummary:
-        return merge_usage_summaries(
-            self._llms[name].get_usage_summary() for name in sorted(self._llms)
-        )
+        # Snapshot + clone (avoid external mutation and keep keys deterministic).
+        with self._usage_lock:
+            return merge_usage_summaries([self._usage])
 
     # ---------------------------------------------------------------------
     # Internals
@@ -308,6 +318,28 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
     def _select_llm(self, model: str | None, /) -> LLMPort:
         resolved = self._routing_rules.resolve(model)
         return self._llms[resolved]
+
+    def _record_usage(self, usage: UsageSummary, /) -> None:
+        """
+        Merge a per-call usage summary into the broker's totals.
+
+        This intentionally tracks *only* calls routed through this broker instance,
+        independent of any internal totals maintained by LLM adapters.
+        """
+
+        with self._usage_lock:
+            for model, mus in usage.model_usage_summaries.items():
+                current = self._usage.model_usage_summaries.get(model)
+                if current is None:
+                    self._usage.model_usage_summaries[model] = ModelUsageSummary(
+                        total_calls=mus.total_calls,
+                        total_input_tokens=mus.total_input_tokens,
+                        total_output_tokens=mus.total_output_tokens,
+                    )
+                else:
+                    current.total_calls += mus.total_calls
+                    current.total_input_tokens += mus.total_input_tokens
+                    current.total_output_tokens += mus.total_output_tokens
 
     def _handle_wire_request(self, request: WireRequest, /) -> WireResponse:
         try:
@@ -340,6 +372,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                             WireResult(error=_safe_error_message(item), chat_completion=None)
                         )
                     else:
+                        self._record_usage(item.usage_summary)
                         results.append(WireResult(error=None, chat_completion=item))
                 return results
 
