@@ -52,13 +52,25 @@ class RLM:
 
     def completion(self, prompt: Prompt, *, root_prompt: str | None = None) -> ChatCompletion:
         broker = self._broker_factory(self._llm)
-        deps = RunCompletionDeps(
-            llm=self._llm,
-            broker=broker,
-            environment_factory=self._environment_factory,
-            logger=self._logger,
-            system_prompt=self._system_prompt or RunCompletionDeps.system_prompt,  # default text
-        )
+        # `RunCompletionDeps.system_prompt` is a dataclass field, not a class-level
+        # constant (and under `slots=True` it resolves to a `member_descriptor`).
+        # So: only pass a system prompt if the user explicitly provided one;
+        # otherwise rely on the dataclass default (`RLM_SYSTEM_PROMPT`).
+        if self._system_prompt is None:
+            deps = RunCompletionDeps(
+                llm=self._llm,
+                broker=broker,
+                environment_factory=self._environment_factory,
+                logger=self._logger,
+            )
+        else:
+            deps = RunCompletionDeps(
+                llm=self._llm,
+                broker=broker,
+                environment_factory=self._environment_factory,
+                logger=self._logger,
+                system_prompt=self._system_prompt,
+            )
         req = RunCompletionRequest(
             prompt=prompt,
             root_prompt=root_prompt,
