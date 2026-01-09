@@ -249,20 +249,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         llm = self._select_llm(request.model)
 
         async def _run() -> list[ChatCompletion]:
-            out: list[ChatCompletion | Exception] = [Exception("uninitialized")] * len(
-                request.prompts
-            )
-
-            async def _one(i: int, prompt: Any) -> None:
-                try:
-                    out[i] = await llm.acomplete(LLMRequest(prompt=prompt, model=request.model))
-                except Exception as exc:  # noqa: BLE001 - isolate per-item errors
-                    out[i] = exc
-
-            async with asyncio.TaskGroup() as tg:
-                for i, p in enumerate(request.prompts):
-                    tg.create_task(_one(i, p))
-
+            out = await _acomplete_prompts_batched(llm, request.prompts, request.model)
             results: list[ChatCompletion] = []
             for item in out:
                 if isinstance(item, Exception):
@@ -325,20 +312,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
             llm = self._select_llm(request.model)
 
             async def _run() -> list[WireResult]:
-                out: list[ChatCompletion | Exception] = [Exception("uninitialized")] * len(
-                    request.prompts
-                )  # noqa: B008
-
-                async def _one(i: int, prompt: Any) -> None:
-                    try:
-                        out[i] = await llm.acomplete(LLMRequest(prompt=prompt, model=request.model))
-                    except Exception as exc:  # noqa: BLE001 - isolate per-item errors
-                        out[i] = exc
-
-                async with asyncio.TaskGroup() as tg:
-                    for i, p in enumerate(request.prompts):
-                        tg.create_task(_one(i, p))
-
+                out = await _acomplete_prompts_batched(llm, request.prompts, request.model)
                 results: list[WireResult] = []
                 for item in out:
                     if isinstance(item, Exception):
@@ -368,3 +342,28 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                 error=_safe_error_message(exc),
                 results=None,
             )
+
+
+async def _acomplete_prompts_batched(
+    llm: LLMPort, prompts: list[Any], model: str | None
+) -> list[ChatCompletion | Exception]:
+    """
+    Run multiple `llm.acomplete(...)` calls concurrently and preserve ordering.
+
+    This is used by both the direct `complete_batched` API and the wire-protocol
+    handler to keep concurrency logic consistent.
+    """
+
+    out: list[ChatCompletion | Exception] = [Exception("uninitialized")] * len(prompts)
+
+    async def _one(i: int, prompt: Any) -> None:
+        try:
+            out[i] = await llm.acomplete(LLMRequest(prompt=prompt, model=model))
+        except Exception as exc:  # noqa: BLE001 - isolate per-item errors
+            out[i] = exc
+
+    async with asyncio.TaskGroup() as tg:
+        for i, p in enumerate(prompts):
+            tg.create_task(_one(i, p))
+
+    return out

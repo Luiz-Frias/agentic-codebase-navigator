@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol, overload
 
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
-from rlm.domain.models import ChatCompletion
+from rlm.domain.models import ChatCompletion, RunMetadata
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
 from rlm.domain.services.rlm_orchestrator import RLMOrchestrator
@@ -140,6 +140,30 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
             raise ExecutionError("Failed to build environment") from e
 
         try:
+            if deps.logger is not None:
+                # Best-effort environment type inference without importing adapters/legacy.
+                inner = getattr(env, "_env", None)
+                inner_name = type(inner).__name__ if inner is not None else type(env).__name__
+                env_type = "unknown"
+                if "DockerREPL" in inner_name:
+                    env_type = "docker"
+                elif "LocalREPL" in inner_name:
+                    env_type = "local"
+
+                deps.logger.log_metadata(
+                    RunMetadata(
+                        root_model=deps.llm.model_name,
+                        max_depth=request.max_depth,
+                        max_iterations=request.max_iterations,
+                        backend=deps.llm.model_name,
+                        backend_kwargs={},
+                        environment_type=env_type,
+                        environment_kwargs={},
+                        other_backends=None,
+                        correlation_id=correlation_id,
+                    )
+                )
+
             orch = RLMOrchestrator(
                 llm=deps.llm,
                 environment=env,
