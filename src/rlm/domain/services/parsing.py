@@ -29,10 +29,59 @@ def find_final_answer(text: str, *, environment: EnvironmentPort | None = None) 
     - FINAL(answer) returns the answer substring (stripped).
     - FINAL_VAR(name) optionally queries the environment to resolve a variable.
     """
-    final_var_pattern = r"^\s*FINAL_VAR\((.*?)\)"
-    match = re.search(final_var_pattern, text, re.MULTILINE | re.DOTALL)
-    if match:
-        variable_name = match.group(1).strip().strip('"').strip("'")
+
+    def _extract_call_arg(call_name: str) -> str | None:
+        """
+        Extract the argument string from a call like `CALL_NAME(<arg...>)` that
+        appears at the start of a line.
+
+        We can't use a naive regex like `.*?` because answers may contain
+        parentheses (e.g. `FINAL(f(x) == 5)`).
+        """
+        m = re.search(rf"^\s*{re.escape(call_name)}\(", text, re.MULTILINE)
+        if not m:
+            return None
+
+        start = m.end()
+        depth = 1
+        in_single = False
+        in_double = False
+        escape = False
+
+        for i in range(start, len(text)):
+            ch = text[i]
+
+            if escape:
+                escape = False
+                continue
+            if ch == "\\" and (in_single or in_double):
+                escape = True
+                continue
+
+            if ch == "'" and not in_double:
+                in_single = not in_single
+                continue
+            if ch == '"' and not in_single:
+                in_double = not in_double
+                continue
+
+            if in_single or in_double:
+                continue
+
+            if ch == "(":
+                depth += 1
+                continue
+            if ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i]
+                continue
+
+        return None
+
+    final_var_arg = _extract_call_arg("FINAL_VAR")
+    if final_var_arg is not None:
+        variable_name = final_var_arg.strip().strip('"').strip("'")
         if environment is None:
             return None
         result = environment.execute_code(f"print(FINAL_VAR({variable_name!r}))")
@@ -41,10 +90,9 @@ def find_final_answer(text: str, *, environment: EnvironmentPort | None = None) 
             final_answer = result.stderr.strip() or ""
         return final_answer
 
-    final_pattern = r"^\s*FINAL\((.*?)\)"
-    match = re.search(final_pattern, text, re.MULTILINE | re.DOTALL)
-    if match:
-        return match.group(1).strip()
+    final_arg = _extract_call_arg("FINAL")
+    if final_arg is not None:
+        return final_arg.strip()
     return None
 
 
@@ -56,10 +104,52 @@ async def afind_final_answer(
 
     This avoids blocking the event loop when FINAL_VAR needs environment execution.
     """
-    final_var_pattern = r"^\s*FINAL_VAR\((.*?)\)"
-    match = re.search(final_var_pattern, text, re.MULTILINE | re.DOTALL)
-    if match:
-        variable_name = match.group(1).strip().strip('"').strip("'")
+
+    def _extract_call_arg(call_name: str) -> str | None:
+        m = re.search(rf"^\s*{re.escape(call_name)}\(", text, re.MULTILINE)
+        if not m:
+            return None
+
+        start = m.end()
+        depth = 1
+        in_single = False
+        in_double = False
+        escape = False
+
+        for i in range(start, len(text)):
+            ch = text[i]
+
+            if escape:
+                escape = False
+                continue
+            if ch == "\\" and (in_single or in_double):
+                escape = True
+                continue
+
+            if ch == "'" and not in_double:
+                in_single = not in_single
+                continue
+            if ch == '"' and not in_single:
+                in_double = not in_double
+                continue
+
+            if in_single or in_double:
+                continue
+
+            if ch == "(":
+                depth += 1
+                continue
+            if ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i]
+                continue
+
+        return None
+
+    final_var_arg = _extract_call_arg("FINAL_VAR")
+    if final_var_arg is not None:
+        variable_name = final_var_arg.strip().strip('"').strip("'")
         if environment is None:
             return None
         result = await asyncio.to_thread(
@@ -70,10 +160,9 @@ async def afind_final_answer(
             final_answer = result.stderr.strip() or ""
         return final_answer
 
-    final_pattern = r"^\s*FINAL\((.*?)\)"
-    match = re.search(final_pattern, text, re.MULTILINE | re.DOTALL)
-    if match:
-        return match.group(1).strip()
+    final_arg = _extract_call_arg("FINAL")
+    if final_arg is not None:
+        return final_arg.strip()
     return None
 
 

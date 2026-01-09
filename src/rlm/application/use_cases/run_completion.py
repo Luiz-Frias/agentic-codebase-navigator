@@ -7,6 +7,7 @@ from typing import Protocol, overload
 
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion, RunMetadata
+from rlm.domain.models.usage import merge_usage_summaries
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
 from rlm.domain.services.rlm_orchestrator import RLMOrchestrator
@@ -171,13 +172,24 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 system_prompt=deps.system_prompt,
             )
             try:
-                return orch.completion(
+                cc = orch.completion(
                     request.prompt,
                     root_prompt=request.root_prompt,
                     max_depth=request.max_depth,
                     depth=0,
                     max_iterations=request.max_iterations,
                     correlation_id=correlation_id,
+                )
+                # Merge orchestrator usage (root calls) with broker usage (env subcalls).
+                merged_usage = merge_usage_summaries(
+                    [cc.usage_summary, deps.broker.get_usage_summary()]
+                )
+                return ChatCompletion(
+                    root_model=cc.root_model,
+                    prompt=cc.prompt,
+                    response=cc.response,
+                    usage_summary=merged_usage,
+                    execution_time=cc.execution_time,
                 )
             except RLMError:
                 raise

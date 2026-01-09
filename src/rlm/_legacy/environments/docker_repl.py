@@ -241,7 +241,13 @@ def llm_query(prompt, model=None, correlation_id=None):
             timeout={proxy_timeout_s},
         )
         d = r.json()
-        return d.get("response") or f"Error: {{d.get('error')}}"
+        # Important: preserve a legitimate empty-string response. Don't rely on
+        # truthiness; explicitly branch on `error`.
+        err = d.get("error")
+        if err is not None:
+            return f"Error: {{err}}"
+        resp = d.get("response")
+        return "" if resp is None else resp
     except Exception as e:
         return f"Error: {{e}}"
 
@@ -254,7 +260,12 @@ def llm_query_batched(prompts, model=None, correlation_id=None):
             timeout={proxy_timeout_s},
         )
         d = r.json()
-        return d.get("responses") or [f"Error: {{d.get('error')}}"] * len(prompts)
+        # Important: preserve an empty responses list for `prompts=[]`.
+        err = d.get("error")
+        if err is not None:
+            return [f"Error: {{err}}"] * len(prompts)
+        resps = d.get("responses")
+        return [] if resps is None else resps
     except Exception as e:
         return [f"Error: {{e}}"] * len(prompts)
 

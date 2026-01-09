@@ -122,7 +122,7 @@ def test_llm_proxy_handler_single_uses_broker_when_provided_and_does_not_call_le
         lock=threading.Lock(),
     )
 
-    out = docker_mod.LLMProxyHandler._handle_single(dummy, {"prompt": "ping", "model": "m1"})
+    out = docker_mod.LLMProxyHandler._handle_single(dummy, {"prompt": "ping", "model": "dummy"})
     assert out == {"response": "ok"}
     assert [c.response for c in dummy.pending_calls] == ["ok"]
 
@@ -151,7 +151,7 @@ def test_llm_proxy_handler_batched_uses_broker_per_item_and_preserves_order(
     )
 
     out = docker_mod.LLMProxyHandler._handle_batched(
-        dummy, {"prompts": ["a", "b", "c"], "model": "m2"}
+        dummy, {"prompts": ["a", "b", "c"], "model": "dummy"}
     )
     assert out == {"responses": ["r1", "Error: boom", "r3"]}
     assert [c.response for c in dummy.pending_calls] == ["r1", "r3"]
@@ -167,6 +167,24 @@ def test_docker_exec_script_passes_correlation_id_to_proxy_requests() -> None:
     assert "def llm_query(prompt, model=None, correlation_id=None):" in script
     assert "def llm_query_batched(prompts, model=None, correlation_id=None):" in script
     assert '"correlation_id": cid' in script
+
+
+@pytest.mark.unit
+def test_docker_exec_script_llm_query_preserves_empty_string_response() -> None:
+    """
+    Regression: `llm_query()` must not treat an empty-string LLM response as an error.
+
+    The container-side script should explicitly branch on `error` rather than
+    using `d.get("response") or ...`, because `""` is falsy.
+    """
+
+    from rlm._legacy.environments.docker_repl import _build_exec_script
+
+    script = _build_exec_script("print('hi')", 1234)
+    assert 'return d.get("response") or' not in script
+    assert 'return d.get("responses") or' not in script
+    assert 'err = d.get("error")' in script
+    assert "if err is not None:" in script
 
 
 @pytest.mark.unit

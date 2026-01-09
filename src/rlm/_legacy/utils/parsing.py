@@ -42,11 +42,64 @@ def find_final_answer(text: str, environment: BaseEnv | None = None) -> str | No
     Returns:
         The final answer string, or None if no final answer pattern is found
     """
+
+    def _extract_call_arg(call_name: str) -> str | None:
+        """
+        Extract the argument string from a call like `CALL_NAME(<arg...>)` that
+        appears at the start of a line.
+
+        We can't use a naive regex like `.*?` because answers may contain
+        parentheses (e.g. `FINAL(f(x) == 5)`).
+        """
+        # Find the opening `CALL_NAME(` anchored to line-start.
+        m = re.search(rf"^\s*{re.escape(call_name)}\(", text, re.MULTILINE)
+        if not m:
+            return None
+
+        start = m.end()
+        depth = 1
+        in_single = False
+        in_double = False
+        escape = False
+
+        for i in range(start, len(text)):
+            ch = text[i]
+
+            if escape:
+                escape = False
+                continue
+
+            # Ignore escaped characters inside quoted strings.
+            if ch == "\\" and (in_single or in_double):
+                escape = True
+                continue
+
+            # Track basic quote state so parentheses inside quotes don't affect depth.
+            if ch == "'" and not in_double:
+                in_single = not in_single
+                continue
+            if ch == '"' and not in_single:
+                in_double = not in_double
+                continue
+
+            if in_single or in_double:
+                continue
+
+            if ch == "(":
+                depth += 1
+                continue
+            if ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i]
+                continue
+
+        return None
+
     # Check for FINAL_VAR pattern first - must be at start of line
-    final_var_pattern = r"^\s*FINAL_VAR\((.*?)\)"
-    match = re.search(final_var_pattern, text, re.MULTILINE | re.DOTALL)
-    if match:
-        variable_name = match.group(1).strip().strip('"').strip("'")
+    final_var_arg = _extract_call_arg("FINAL_VAR")
+    if final_var_arg is not None:
+        variable_name = final_var_arg.strip().strip('"').strip("'")
         if environment is not None:
             result = environment.execute_code(f"print(FINAL_VAR({variable_name!r}))")
             final_answer = result.stdout.strip()
@@ -56,10 +109,9 @@ def find_final_answer(text: str, environment: BaseEnv | None = None) -> str | No
         return None
 
     # Check for FINAL pattern - must be at start of line
-    final_pattern = r"^\s*FINAL\((.*?)\)"
-    match = re.search(final_pattern, text, re.MULTILINE | re.DOTALL)
-    if match:
-        return match.group(1).strip()
+    final_arg = _extract_call_arg("FINAL")
+    if final_arg is not None:
+        return final_arg.strip()
 
     return None
 

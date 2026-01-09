@@ -92,4 +92,7 @@ def test_facade_boundary_runs_legacy_loop_and_executes_local_repl_code_block() -
     assert cc.response == "ok"
     assert cc.root_model == "dummy"
     assert cc.prompt == "hello"
-    assert cc.usage_summary.model_usage_summaries["dummy"].total_calls == 1
+    # The legacy loop should require two LLM calls here:
+    # 1) produce a repl code block (no FINAL)
+    # 2) after execution evidence is appended, return FINAL(...)
+    assert cc.usage_summary.model_usage_summaries["dummy"].total_calls == 2

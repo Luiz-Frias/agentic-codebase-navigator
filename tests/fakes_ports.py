@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from rlm.domain.errors import ValidationError
 from rlm.domain.models import (
     BatchedLLMRequest,
     ChatCompletion,
     Iteration,
     LLMRequest,
+    ModelSpec,
     ModelUsageSummary,
     ReplResult,
     RunMetadata,
     UsageSummary,
+    build_routing_rules,
 )
+from rlm.domain.models.usage import merge_usage_summaries
 from rlm.domain.ports import (
     BrokerPort,
     ClockPort,
@@ -140,10 +144,26 @@ class InMemoryBroker(BrokerPort):
     def __init__(self, default_llm: LLMPort) -> None:
         self._llms: dict[str, LLMPort] = {default_llm.model_name: default_llm}
         self._default = default_llm
+        self._routing_rules = build_routing_rules(
+            [ModelSpec(name=default_llm.model_name, is_default=True)]
+        )
         self._started = False
 
     def register_llm(self, model_name: str, llm: LLMPort, /) -> None:
+        if not isinstance(model_name, str) or not model_name.strip():
+            raise ValidationError("Broker.register_llm requires a non-empty model_name")
+        if model_name != llm.model_name:
+            raise ValidationError(
+                f"Broker.register_llm model_name {model_name!r} must match llm.model_name {llm.model_name!r}"
+            )
         self._llms[model_name] = llm
+        default = self._default.model_name
+        specs = [ModelSpec(name=default, is_default=True)]
+        for name in sorted(self._llms):
+            if name == default:
+                continue
+            specs.append(ModelSpec(name=name))
+        self._routing_rules = build_routing_rules(specs)
 
     def start(self) -> tuple[str, int]:
         self._started = True
@@ -153,16 +173,16 @@ class InMemoryBroker(BrokerPort):
         self._started = False
 
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
-        llm = self._llms.get(request.model or "", self._default)
-        return llm.complete(request)
+        resolved = self._routing_rules.resolve(request.model)
+        llm = self._llms[resolved]
+        # `request.model` is a routing hint; call the selected adapter with its own
+        # model name to keep `root_model` consistent.
+        return llm.complete(LLMRequest(prompt=request.prompt, model=llm.model_name))
 
     def complete_batched(self, request: BatchedLLMRequest, /) -> list[ChatCompletion]:
-        return [self.complete(LLMRequest(prompt=p, model=request.model)) for p in request.prompts]
+        resolved = self._routing_rules.resolve(request.model)
+        llm = self._llms[resolved]
+        return [llm.complete(LLMRequest(prompt=p, model=llm.model_name)) for p in request.prompts]
 
     def get_usage_summary(self) -> UsageSummary:
-        merged: dict[str, ModelUsageSummary] = {}
-        for _name, llm in self._llms.items():
-            summary = llm.get_usage_summary()
-            for model, mus in summary.model_usage_summaries.items():
-                merged[model] = mus
-        return UsageSummary(model_usage_summaries=merged)
+        return merge_usage_summaries(llm.get_usage_summary() for llm in self._llms.values())

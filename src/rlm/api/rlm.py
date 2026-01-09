@@ -10,6 +10,7 @@ from rlm.application.use_cases.run_completion import (
     RunCompletionRequest,
     run_completion,
 )
+from rlm.domain.errors import ValidationError
 from rlm.domain.models import ChatCompletion
 from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
 from rlm.domain.types import Prompt
@@ -28,6 +29,7 @@ class RLM:
         self,
         llm: LLMPort,
         *,
+        other_llms: list[LLMPort] | None = None,
         environment: EnvironmentName = "local",
         environment_kwargs: dict[str, Any] | None = None,
         max_depth: int = 1,
@@ -39,6 +41,7 @@ class RLM:
         system_prompt: str | None = None,
     ) -> None:
         self._llm = llm
+        self._other_llms = list(other_llms or [])
         self._max_depth = max_depth
         self._max_iterations = max_iterations
         self._verbose = verbose
@@ -52,6 +55,14 @@ class RLM:
 
     def completion(self, prompt: Prompt, *, root_prompt: str | None = None) -> ChatCompletion:
         broker = self._broker_factory(self._llm)
+        # Register additional models for subcalls (Phase 4 multi-backend).
+        seen = {self._llm.model_name}
+        for other in self._other_llms:
+            name = other.model_name
+            if name in seen:
+                raise ValidationError(f"Duplicate model registered: {name!r}")
+            seen.add(name)
+            broker.register_llm(name, other)
         # `RunCompletionDeps.system_prompt` is a dataclass field, not a class-level
         # constant (and under `slots=True` it resolves to a `member_descriptor`).
         # So: only pass a system prompt if the user explicitly provided one;

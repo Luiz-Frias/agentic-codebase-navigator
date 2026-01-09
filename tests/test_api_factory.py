@@ -43,15 +43,21 @@ def test_create_rlm_factory() -> None:
 
 
 @pytest.mark.unit
-def test_create_rlm_from_config_requires_llm_in_phase1() -> None:
+def test_create_rlm_from_config_uses_default_llm_registry() -> None:
     cfg = RLMConfig(
-        llm=LLMConfig(backend="mock", model_name="dummy"),
+        llm=LLMConfig(
+            backend="mock",
+            model_name="dummy",
+            backend_kwargs={"script": ["FINAL(factory_ok)"]},
+        ),
+        other_llms=[],
         env=EnvironmentConfig(environment="local"),
         max_iterations=2,
         verbose=False,
     )
-    with pytest.raises(NotImplementedError):
-        create_rlm_from_config(cfg)
+    rlm = create_rlm_from_config(cfg)
+    cc = rlm.completion("hi")
+    assert cc.response == "factory_ok"
 
 
 @pytest.mark.unit
@@ -67,6 +73,7 @@ def test_create_rlm_from_config_can_build_llm_from_registry() -> None:
     registry = _Registry()
     cfg = RLMConfig(
         llm=LLMConfig(backend="dummy", model_name="dummy"),
+        other_llms=[],
         env=EnvironmentConfig(environment="local"),
         max_iterations=2,
         verbose=False,
