@@ -12,7 +12,11 @@ from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Any, Literal
 
-from rlm.domain.models.usage import UsageSummary
+# NOTE(phase4): Usage accounting has been migrated to the domain layer.
+# We re-export the domain types here so legacy modules/tests can continue to import
+# `rlm._legacy.core.types.(ModelUsageSummary|UsageSummary)` without maintaining a
+# divergent copy.
+from rlm.domain.models.usage import ModelUsageSummary, UsageSummary  # noqa: F401
 
 ClientBackend = Literal[
     "openai",
