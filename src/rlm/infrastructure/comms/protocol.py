@@ -5,6 +5,7 @@ from typing import Any
 
 from rlm.domain.errors import BrokerError
 from rlm.domain.models import ChatCompletion
+from rlm.domain.policies.timeouts import DEFAULT_BROKER_CLIENT_TIMEOUT_S
 from rlm.domain.types import Prompt
 from rlm.infrastructure.comms.codec import DEFAULT_MAX_MESSAGE_BYTES, request_response
 from rlm.infrastructure.comms.messages import WireRequest, WireResponse, WireResult
@@ -57,7 +58,7 @@ def send_request(
     request: WireRequest,
     /,
     *,
-    timeout_s: float = 300,
+    timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> WireResponse:
     """
@@ -92,7 +93,7 @@ def request_completion(
     *,
     model: str | None = None,
     correlation_id: str | None = None,
-    timeout_s: float = 300,
+    timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> ChatCompletion:
     """
@@ -126,7 +127,7 @@ def request_completions_batched(
     *,
     model: str | None = None,
     correlation_id: str | None = None,
-    timeout_s: float = 300,
+    timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> list[WireResult]:
     """

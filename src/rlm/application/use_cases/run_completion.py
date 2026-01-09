@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import uuid
 from dataclasses import dataclass
 from typing import Protocol, overload
 
@@ -27,11 +28,24 @@ class EnvironmentFactory(Protocol):
     @overload
     def build(self, broker: BrokerPort, broker_address: tuple[str, int], /) -> EnvironmentPort: ...
 
+    @overload
+    def build(
+        self,
+        broker: BrokerPort,
+        broker_address: tuple[str, int],
+        correlation_id: str | None,
+        /,
+    ) -> EnvironmentPort: ...
+
     def build(self, *args: object) -> EnvironmentPort: ...
 
 
 def _build_environment(
-    factory: EnvironmentFactory, broker: BrokerPort, broker_address: tuple[str, int], /
+    factory: EnvironmentFactory,
+    broker: BrokerPort,
+    broker_address: tuple[str, int],
+    correlation_id: str | None,
+    /,
 ) -> EnvironmentPort:
     """
     Call `EnvironmentFactory.build()` in a backwards-compatible way.
@@ -47,11 +61,14 @@ def _build_environment(
     try:
         sig = inspect.signature(factory.build)
     except (TypeError, ValueError):
-        # Fallback: prefer passing the broker when we can't inspect.
+        # Fallback: try the richest call shape first.
         try:
-            return factory.build(broker, broker_address)  # type: ignore[misc]
+            return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
         except TypeError:
-            return factory.build(broker_address)  # type: ignore[misc]
+            try:
+                return factory.build(broker, broker_address)  # type: ignore[misc]
+            except TypeError:
+                return factory.build(broker_address)  # type: ignore[misc]
 
     params = list(sig.parameters.values())
     has_var_positional = any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in params)
@@ -62,7 +79,13 @@ def _build_environment(
         and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     ]
 
-    if has_var_positional or len(required_positional) >= 2:
+    # If the factory is varargs-based (our default migration factory is), prefer
+    # passing correlation_id as an additional arg for end-to-end tracing.
+    if has_var_positional:
+        return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
+    if len(required_positional) >= 3:
+        return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
+    if len(required_positional) >= 2:
         return factory.build(broker, broker_address)  # type: ignore[misc]
     return factory.build(broker_address)  # type: ignore[misc]
 
@@ -102,6 +125,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
     - runs the domain orchestrator
     - ensures cleanup (env + broker)
     """
+    correlation_id = uuid.uuid4().hex
     try:
         broker_addr = deps.broker.start()
     except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
@@ -109,7 +133,9 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
 
     try:
         try:
-            env = _build_environment(deps.environment_factory, deps.broker, broker_addr)
+            env = _build_environment(
+                deps.environment_factory, deps.broker, broker_addr, correlation_id
+            )
         except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
             raise ExecutionError("Failed to build environment") from e
 
@@ -127,6 +153,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                     max_depth=request.max_depth,
                     depth=0,
                     max_iterations=request.max_iterations,
+                    correlation_id=correlation_id,
                 )
             except RLMError:
                 raise

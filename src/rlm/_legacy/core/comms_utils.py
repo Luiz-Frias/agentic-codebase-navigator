@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from rlm._legacy.core.types import RLMChatCompletion, UsageSummary
+from rlm.domain.policies.timeouts import DEFAULT_BROKER_CLIENT_TIMEOUT_S
 from rlm.infrastructure.comms.codec import (
     DEFAULT_MAX_MESSAGE_BYTES,
 )
@@ -177,7 +178,7 @@ def socket_recv(sock: socket.socket) -> dict[str, Any]:
 
 
 def socket_request(
-    address: tuple[str, int], data: dict[str, Any], timeout: int = 300
+    address: tuple[str, int], data: dict[str, Any], timeout: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S
 ) -> dict[str, Any]:
     """Send a request and receive a response over a new socket connection.
 
@@ -186,7 +187,7 @@ def socket_request(
     Args:
         address: (host, port) tuple to connect to.
         data: Dictionary to send as JSON.
-        timeout: Socket timeout in seconds (default 300).
+        timeout: Socket timeout in seconds.
 
     Returns:
         Response dictionary.
@@ -211,7 +212,11 @@ def socket_request(
 # =============================================================================
 
 
-def send_lm_request(address: tuple[str, int], request: LMRequest, timeout: int = 300) -> LMResponse:
+def send_lm_request(
+    address: tuple[str, int],
+    request: LMRequest,
+    timeout: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
+) -> LMResponse:
     """Send an LM request and return typed response.
 
     Args:
@@ -268,7 +273,7 @@ def send_lm_request_batched(
     address: tuple[str, int],
     prompts: list[str | dict[str, Any]],
     model: str | None = None,
-    timeout: int = 300,
+    timeout: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
 ) -> list[LMResponse]:
     """Send a batched LM request and return a list of typed responses.
 

@@ -2,13 +2,11 @@
 Environment adapters (hexagonal).
 
 Phase 1 note:
-- These adapters are thin wrappers around the legacy environment implementations.
-- They exist to establish the target seams; later phases will replace the legacy
-  envs with native implementations.
+- This package is reserved for native environment adapters in later phases.
+- Legacy environment implementations live under `rlm._legacy` and are used only
+  as a migration bridge during the refactor.
 """
 
 from __future__ import annotations
 
-from rlm.adapters.environments.docker import LegacyDockerEnvironmentAdapter
-
-__all__ = ["LegacyDockerEnvironmentAdapter"]
+__all__: list[str] = []

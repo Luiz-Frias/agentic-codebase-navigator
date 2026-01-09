@@ -8,6 +8,7 @@ from typing import Protocol
 
 from rlm.application.config import EnvironmentConfig, LLMConfig, LoggerConfig
 from rlm.application.use_cases.run_completion import EnvironmentFactory
+from rlm.domain.policies.timeouts import DEFAULT_DOCKER_DAEMON_PROBE_TIMEOUT_S
 from rlm.domain.ports import LLMPort, LoggerPort
 
 
@@ -108,7 +109,7 @@ class DefaultLoggerRegistry(LoggerRegistry):
                 raise ValueError(f"Unknown logger: {config.logger!r}")
 
 
-def ensure_docker_available(*, timeout_s: float = 2.0) -> None:
+def ensure_docker_available(*, timeout_s: float = DEFAULT_DOCKER_DAEMON_PROBE_TIMEOUT_S) -> None:
     """
     Raise a helpful error if Docker isn't available.
 

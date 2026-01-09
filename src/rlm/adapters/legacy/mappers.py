@@ -51,7 +51,7 @@ def legacy_repl_result_to_domain(legacy: legacy_types.REPLResult, /) -> domain_m
         stderr=legacy.stderr,
         locals=dict(legacy.locals),
         llm_calls=[legacy_chat_completion_to_domain(c) for c in legacy.llm_calls],
-        execution_time=legacy.execution_time,
+        execution_time=legacy.execution_time or 0.0,
     )
 
 

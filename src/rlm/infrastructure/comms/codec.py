@@ -5,6 +5,8 @@ import socket
 import struct
 from typing import Any
 
+from rlm.domain.policies.timeouts import DEFAULT_BROKER_CLIENT_TIMEOUT_S
+
 DEFAULT_MAX_MESSAGE_BYTES = 10_000_000  # 10MB safety cap
 
 
@@ -69,7 +71,7 @@ def request_response(
     message: dict[str, Any],
     /,
     *,
-    timeout_s: float = 300,
+    timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> dict[str, Any]:
     """Open a TCP connection, send a single request frame, then read one response frame."""

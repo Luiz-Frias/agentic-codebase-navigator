@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import time
 from socketserver import StreamRequestHandler, ThreadingTCPServer
 from threading import Event, Thread
@@ -14,6 +15,12 @@ from rlm.domain.models import (
     LLMRequest,
     ModelUsageSummary,
     UsageSummary,
+)
+from rlm.domain.policies.timeouts import (
+    DEFAULT_BROKER_ASYNC_LOOP_START_TIMEOUT_S,
+    DEFAULT_BROKER_THREAD_JOIN_TIMEOUT_S,
+    BrokerTimeouts,
+    CancellationPolicy,
 )
 from rlm.domain.ports import LLMPort
 from rlm.infrastructure.comms.codec import DEFAULT_MAX_MESSAGE_BYTES, recv_frame, send_frame
@@ -32,7 +39,9 @@ def _safe_error_message(exc: BaseException, /) -> str:
             return str(exc)
         case ValueError() | TypeError():
             return str(exc)
-        case TimeoutError() | ConnectionError() | OSError():
+        case TimeoutError():
+            return "Request timed out"
+        case ConnectionError() | OSError():
             return "Connection error"
         case _:
             return "Internal broker error"
@@ -76,7 +85,7 @@ class _AsyncLoopThread:
 
         self._thread = Thread(target=_runner, name="rlm-tcp-broker-async-loop", daemon=True)
         self._thread.start()
-        self._ready.wait(timeout=2.0)
+        self._ready.wait(timeout=DEFAULT_BROKER_ASYNC_LOOP_START_TIMEOUT_S)
         if self._loop is None:
             raise RuntimeError("Async loop thread failed to start")
 
@@ -88,15 +97,38 @@ class _AsyncLoopThread:
 
         loop = self._loop
         loop.call_soon_threadsafe(loop.stop)
-        self._thread.join(timeout=2.0)
+        self._thread.join(timeout=DEFAULT_BROKER_THREAD_JOIN_TIMEOUT_S)
         self._thread = None
         self._loop = None
 
-    def run(self, coro: asyncio.Future[Any] | asyncio.coroutines.Coroutine[Any, Any, Any]) -> Any:
+    def run(
+        self,
+        coro: asyncio.Future[Any] | asyncio.coroutines.Coroutine[Any, Any, Any],
+        /,
+        *,
+        timeout_s: float | None = None,
+        cancellation: CancellationPolicy | None = None,
+    ) -> Any:
         if self._loop is None:
             raise RuntimeError("Async loop not started")
         fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return fut.result()
+        if timeout_s is None:
+            return fut.result()
+
+        try:
+            return fut.result(timeout=timeout_s)
+        except concurrent.futures.TimeoutError:
+            # Best-effort cancellation: ask the loop to cancel the coroutine.
+            fut.cancel()
+
+            # Give cancellation a small grace period to propagate and clean up children.
+            grace = cancellation.grace_timeout_s if cancellation is not None else 0.0
+            if grace > 0:
+                try:
+                    fut.result(timeout=grace)
+                except Exception:  # noqa: BLE001 - best-effort cancellation cleanup
+                    pass
+            raise TimeoutError("Batched request timed out") from None
 
 
 class _TcpBrokerServer(ThreadingTCPServer):
@@ -146,12 +178,17 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         *,
         host: str = _DEFAULT_HOST,
         port: int = 0,
+        timeouts: BrokerTimeouts | None = None,
+        cancellation: CancellationPolicy | None = None,
     ) -> None:
         self._host = host
         self._port = port
 
         self._default_llm = default_llm
         self._llms: dict[str, LLMPort] = {default_llm.model_name: default_llm}
+
+        self._timeouts = timeouts or BrokerTimeouts()
+        self._cancellation = cancellation or CancellationPolicy()
 
         self._server: _TcpBrokerServer | None = None
         self._thread: Thread | None = None
@@ -186,7 +223,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         self._server.server_close()
         self._server = None
         if thread is not None:
-            thread.join(timeout=2.0)
+            thread.join(timeout=DEFAULT_BROKER_THREAD_JOIN_TIMEOUT_S)
         self._thread = None
 
         self._async_loop.stop()
@@ -233,7 +270,14 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                 results.append(item)
             return results
 
-        return self._async_loop.run(_run())
+        try:
+            return self._async_loop.run(
+                _run(),
+                timeout_s=self._timeouts.batched_completion_timeout_s,
+                cancellation=self._cancellation,
+            )
+        except TimeoutError as exc:
+            raise LLMError(str(exc)) from None
 
     def get_usage_summary(self) -> UsageSummary:
         merged: dict[str, ModelUsageSummary] = {}
@@ -305,7 +349,18 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                         results.append(WireResult(error=None, chat_completion=item))
                 return results
 
-            results = self._async_loop.run(_run())
+            try:
+                results = self._async_loop.run(
+                    _run(),
+                    timeout_s=self._timeouts.batched_completion_timeout_s,
+                    cancellation=self._cancellation,
+                )
+            except TimeoutError as exc:
+                return WireResponse(
+                    correlation_id=request.correlation_id,
+                    error=_safe_error_message(exc),
+                    results=None,
+                )
             return WireResponse(correlation_id=request.correlation_id, error=None, results=results)
         except Exception as exc:  # noqa: BLE001 - never crash the server; safe response
             return WireResponse(

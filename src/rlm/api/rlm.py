@@ -90,7 +90,12 @@ def _default_legacy_environment_factory(
     pulling optional dependencies unless selected.
     """
 
-    def _build(broker: BrokerPort | None, broker_address: tuple[str, int], /):
+    def _build(
+        broker: BrokerPort | None,
+        broker_address: tuple[str, int],
+        correlation_id: str | None = None,
+        /,
+    ):
         from rlm.adapters.legacy.environment import LegacyEnvironmentAdapter
 
         match environment:
@@ -102,9 +107,18 @@ def _default_legacy_environment_factory(
                 # Prefer injecting the BrokerPort explicitly (no runtime monkey patching).
                 # Fallback is legacy socket transport (lm_handler_address).
                 if broker is not None:
-                    env = LocalREPL(lm_handler_address=broker_address, broker=broker, **kwargs)
+                    env = LocalREPL(
+                        lm_handler_address=broker_address,
+                        broker=broker,
+                        correlation_id=correlation_id,
+                        **kwargs,
+                    )
                 else:
-                    env = LocalREPL(lm_handler_address=broker_address, **kwargs)
+                    env = LocalREPL(
+                        lm_handler_address=broker_address,
+                        correlation_id=correlation_id,
+                        **kwargs,
+                    )
                 return LegacyEnvironmentAdapter(env)
             case "docker":
                 from rlm._legacy.environments.docker_repl import DockerREPL
@@ -112,9 +126,18 @@ def _default_legacy_environment_factory(
                 kwargs = dict(environment_kwargs)
                 kwargs.pop("lm_handler_address", None)
                 if broker is not None:
-                    env = DockerREPL(lm_handler_address=broker_address, broker=broker, **kwargs)
+                    env = DockerREPL(
+                        lm_handler_address=broker_address,
+                        broker=broker,
+                        correlation_id=correlation_id,
+                        **kwargs,
+                    )
                 else:
-                    env = DockerREPL(lm_handler_address=broker_address, **kwargs)
+                    env = DockerREPL(
+                        lm_handler_address=broker_address,
+                        correlation_id=correlation_id,
+                        **kwargs,
+                    )
                 return LegacyEnvironmentAdapter(env)
             case "modal" | "prime":
                 raise NotImplementedError(
@@ -135,9 +158,15 @@ def _default_legacy_environment_factory(
 
             match args:
                 case ((str() as host, int() as port),):
-                    return _build(None, (host, port))
+                    return _build(None, (host, port), None)
                 case (broker, (str() as host, int() as port)):
-                    return _build(broker, (host, port))  # type: ignore[arg-type]
+                    return _build(broker, (host, port), None)  # type: ignore[arg-type]
+                case (broker, (str() as host, int() as port), cid) if cid is None or isinstance(
+                    cid, str
+                ):
+                    return _build(broker, (host, port), cid)  # type: ignore[arg-type]
+                case ((str() as host, int() as port), cid) if isinstance(cid, str):
+                    return _build(None, (host, port), cid)
                 case _:
                     raise TypeError(
                         "EnvironmentFactory.build() expects (broker_address) or (broker, broker_address)"

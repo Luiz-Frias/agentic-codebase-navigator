@@ -24,6 +24,13 @@ from rlm._legacy.core.comms_utils import LMRequest, send_lm_request, send_lm_req
 from rlm._legacy.core.types import REPLResult, RLMChatCompletion, UsageSummary
 from rlm._legacy.environments.base_env import NonIsolatedEnv
 from rlm.domain.models import LLMRequest as DomainLLMRequest
+from rlm.domain.policies.timeouts import (
+    DEFAULT_DOCKER_CLEANUP_SUBPROCESS_TIMEOUT_S,
+    DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S,
+    DEFAULT_DOCKER_STOP_GRACE_S,
+    DEFAULT_DOCKER_SUBPROCESS_TIMEOUT_S,
+    DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S,
+)
 from rlm.domain.ports import BrokerPort
 
 
@@ -203,7 +210,13 @@ class LLMProxyHandler(BaseHTTPRequestHandler):
         return {"responses": results}
 
 
-def _build_exec_script(code: str, proxy_port: int) -> str:
+def _build_exec_script(
+    code: str,
+    proxy_port: int,
+    /,
+    *,
+    proxy_timeout_s: float = DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S,
+) -> str:
     """Build execution script for the container."""
     code_b64 = base64.b64encode(code.encode()).decode()
 
@@ -225,7 +238,7 @@ def llm_query(prompt, model=None, correlation_id=None):
         r = requests.post(
             f"{{PROXY}}/llm_query",
             json={{"prompt": prompt, "model": model, "correlation_id": cid}},
-            timeout=300,
+            timeout={proxy_timeout_s},
         )
         d = r.json()
         return d.get("response") or f"Error: {{d.get('error')}}"
@@ -238,7 +251,7 @@ def llm_query_batched(prompts, model=None, correlation_id=None):
         r = requests.post(
             f"{{PROXY}}/llm_query_batched",
             json={{"prompts": prompts, "model": model, "correlation_id": cid}},
-            timeout=300,
+            timeout={proxy_timeout_s},
         )
         d = r.json()
         return d.get("responses") or [f"Error: {{d.get('error')}}"] * len(prompts)
@@ -283,8 +296,9 @@ try:
     for k, v in combined.items():
         if k not in _globals and not k.startswith("_"):
             _locals[k] = v
-except:
-    traceback.print_exc(file=stderr_buf)
+except Exception as e:
+    # Safe error mapping: avoid dumping full stack traces into user-facing output.
+    stderr_buf.write(f"{{type(e).__name__}}: {{e}}")
 finally:
     sys.stdout, sys.stderr = old_stdout, old_stderr
 
@@ -306,10 +320,12 @@ class DockerREPL(NonIsolatedEnv):
         image: str = "python:3.12-slim",
         lm_handler_address: tuple[str, int] | None = None,
         broker: BrokerPort | None = None,
+        correlation_id: str | None = None,
         context_payload: dict | list | str | None = None,
         setup_code: str | None = None,
         *,
-        subprocess_timeout_s: float = 300,
+        subprocess_timeout_s: float = DEFAULT_DOCKER_SUBPROCESS_TIMEOUT_S,
+        proxy_http_timeout_s: float = DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -317,7 +333,9 @@ class DockerREPL(NonIsolatedEnv):
         self.image = image
         self.lm_handler_address = lm_handler_address
         self._broker = broker
+        self.correlation_id = correlation_id
         self.subprocess_timeout_s = subprocess_timeout_s
+        self.proxy_http_timeout_s = proxy_http_timeout_s
         self.container_id: str | None = None
         self.proxy_server: HTTPServer | None = None
         self.proxy_thread: threading.Thread | None = None
@@ -446,10 +464,16 @@ class DockerREPL(NonIsolatedEnv):
         with self._calls_lock:
             self.pending_calls.clear()
 
-        script = _build_exec_script(code, self.proxy_port)
+        script = _build_exec_script(
+            code, self.proxy_port, proxy_timeout_s=self.proxy_http_timeout_s
+        )
         try:
+            cmd = ["docker", "exec"]
+            if self.correlation_id is not None:
+                cmd.extend(["--env", f"RLM_CORRELATION_ID={self.correlation_id}"])
+            cmd.extend([self.container_id, "python", "-c", script])
             result = subprocess.run(
-                ["docker", "exec", self.container_id, "python", "-c", script],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=self.subprocess_timeout_s,
@@ -511,9 +535,9 @@ class DockerREPL(NonIsolatedEnv):
             if container_id:
                 # Don't block indefinitely on docker stop.
                 subprocess.run(
-                    ["docker", "stop", "-t", "2", container_id],
+                    ["docker", "stop", "-t", str(DEFAULT_DOCKER_STOP_GRACE_S), container_id],
                     capture_output=True,
-                    timeout=5,
+                    timeout=DEFAULT_DOCKER_CLEANUP_SUBPROCESS_TIMEOUT_S,
                 )
         except Exception:
             pass
@@ -537,7 +561,7 @@ class DockerREPL(NonIsolatedEnv):
 
         try:
             if proxy_thread is not None and proxy_thread.is_alive():
-                proxy_thread.join(timeout=2)
+                proxy_thread.join(timeout=DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S)
         except Exception:
             pass
         finally:

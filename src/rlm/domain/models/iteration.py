@@ -30,23 +30,29 @@ class Iteration:
 
     prompt: Any
     response: str
+    correlation_id: str | None = None
     code_blocks: list[CodeBlock] = field(default_factory=list)
     final_answer: str | None = None
     iteration_time: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "prompt": self.prompt,
             "response": self.response,
             "code_blocks": [b.to_dict() for b in self.code_blocks],
             "final_answer": self.final_answer,
             "iteration_time": self.iteration_time,
         }
+        if self.correlation_id is not None:
+            d["correlation_id"] = self.correlation_id
+        return d
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Iteration:
         raw_blocks = data.get("code_blocks", []) or []
+        correlation_id = data.get("correlation_id")
         return cls(
+            correlation_id=str(correlation_id) if correlation_id is not None else None,
             prompt=data.get("prompt"),
             response=str(data.get("response", "")),
             code_blocks=[CodeBlock.from_dict(b) for b in raw_blocks],
