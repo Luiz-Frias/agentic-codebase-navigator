@@ -33,3 +33,23 @@ def test_rlm_chat_completion_from_dict_rejects_non_dict_usage_summary() -> None:
                 "execution_time": 0.1,
             }
         )
+
+
+@pytest.mark.unit
+def test_rlm_chat_completion_from_dict_defaults_required_fields_when_missing() -> None:
+    cc = RLMChatCompletion.from_dict({})
+    assert cc.root_model == ""
+    assert cc.prompt == ""
+    assert cc.response == ""
+    assert cc.execution_time == 0.0
+
+
+@pytest.mark.unit
+def test_rlm_chat_completion_from_dict_defaults_required_fields_when_explicit_none() -> None:
+    cc = RLMChatCompletion.from_dict(
+        {"root_model": None, "prompt": None, "response": None, "execution_time": None}
+    )
+    assert cc.root_model == ""
+    assert cc.prompt == ""
+    assert cc.response == ""
+    assert cc.execution_time == 0.0

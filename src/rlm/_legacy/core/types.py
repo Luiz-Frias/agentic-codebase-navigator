@@ -92,12 +92,29 @@ class RLMChatCompletion:
                 "RLMChatCompletion.usage_summary must be a dict when present "
                 f"(got {type(usage_summary_data).__name__})"
             )
+
+        root_model_raw = data.get("root_model")
+        root_model = "" if root_model_raw is None else str(root_model_raw)
+
+        # Prompt payloads can vary across upstream; we keep it permissive here.
+        prompt = data.get("prompt")
+        if prompt is None:
+            prompt = ""
+
+        response_raw = data.get("response")
+        response = "" if response_raw is None else str(response_raw)
+
+        execution_time_raw = data.get("execution_time", 0.0)
+        if execution_time_raw is None:
+            execution_time_raw = 0.0
+        execution_time = float(execution_time_raw)
+
         return cls(
-            root_model=data.get("root_model"),
-            prompt=data.get("prompt"),
-            response=data.get("response"),
+            root_model=root_model,
+            prompt=prompt,
+            response=response,
             usage_summary=UsageSummary.from_dict(usage_summary_data),
-            execution_time=data.get("execution_time"),
+            execution_time=execution_time,
         )
 
 

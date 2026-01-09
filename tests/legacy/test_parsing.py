@@ -32,6 +32,12 @@ def test_find_final_answer_final() -> None:
 
 
 @pytest.mark.unit
+def test_find_final_answer_final_allows_parentheses_in_payload() -> None:
+    text = "noise\nFINAL(The result of f(x) is 5)\nmore"
+    assert find_final_answer(text) == "The result of f(x) is 5"
+
+
+@pytest.mark.unit
 def test_find_final_answer_final_var_requires_env() -> None:
     assert find_final_answer("FINAL_VAR(answer)") is None
 
