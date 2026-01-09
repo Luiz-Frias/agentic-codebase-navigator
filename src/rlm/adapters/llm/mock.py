@@ -135,12 +135,31 @@ class MockLLMAdapter(BaseLLMAdapter):
 
     def get_usage_summary(self) -> UsageSummary:
         with self._lock:
-            # Return a shallow copy to protect internal mutability.
-            return UsageSummary(model_usage_summaries=dict(self._usage.model_usage_summaries))
+            # Return a deep copy to protect internal mutability. `ModelUsageSummary`
+            # instances are mutable, so copying only the dict is insufficient.
+            return UsageSummary(
+                model_usage_summaries={
+                    model: ModelUsageSummary(
+                        total_calls=mus.total_calls,
+                        total_input_tokens=mus.total_input_tokens,
+                        total_output_tokens=mus.total_output_tokens,
+                    )
+                    for model, mus in self._usage.model_usage_summaries.items()
+                }
+            )
 
     def get_last_usage(self) -> UsageSummary:
         with self._lock:
-            return self._last_usage
+            return UsageSummary(
+                model_usage_summaries={
+                    model: ModelUsageSummary(
+                        total_calls=mus.total_calls,
+                        total_input_tokens=mus.total_input_tokens,
+                        total_output_tokens=mus.total_output_tokens,
+                    )
+                    for model, mus in self._last_usage.model_usage_summaries.items()
+                }
+            )
 
     # ---------------------------------------------------------------------
     # Internals

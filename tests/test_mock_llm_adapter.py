@@ -33,6 +33,34 @@ def test_mock_llm_adapter_echo_is_deterministic_and_tracks_usage() -> None:
 
 
 @pytest.mark.unit
+def test_mock_llm_adapter_usage_summary_is_snapshot_not_mutated_by_later_calls() -> None:
+    llm = MockLLMAdapter(model="mock-model")
+
+    llm.complete(LLMRequest(prompt="hello world"))
+    snap1 = llm.get_usage_summary()
+    assert snap1.model_usage_summaries["mock-model"].total_calls == 1
+
+    llm.complete(LLMRequest(prompt="hello world"))
+    # Earlier snapshot must not change after later calls.
+    assert snap1.model_usage_summaries["mock-model"].total_calls == 1
+
+    snap2 = llm.get_usage_summary()
+    assert snap2.model_usage_summaries["mock-model"].total_calls == 2
+
+
+@pytest.mark.unit
+def test_mock_llm_adapter_usage_summary_does_not_allow_mutating_internal_state() -> None:
+    llm = MockLLMAdapter(model="mock-model")
+
+    llm.complete(LLMRequest(prompt="hello world"))
+    snap = llm.get_usage_summary()
+    snap.model_usage_summaries["mock-model"].total_calls = 999
+
+    snap2 = llm.get_usage_summary()
+    assert snap2.model_usage_summaries["mock-model"].total_calls == 1
+
+
+@pytest.mark.unit
 def test_mock_llm_adapter_scripted_responses_pop_in_order() -> None:
     llm = MockLLMAdapter(model="dummy", script=["A", "B"])
 

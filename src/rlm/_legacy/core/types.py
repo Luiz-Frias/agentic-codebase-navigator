@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Any, Literal
 
+from rlm.domain.models.usage import UsageSummary
+
 ClientBackend = Literal[
     "openai",
     "portkey",
@@ -51,55 +53,9 @@ def _serialize_value(value: Any) -> Any:
 ########    Types for LM Cost Tracking         #########
 ########################################################
 
-
-@dataclass
-class ModelUsageSummary:
-    total_calls: int
-    total_input_tokens: int
-    total_output_tokens: int
-
-    def to_dict(self) -> dict[str, int]:
-        return {
-            "total_calls": self.total_calls,
-            "total_input_tokens": self.total_input_tokens,
-            "total_output_tokens": self.total_output_tokens,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ModelUsageSummary:
-        def _int_field(key: str) -> int:
-            value = data.get(key, 0)
-            if value is None:
-                value = 0
-            return int(value)
-
-        return cls(
-            total_calls=_int_field("total_calls"),
-            total_input_tokens=_int_field("total_input_tokens"),
-            total_output_tokens=_int_field("total_output_tokens"),
-        )
-
-
-@dataclass
-class UsageSummary:
-    model_usage_summaries: dict[str, ModelUsageSummary]
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "model_usage_summaries": {
-                model: usage_summary.to_dict()
-                for model, usage_summary in self.model_usage_summaries.items()
-            },
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> UsageSummary:
-        return cls(
-            model_usage_summaries={
-                model: ModelUsageSummary.from_dict(usage_summary)
-                for model, usage_summary in data.get("model_usage_summaries", {}).items()
-            },
-        )
+# NOTE(phase4): Usage accounting has been migrated to the domain layer.
+# We re-export the domain types here so legacy modules/tests can continue to import
+# `rlm._legacy.core.types.UsageSummary` without maintaining a divergent copy.
 
 
 ########################################################

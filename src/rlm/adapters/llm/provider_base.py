@@ -198,8 +198,47 @@ class UsageTracker:
 
     def get_usage_summary(self) -> UsageSummary:
         with self._lock:
-            return UsageSummary(model_usage_summaries=dict(self._total))
+            # Snapshot values (copy the *numbers*) while holding the lock.
+            items = [
+                (
+                    model,
+                    mus.total_calls,
+                    mus.total_input_tokens,
+                    mus.total_output_tokens,
+                )
+                for model, mus in self._total.items()
+            ]
+        # Return deep-copied ModelUsageSummary objects so callers can't observe
+        # future `record()` mutations (or mutate our internal state via aliasing).
+        return UsageSummary(
+            model_usage_summaries={
+                model: ModelUsageSummary(
+                    total_calls=calls,
+                    total_input_tokens=input_tokens,
+                    total_output_tokens=output_tokens,
+                )
+                for model, calls, input_tokens, output_tokens in items
+            }
+        )
 
     def get_last_usage(self) -> UsageSummary:
         with self._lock:
-            return UsageSummary(model_usage_summaries=dict(self._last))
+            items = [
+                (
+                    model,
+                    mus.total_calls,
+                    mus.total_input_tokens,
+                    mus.total_output_tokens,
+                )
+                for model, mus in self._last.items()
+            ]
+        return UsageSummary(
+            model_usage_summaries={
+                model: ModelUsageSummary(
+                    total_calls=calls,
+                    total_input_tokens=input_tokens,
+                    total_output_tokens=output_tokens,
+                )
+                for model, calls, input_tokens, output_tokens in items
+            }
+        )
