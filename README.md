@@ -27,6 +27,25 @@ Integration tests (may use Docker; skip cleanly if unavailable):
 uv run --group test pytest -m integration
 ```
 
+### Optional LLM adapters (providers)
+
+Provider SDKs are installed via **optional extras** to keep the default install lightweight.
+
+- **OpenAI**:
+  - Install: `uv pip install -e ".[llm-openai]"`
+  - Configure: set `OPENAI_API_KEY`
+  - Use:
+
+```python
+from rlm.adapters.llm import OpenAIAdapter
+from rlm.api import create_rlm
+
+rlm = create_rlm(OpenAIAdapter(model="gpt-4o-mini"), environment="local")
+print(rlm.completion("hello").response)
+```
+
+Other provider extras are available (Anthropic/Gemini/Portkey/LiteLLM/Azure OpenAI). See `docs/llm_providers.md`.
+
 ### Docker execution environment (Phase 1)
 
 The legacy Docker execution environment (`DockerREPL`) is used in Phase 1 to execute `repl` code blocks inside a

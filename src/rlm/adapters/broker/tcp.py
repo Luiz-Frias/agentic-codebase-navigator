@@ -231,7 +231,10 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         llm = self._select_llm(request.model)
         start = time.perf_counter()
-        cc = llm.complete(LLMRequest(prompt=request.prompt, model=request.model))
+        # `request.model` is used for *routing*; once selected, call the chosen
+        # adapter with its own model name so unknown models truly fall back to the
+        # default LLM (and usage/root_model remain consistent).
+        cc = llm.complete(LLMRequest(prompt=request.prompt, model=llm.model_name))
         end = time.perf_counter()
 
         # Preserve adapter timings when the LLM impl doesn't set execution_time.
@@ -249,7 +252,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         llm = self._select_llm(request.model)
 
         async def _run() -> list[ChatCompletion]:
-            out = await _acomplete_prompts_batched(llm, request.prompts, request.model)
+            out = await _acomplete_prompts_batched(llm, request.prompts, llm.model_name)
             results: list[ChatCompletion] = []
             for item in out:
                 if isinstance(item, Exception):
@@ -312,7 +315,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
             llm = self._select_llm(request.model)
 
             async def _run() -> list[WireResult]:
-                out = await _acomplete_prompts_batched(llm, request.prompts, request.model)
+                out = await _acomplete_prompts_batched(llm, request.prompts, llm.model_name)
                 results: list[WireResult] = []
                 for item in out:
                     if isinstance(item, Exception):

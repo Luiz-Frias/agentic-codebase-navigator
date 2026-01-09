@@ -5,6 +5,7 @@ from typing import Any
 
 from rlm.api.registries import (
     DefaultEnvironmentRegistry,
+    DefaultLLMRegistry,
     DefaultLoggerRegistry,
     EnvironmentRegistry,
     LLMRegistry,
@@ -61,10 +62,7 @@ def create_rlm_from_config(
     """
     if llm is None:
         if llm_registry is None:
-            raise NotImplementedError(
-                "Phase 2 factory requires either an explicit `llm` instance or an "
-                "`llm_registry` to build one from `RLMConfig.llm`."
-            )
+            llm_registry = DefaultLLMRegistry()
         llm = llm_registry.build(config.llm)
 
     if environment_registry is None:

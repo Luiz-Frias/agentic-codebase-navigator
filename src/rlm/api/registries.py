@@ -52,6 +52,70 @@ class DictLLMRegistry(LLMRegistry):
 
 
 @dataclass(frozen=True, slots=True)
+class DefaultLLMRegistry(LLMRegistry):
+    """
+    Default provider registry (Phase 4).
+
+    Keeps optional provider dependencies behind lazy imports and provides a
+    consistent place to map `LLMConfig` -> concrete `LLMPort`.
+    """
+
+    def build(self, config: LLMConfig, /) -> LLMPort:
+        match config.backend:
+            case "mock":
+                from rlm.adapters.llm.mock import MockLLMAdapter
+
+                return MockLLMAdapter(
+                    model=config.model_name or "mock-model", **config.backend_kwargs
+                )
+            case "openai":
+                from rlm.adapters.llm.openai import build_openai_adapter
+
+                model = config.model_name or "gpt-4o-mini"
+                return build_openai_adapter(model=model, **config.backend_kwargs)
+            case "anthropic":
+                from rlm.adapters.llm.anthropic import build_anthropic_adapter
+
+                model = config.model_name
+                if model is None:
+                    raise ValueError("LLM backend 'anthropic' requires LLMConfig.model_name")
+                return build_anthropic_adapter(model=model, **config.backend_kwargs)
+            case "gemini":
+                from rlm.adapters.llm.gemini import build_gemini_adapter
+
+                model = config.model_name
+                if model is None:
+                    raise ValueError("LLM backend 'gemini' requires LLMConfig.model_name")
+                return build_gemini_adapter(model=model, **config.backend_kwargs)
+            case "portkey":
+                from rlm.adapters.llm.portkey import build_portkey_adapter
+
+                model = config.model_name
+                if model is None:
+                    raise ValueError("LLM backend 'portkey' requires LLMConfig.model_name")
+                return build_portkey_adapter(model=model, **config.backend_kwargs)
+            case "litellm":
+                from rlm.adapters.llm.litellm import build_litellm_adapter
+
+                model = config.model_name
+                if model is None:
+                    raise ValueError("LLM backend 'litellm' requires LLMConfig.model_name")
+                return build_litellm_adapter(model=model, **config.backend_kwargs)
+            case "azure_openai":
+                from rlm.adapters.llm.azure_openai import build_azure_openai_adapter
+
+                deployment = config.model_name
+                if deployment is None:
+                    raise ValueError("LLM backend 'azure_openai' requires LLMConfig.model_name")
+                return build_azure_openai_adapter(deployment=deployment, **config.backend_kwargs)
+            case _:
+                raise ValueError(
+                    f"Unknown LLM backend {config.backend!r}. "
+                    "Available: ['mock','openai','anthropic','gemini','portkey','litellm','azure_openai']"
+                )
+
+
+@dataclass(frozen=True, slots=True)
 class DefaultEnvironmentRegistry(EnvironmentRegistry):
     """
     Phase 2 environment registry.

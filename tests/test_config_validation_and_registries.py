@@ -6,6 +6,7 @@ import pytest
 
 from rlm.api.registries import (
     DefaultEnvironmentRegistry,
+    DefaultLLMRegistry,
     DefaultLoggerRegistry,
     DictLLMRegistry,
     ensure_docker_available,
@@ -62,6 +63,132 @@ def test_dict_llm_registry_unknown_backend_has_helpful_error() -> None:
     registry = DictLLMRegistry(builders={"noop": lambda cfg: _NoopLLM()})  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="Unknown LLM backend"):
         registry.build(LLMConfig(backend="missing"))
+
+
+@pytest.mark.unit
+def test_default_llm_registry_builds_mock_llm() -> None:
+    reg = DefaultLLMRegistry()
+    llm = reg.build(LLMConfig(backend="mock", model_name="dummy"))
+    assert llm.model_name == "dummy"
+
+
+@pytest.mark.unit
+def test_default_llm_registry_openai_build_is_lazy_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    # This ensures we don't import the optional `openai` dependency during registry build.
+    import builtins
+
+    orig_import = builtins.__import__
+
+    def _guarded_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name == "openai" or str(name).startswith("openai."):
+            raise AssertionError("openai should not be imported during registry.build()")
+        return orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+    reg = DefaultLLMRegistry()
+    llm = reg.build(LLMConfig(backend="openai", model_name="gpt-test"))
+    assert llm.model_name == "gpt-test"
+
+
+@pytest.mark.unit
+def test_default_llm_registry_anthropic_build_is_lazy_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import builtins
+
+    orig_import = builtins.__import__
+
+    def _guarded_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name == "anthropic" or str(name).startswith("anthropic."):
+            raise AssertionError("anthropic should not be imported during registry.build()")
+        return orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+    reg = DefaultLLMRegistry()
+    llm = reg.build(LLMConfig(backend="anthropic", model_name="claude-test"))
+    assert llm.model_name == "claude-test"
+
+
+@pytest.mark.unit
+def test_default_llm_registry_gemini_build_is_lazy_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import builtins
+
+    orig_import = builtins.__import__
+
+    def _guarded_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name == "google" or str(name).startswith("google."):
+            raise AssertionError("google-genai should not be imported during registry.build()")
+        return orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+    reg = DefaultLLMRegistry()
+    llm = reg.build(LLMConfig(backend="gemini", model_name="gemini-test"))
+    assert llm.model_name == "gemini-test"
+
+
+@pytest.mark.unit
+def test_default_llm_registry_portkey_build_is_lazy_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import builtins
+
+    orig_import = builtins.__import__
+
+    def _guarded_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name == "portkey_ai" or str(name).startswith("portkey_ai."):
+            raise AssertionError("portkey-ai should not be imported during registry.build()")
+        return orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+    reg = DefaultLLMRegistry()
+    llm = reg.build(LLMConfig(backend="portkey", model_name="portkey-test"))
+    assert llm.model_name == "portkey-test"
+
+
+@pytest.mark.unit
+def test_default_llm_registry_litellm_build_is_lazy_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import builtins
+
+    orig_import = builtins.__import__
+
+    def _guarded_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name == "litellm" or str(name).startswith("litellm."):
+            raise AssertionError("litellm should not be imported during registry.build()")
+        return orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+    reg = DefaultLLMRegistry()
+    llm = reg.build(LLMConfig(backend="litellm", model_name="litellm-test"))
+    assert llm.model_name == "litellm-test"
+
+
+@pytest.mark.unit
+def test_default_llm_registry_azure_openai_build_is_lazy_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import builtins
+
+    orig_import = builtins.__import__
+
+    def _guarded_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name == "openai" or str(name).startswith("openai."):
+            raise AssertionError("openai should not be imported during registry.build()")
+        return orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+    reg = DefaultLLMRegistry()
+    llm = reg.build(LLMConfig(backend="azure_openai", model_name="dep-test"))
+    assert llm.model_name == "dep-test"
 
 
 @pytest.mark.unit
