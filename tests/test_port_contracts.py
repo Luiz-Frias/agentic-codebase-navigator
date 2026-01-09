@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from rlm.domain.errors import ValidationError
 from rlm.domain.models import (
     BatchedLLMRequest,
     Iteration,
@@ -52,9 +53,9 @@ def test_broker_port_contract_routes_by_model_name_and_defaults() -> None:
     cc_b = broker.complete(LLMRequest(prompt="p", model="b"))
     assert cc_b.response == "b1"
 
-    # Unknown model falls back to default LLM.
-    cc_default = broker.complete(LLMRequest(prompt="p2", model="unknown"))
-    assert cc_default.response == "a1"
+    # Unknown model selection should fail fast with a clear validation error.
+    with pytest.raises(ValidationError, match="Unknown model"):
+        broker.complete(LLMRequest(prompt="p2", model="unknown"))
 
 
 @pytest.mark.unit

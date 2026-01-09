@@ -20,6 +20,7 @@ from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
 def create_rlm(
     llm: LLMPort,
     *,
+    other_llms: list[LLMPort] | None = None,
     environment: EnvironmentName = "local",
     environment_kwargs: dict[str, Any] | None = None,
     max_depth: int = 1,
@@ -33,6 +34,7 @@ def create_rlm(
     """Convenience factory for the public `RLM` facade."""
     return RLM(
         llm,
+        other_llms=other_llms,
         environment=environment,
         environment_kwargs=environment_kwargs,
         max_depth=max_depth,
@@ -64,6 +66,13 @@ def create_rlm_from_config(
         if llm_registry is None:
             llm_registry = DefaultLLMRegistry()
         llm = llm_registry.build(config.llm)
+    else:
+        # If the caller provided the root LLM but not a registry, we may still
+        # need a registry for `config.other_llms`.
+        if llm_registry is None:
+            llm_registry = DefaultLLMRegistry()
+
+    other_llms: list[LLMPort] = [llm_registry.build(c) for c in config.other_llms]
 
     if environment_registry is None:
         environment_registry = DefaultEnvironmentRegistry()
@@ -75,6 +84,7 @@ def create_rlm_from_config(
 
     return create_rlm(
         llm,
+        other_llms=other_llms,
         environment=config.env.environment,
         environment_kwargs=config.env.environment_kwargs,
         max_depth=config.max_depth,

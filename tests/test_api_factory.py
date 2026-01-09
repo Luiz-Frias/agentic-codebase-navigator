@@ -50,6 +50,7 @@ def test_create_rlm_from_config_uses_default_llm_registry() -> None:
             model_name="dummy",
             backend_kwargs={"script": ["FINAL(factory_ok)"]},
         ),
+        other_llms=[],
         env=EnvironmentConfig(environment="local"),
         max_iterations=2,
         verbose=False,
@@ -72,6 +73,7 @@ def test_create_rlm_from_config_can_build_llm_from_registry() -> None:
     registry = _Registry()
     cfg = RLMConfig(
         llm=LLMConfig(backend="dummy", model_name="dummy"),
+        other_llms=[],
         env=EnvironmentConfig(environment="local"),
         max_iterations=2,
         verbose=False,

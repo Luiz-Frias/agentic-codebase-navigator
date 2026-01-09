@@ -60,6 +60,41 @@ rlm = create_rlm_from_config(cfg)
 assert rlm.completion("hello").response == "ok"
 ```
 
+## Multi-backend routing (root + subcalls)
+
+You can configure **multiple models/backends** so nested environment calls can route explicitly by model name:
+
+- `llm_query("...", model="some-model-name")`
+- `llm_query_batched([...], model="some-model-name")`
+
+Example (fully deterministic; no network):
+
+```python
+from rlm.api import create_rlm_from_config
+from rlm.application.config import EnvironmentConfig, LLMConfig, RLMConfig
+
+root_script = (
+    "```repl\n"
+    "resp = llm_query('ping', model='sub')\n"
+    "```\n"
+    "FINAL_VAR('resp')"
+)
+
+cfg = RLMConfig(
+    llm=LLMConfig(backend="mock", model_name="root", backend_kwargs={"script": [root_script]}),
+    other_llms=[
+        LLMConfig(backend="mock", model_name="sub", backend_kwargs={"script": ["pong"]}),
+    ],
+    env=EnvironmentConfig(environment="local"),
+    max_iterations=2,
+)
+
+cc = create_rlm_from_config(cfg).completion("hello")
+assert cc.response == "pong"
+assert cc.usage_summary.model_usage_summaries["root"].total_calls == 1
+assert cc.usage_summary.model_usage_summaries["sub"].total_calls == 1
+```
+
 ## Anthropic
 
 ### Environment variables

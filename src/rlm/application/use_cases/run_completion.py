@@ -171,13 +171,21 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 system_prompt=deps.system_prompt,
             )
             try:
-                return orch.completion(
+                cc = orch.completion(
                     request.prompt,
                     root_prompt=request.root_prompt,
                     max_depth=request.max_depth,
                     depth=0,
                     max_iterations=request.max_iterations,
                     correlation_id=correlation_id,
+                )
+                # Merge usage across all registered models deterministically (root + subcalls).
+                return ChatCompletion(
+                    root_model=cc.root_model,
+                    prompt=cc.prompt,
+                    response=cc.response,
+                    usage_summary=deps.broker.get_usage_summary(),
+                    execution_time=cc.execution_time,
                 )
             except RLMError:
                 raise

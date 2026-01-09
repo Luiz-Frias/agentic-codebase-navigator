@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,3 +56,32 @@ class UsageSummary:
                 str(model): ModelUsageSummary.from_dict(summary) for model, summary in raw.items()
             }
         )
+
+
+def merge_usage_summaries(summaries: Iterable[UsageSummary], /) -> UsageSummary:
+    """
+    Deterministically merge usage summaries across models.
+
+    Behavior:
+    - Sums totals for the same model key across inputs.
+    - Returns a new UsageSummary with keys inserted in sorted order.
+
+    Notes:
+    - The returned ModelUsageSummary objects are new instances (no aliasing).
+    """
+    totals: dict[str, ModelUsageSummary] = {}
+    for summary in summaries:
+        for model, mus in summary.model_usage_summaries.items():
+            current = totals.get(model)
+            if current is None:
+                totals[model] = ModelUsageSummary(
+                    total_calls=mus.total_calls,
+                    total_input_tokens=mus.total_input_tokens,
+                    total_output_tokens=mus.total_output_tokens,
+                )
+            else:
+                current.total_calls += mus.total_calls
+                current.total_input_tokens += mus.total_input_tokens
+                current.total_output_tokens += mus.total_output_tokens
+
+    return UsageSummary(model_usage_summaries={m: totals[m] for m in sorted(totals)})

@@ -49,8 +49,6 @@ class RLM:
         max_depth: int = 1,
         max_iterations: int = 30,
         custom_system_prompt: str | None = None,
-        other_backends: list[ClientBackend] | None = None,
-        other_backend_kwargs: list[dict[str, Any]] | None = None,
         logger: RLMLogger | None = None,
         verbose: bool = False,
     ):
@@ -64,8 +62,6 @@ class RLM:
             max_depth: The maximum depth of the RLM. Currently, only depth 1 is supported.
             max_iterations: The maximum number of iterations of the RLM.
             custom_system_prompt: The custom system prompt to use for the RLM.
-            other_backends: A list of other client backends that the environments can use to make sub-calls.
-            other_backend_kwargs: The kwargs to pass to the other client backends (ordered to match other_backends).
             logger: The logger to use for the RLM.
             verbose: Whether to print verbose output in rich to console.
         """
@@ -76,8 +72,6 @@ class RLM:
         self.environment_kwargs = (
             environment_kwargs.copy() if environment_kwargs is not None else {}
         )
-        self.other_backends = other_backends
-        self.other_backend_kwargs = other_backend_kwargs
 
         self.depth = depth
         self.max_depth = max_depth
@@ -100,7 +94,6 @@ class RLM:
                 environment_kwargs=filter_sensitive_keys(environment_kwargs)
                 if environment_kwargs
                 else {},
-                other_backends=other_backends,
             )
             if self.logger:
                 self.logger.log_metadata(metadata)
@@ -115,12 +108,6 @@ class RLM:
         # Create client and wrap in handler
         client: BaseLM = get_client(self.backend, self.backend_kwargs)
         lm_handler = LMHandler(client)
-
-        # Register other clients to be available as sub-call options
-        if self.other_backends and self.other_backend_kwargs:
-            for backend, kwargs in zip(self.other_backends, self.other_backend_kwargs, strict=True):
-                other_client: BaseLM = get_client(backend, kwargs)
-                lm_handler.register_client(other_client.model_name, other_client)
 
         lm_handler.start()
 

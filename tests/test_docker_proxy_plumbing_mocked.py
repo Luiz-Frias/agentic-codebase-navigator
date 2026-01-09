@@ -122,7 +122,7 @@ def test_llm_proxy_handler_single_uses_broker_when_provided_and_does_not_call_le
         lock=threading.Lock(),
     )
 
-    out = docker_mod.LLMProxyHandler._handle_single(dummy, {"prompt": "ping", "model": "m1"})
+    out = docker_mod.LLMProxyHandler._handle_single(dummy, {"prompt": "ping", "model": "dummy"})
     assert out == {"response": "ok"}
     assert [c.response for c in dummy.pending_calls] == ["ok"]
 
@@ -151,7 +151,7 @@ def test_llm_proxy_handler_batched_uses_broker_per_item_and_preserves_order(
     )
 
     out = docker_mod.LLMProxyHandler._handle_batched(
-        dummy, {"prompts": ["a", "b", "c"], "model": "m2"}
+        dummy, {"prompts": ["a", "b", "c"], "model": "dummy"}
     )
     assert out == {"responses": ["r1", "Error: boom", "r3"]}
     assert [c.response for c in dummy.pending_calls] == ["r1", "r3"]

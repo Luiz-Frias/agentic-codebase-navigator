@@ -46,6 +46,41 @@ print(rlm.completion("hello").response)
 
 Other provider extras are available (Anthropic/Gemini/Portkey/LiteLLM/Azure OpenAI). See `docs/llm_providers.md`.
 
+### Multi-backend routing (root + subcalls)
+
+RLM supports **registering multiple LLM backends/models** so `repl` code blocks can route nested calls via:
+
+- `llm_query("...", model="some-model-name")`
+- `llm_query_batched([...], model="some-model-name")`
+
+Example (dependency-free, no network):
+
+```python
+from rlm.adapters.llm.mock import MockLLMAdapter
+from rlm.api import create_rlm
+
+root_script = (
+    "```repl\n"
+    "resp = llm_query('ping', model='sub')\n"
+    "```\n"
+    "FINAL_VAR('resp')"
+)
+
+rlm = create_rlm(
+    MockLLMAdapter(model="root", script=[root_script]),
+    other_llms=[MockLLMAdapter(model="sub", script=["pong"])],
+    environment="local",
+    max_iterations=2,
+)
+
+cc = rlm.completion("hello")
+assert cc.response == "pong"
+
+# Usage is aggregated across all registered models (root + subcalls).
+assert cc.usage_summary.model_usage_summaries["root"].total_calls == 1
+assert cc.usage_summary.model_usage_summaries["sub"].total_calls == 1
+```
+
 ### Docker execution environment (Phase 1)
 
 The legacy Docker execution environment (`DockerREPL`) is used in Phase 1 to execute `repl` code blocks inside a

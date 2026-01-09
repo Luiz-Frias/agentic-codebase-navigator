@@ -70,6 +70,7 @@ class RLMConfig:
     """Minimal RLM facade configuration (Phase 1)."""
 
     llm: LLMConfig
+    other_llms: list[LLMConfig] = field(default_factory=list)
     env: EnvironmentConfig = field(default_factory=lambda: EnvironmentConfig(environment="local"))
     logger: LoggerConfig = field(default_factory=LoggerConfig)
     max_depth: int = 1
@@ -81,3 +82,8 @@ class RLMConfig:
             raise ValueError("RLMConfig.max_depth must be >= 0")
         if self.max_iterations < 1:
             raise ValueError("RLMConfig.max_iterations must be >= 1")
+        if not isinstance(self.other_llms, list):
+            raise ValueError("RLMConfig.other_llms must be a list")
+        for cfg in self.other_llms:
+            if not isinstance(cfg, LLMConfig):
+                raise ValueError("RLMConfig.other_llms must contain only LLMConfig values")

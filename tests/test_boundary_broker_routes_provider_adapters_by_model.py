@@ -8,6 +8,7 @@ import pytest
 from rlm.adapters.broker.tcp import TcpBrokerAdapter
 from rlm.adapters.llm.anthropic import AnthropicAdapter
 from rlm.adapters.llm.openai import OpenAIAdapter
+from rlm.domain.errors import BrokerError
 from rlm.infrastructure.comms.protocol import request_completion
 
 
@@ -114,10 +115,7 @@ def test_broker_routes_to_openai_or_anthropic_adapters_by_model_name(
         assert cc_anthropic.root_model == "claude-test"
         assert cc_anthropic.response == "ANTHROPIC"
 
-        # Unknown model should fall back to default adapter+model name (no leaking
-        # the unknown model string into the provider call).
-        cc_unknown = request_completion(addr, "hi", model="unknown")
-        assert cc_unknown.root_model == "gpt-test"
-        assert cc_unknown.response == "OPENAI"
+        with pytest.raises(BrokerError, match="Unknown model"):
+            request_completion(addr, "hi", model="unknown")
     finally:
         broker.stop()
