@@ -170,6 +170,24 @@ def test_docker_exec_script_passes_correlation_id_to_proxy_requests() -> None:
 
 
 @pytest.mark.unit
+def test_docker_exec_script_llm_query_preserves_empty_string_response() -> None:
+    """
+    Regression: `llm_query()` must not treat an empty-string LLM response as an error.
+
+    The container-side script should explicitly branch on `error` rather than
+    using `d.get("response") or ...`, because `""` is falsy.
+    """
+
+    from rlm._legacy.environments.docker_repl import _build_exec_script
+
+    script = _build_exec_script("print('hi')", 1234)
+    assert 'return d.get("response") or' not in script
+    assert 'return d.get("responses") or' not in script
+    assert 'err = d.get("error")' in script
+    assert "if err is not None:" in script
+
+
+@pytest.mark.unit
 def test_llm_proxy_handler_validates_model_and_correlation_id_types_in_broker_mode() -> None:
     import threading
 
