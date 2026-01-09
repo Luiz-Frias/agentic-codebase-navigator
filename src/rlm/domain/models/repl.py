@@ -11,6 +11,7 @@ from rlm.domain.models.serialization import serialize_value
 class ReplResult:
     """Result of executing a code block in an environment."""
 
+    correlation_id: str | None = None
     stdout: str = ""
     stderr: str = ""
     locals: dict[str, Any] = field(default_factory=dict)
@@ -18,18 +19,27 @@ class ReplResult:
     execution_time: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "stdout": self.stdout,
             "stderr": self.stderr,
             "locals": {k: serialize_value(v) for k, v in self.locals.items()},
             "execution_time": self.execution_time,
             "llm_calls": [c.to_dict() for c in self.llm_calls],
         }
+        if self.correlation_id is not None:
+            d["correlation_id"] = self.correlation_id
+        return d
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ReplResult:
-        raw_calls = data.get("llm_calls", []) or []
+        # Back-compat: legacy logs use `rlm_calls` as the JSON key (upstream schema).
+        if "llm_calls" in data:
+            raw_calls = data.get("llm_calls") or []
+        else:
+            raw_calls = data.get("rlm_calls") or []
+        correlation_id = data.get("correlation_id")
         return cls(
+            correlation_id=str(correlation_id) if correlation_id is not None else None,
             stdout=str(data.get("stdout", "")),
             stderr=str(data.get("stderr", "")),
             locals=dict(data.get("locals", {}) or {}),

@@ -64,6 +64,29 @@ def test_domain_model_usage_summary_from_dict_treats_none_as_zero() -> None:
 
 
 @pytest.mark.unit
+def test_domain_repl_result_from_dict_accepts_legacy_rlm_calls_key() -> None:
+    legacy_like = {
+        "stdout": "out",
+        "stderr": "",
+        "locals": {},
+        "execution_time": 0.2,
+        # Legacy REPLResult.to_dict() uses "rlm_calls" for schema compatibility.
+        "rlm_calls": [
+            {
+                "root_model": "dummy",
+                "prompt": "p",
+                "response": "FINAL(pong)",
+                "usage_summary": {"model_usage_summaries": {"dummy": {"total_calls": 1}}},
+                "execution_time": 0.01,
+            }
+        ],
+    }
+
+    repl = ReplResult.from_dict(legacy_like)
+    assert [c.response for c in repl.llm_calls] == ["FINAL(pong)"]
+
+
+@pytest.mark.unit
 def test_domain_result_type_pattern_matching() -> None:
     def _f(flag: bool) -> Result[int]:
         if flag:

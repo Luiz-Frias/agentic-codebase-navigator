@@ -45,6 +45,7 @@ class RLMOrchestrator:
         max_depth: int = 1,
         depth: int = 0,
         max_iterations: int = 30,
+        correlation_id: str | None = None,
     ) -> ChatCompletion:
         time_start = time.perf_counter()
 
@@ -85,12 +86,14 @@ class RLMOrchestrator:
             code_blocks: list[CodeBlock] = []
             for code in code_block_strs:
                 repl_result = self.environment.execute_code(code)
+                repl_result.correlation_id = correlation_id
                 code_blocks.append(CodeBlock(code=code, result=repl_result))
 
             final_answer = find_final_answer(response, environment=self.environment)
             iteration_time = time.perf_counter() - iter_start
 
             iteration = Iteration(
+                correlation_id=correlation_id,
                 prompt=current_prompt,
                 response=response,
                 code_blocks=code_blocks,
@@ -140,6 +143,7 @@ class RLMOrchestrator:
         max_depth: int = 1,
         depth: int = 0,
         max_iterations: int = 30,
+        correlation_id: str | None = None,
     ) -> ChatCompletion:
         """
         Async variant of `completion()`.
@@ -192,12 +196,14 @@ class RLMOrchestrator:
 
             for code in code_block_strs:
                 repl_result = await asyncio.to_thread(self.environment.execute_code, code)
+                repl_result.correlation_id = correlation_id
                 code_blocks.append(CodeBlock(code=code, result=repl_result))
 
             final_answer = await afind_final_answer(response, environment=self.environment)
             iteration_time = time.perf_counter() - iter_start
 
             iteration = Iteration(
+                correlation_id=correlation_id,
                 prompt=current_prompt,
                 response=response,
                 code_blocks=code_blocks,

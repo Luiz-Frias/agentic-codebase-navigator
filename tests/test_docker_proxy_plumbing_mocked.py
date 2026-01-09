@@ -6,6 +6,7 @@ import pytest
 
 from rlm._legacy.core.comms_utils import LMResponse
 from rlm._legacy.core.types import ModelUsageSummary, RLMChatCompletion, UsageSummary
+from tests.fakes_ports import InMemoryBroker, QueueLLM
 
 
 def _chat_completion(response: str) -> RLMChatCompletion:
@@ -97,3 +98,111 @@ def test_llm_proxy_handler_batched_routes_and_preserves_order(
 
     # Only successful responses are recorded as pending calls.
     assert [c.response for c in dummy.pending_calls] == ["r1", "r3"]
+
+
+@pytest.mark.unit
+def test_llm_proxy_handler_single_uses_broker_when_provided_and_does_not_call_legacy_comms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    import rlm._legacy.environments.docker_repl as docker_mod
+
+    def _boom(*_args, **_kwargs):  # noqa: ANN001, D401
+        raise AssertionError("send_lm_request should not be called when broker is provided")
+
+    monkeypatch.setattr(docker_mod, "send_lm_request", _boom)
+
+    broker = InMemoryBroker(default_llm=QueueLLM(model_name="dummy", responses=["ok"]))
+
+    dummy = SimpleNamespace(
+        broker=broker,
+        lm_handler_address=None,
+        pending_calls=[],
+        lock=threading.Lock(),
+    )
+
+    out = docker_mod.LLMProxyHandler._handle_single(dummy, {"prompt": "ping", "model": "m1"})
+    assert out == {"response": "ok"}
+    assert [c.response for c in dummy.pending_calls] == ["ok"]
+
+
+@pytest.mark.unit
+def test_llm_proxy_handler_batched_uses_broker_per_item_and_preserves_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    import rlm._legacy.environments.docker_repl as docker_mod
+
+    def _boom(*_args, **_kwargs):  # noqa: ANN001, D401
+        raise AssertionError("send_lm_request_batched should not be called when broker is provided")
+
+    monkeypatch.setattr(docker_mod, "send_lm_request_batched", _boom)
+
+    broker = InMemoryBroker(
+        default_llm=QueueLLM(model_name="dummy", responses=["r1", RuntimeError("boom"), "r3"])
+    )
+    dummy = SimpleNamespace(
+        broker=broker,
+        lm_handler_address=None,
+        pending_calls=[],
+        lock=threading.Lock(),
+    )
+
+    out = docker_mod.LLMProxyHandler._handle_batched(
+        dummy, {"prompts": ["a", "b", "c"], "model": "m2"}
+    )
+    assert out == {"responses": ["r1", "Error: boom", "r3"]}
+    assert [c.response for c in dummy.pending_calls] == ["r1", "r3"]
+
+
+@pytest.mark.unit
+def test_docker_exec_script_passes_correlation_id_to_proxy_requests() -> None:
+    from rlm._legacy.environments.docker_repl import _build_exec_script
+
+    script = _build_exec_script("print('hi')", 1234)
+    assert "RUN_CORRELATION_ID" in script
+    assert "correlation_id" in script
+    assert "def llm_query(prompt, model=None, correlation_id=None):" in script
+    assert "def llm_query_batched(prompts, model=None, correlation_id=None):" in script
+    assert '"correlation_id": cid' in script
+
+
+@pytest.mark.unit
+def test_llm_proxy_handler_validates_model_and_correlation_id_types_in_broker_mode() -> None:
+    import threading
+
+    from rlm._legacy.environments.docker_repl import LLMProxyHandler
+
+    broker = InMemoryBroker(default_llm=QueueLLM(responses=["ok"]))
+    dummy = SimpleNamespace(
+        broker=broker,
+        lm_handler_address=None,
+        pending_calls=[],
+        lock=threading.Lock(),
+    )
+
+    out = LLMProxyHandler._handle_single(dummy, {"prompt": "hi", "model": 123})
+    assert out == {"error": "Invalid model"}
+
+    out = LLMProxyHandler._handle_single(dummy, {"prompt": "hi", "correlation_id": 123})
+    assert out == {"error": "Invalid correlation_id"}
+
+
+@pytest.mark.unit
+def test_llm_proxy_handler_validates_prompts_list_in_broker_mode() -> None:
+    import threading
+
+    from rlm._legacy.environments.docker_repl import LLMProxyHandler
+
+    broker = InMemoryBroker(default_llm=QueueLLM(responses=["ok"]))
+    dummy = SimpleNamespace(
+        broker=broker,
+        lm_handler_address=None,
+        pending_calls=[],
+        lock=threading.Lock(),
+    )
+
+    out = LLMProxyHandler._handle_batched(dummy, {"prompts": "nope"})
+    assert out == {"error": "Invalid prompts"}

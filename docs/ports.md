@@ -42,6 +42,9 @@ Responsibilities:
 - Support batched requests while preserving **ordering**.
 - Aggregate usage across routed calls.
 
+Related docs:
+- Wire protocol (Phase 3): `docs/protocol.md`
+
 Interface shape:
 - `register_llm(model_name: str, llm: LLMPort) -> None`
 - `start() -> (host, port)` / `stop() -> None`

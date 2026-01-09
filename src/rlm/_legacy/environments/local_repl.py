@@ -4,6 +4,7 @@ import io
 import json
 import os
 import shutil
+import signal
 import sys
 import tempfile
 import threading
@@ -13,8 +14,12 @@ from contextlib import contextmanager
 from typing import Any
 
 from rlm._legacy.core.comms_utils import LMRequest, send_lm_request, send_lm_request_batched
-from rlm._legacy.core.types import REPLResult, RLMChatCompletion
+from rlm._legacy.core.types import REPLResult, RLMChatCompletion, UsageSummary
 from rlm._legacy.environments.base_env import NonIsolatedEnv
+from rlm.domain.models import BatchedLLMRequest
+from rlm.domain.models import LLMRequest as DomainLLMRequest
+from rlm.domain.policies.timeouts import DEFAULT_LOCAL_EXECUTE_TIMEOUT_S
+from rlm.domain.ports import BrokerPort
 
 # =============================================================================
 # Safe Builtins
@@ -122,13 +127,19 @@ class LocalREPL(NonIsolatedEnv):
     def __init__(
         self,
         lm_handler_address: tuple[str, int] | None = None,
+        broker: BrokerPort | None = None,
         context_payload: dict | list | str | None = None,
         setup_code: str | None = None,
+        correlation_id: str | None = None,
+        execute_timeout_s: float | None = DEFAULT_LOCAL_EXECUTE_TIMEOUT_S,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.lm_handler_address = lm_handler_address
+        self._broker = broker
+        self.correlation_id = correlation_id
+        self.execute_timeout_s = execute_timeout_s
         self.original_cwd = os.getcwd()
         self.temp_dir = tempfile.mkdtemp(prefix=f"repl_env_{uuid.uuid4()}_")
         self._lock = threading.Lock()
@@ -160,6 +171,7 @@ class LocalREPL(NonIsolatedEnv):
         self.globals["FINAL_VAR"] = self._final_var
         self.globals["llm_query"] = self._llm_query
         self.globals["llm_query_batched"] = self._llm_query_batched
+        self.globals["RLM_CORRELATION_ID"] = self.correlation_id
 
     def _final_var(self, variable_name: str) -> str:
         """Return the value of a variable as a final answer."""
@@ -175,6 +187,22 @@ class LocalREPL(NonIsolatedEnv):
             prompt: The prompt to send to the LM.
             model: Optional model name to use (if handler has multiple clients).
         """
+        if self._broker is not None:
+            try:
+                cc = self._broker.complete(DomainLLMRequest(prompt=prompt, model=model))
+                self._pending_llm_calls.append(
+                    RLMChatCompletion(
+                        root_model=cc.root_model,
+                        prompt=prompt,
+                        response=cc.response,
+                        usage_summary=UsageSummary.from_dict(cc.usage_summary.to_dict()),
+                        execution_time=cc.execution_time,
+                    )
+                )
+                return cc.response
+            except Exception as e:  # noqa: BLE001 - legacy behavior: return error string
+                return f"Error: LM query failed - {e}"
+
         if not self.lm_handler_address:
             return "Error: No LM handler configured"
 
@@ -204,6 +232,27 @@ class LocalREPL(NonIsolatedEnv):
         Returns:
             List of responses in the same order as input prompts.
         """
+        if self._broker is not None:
+            try:
+                completions = self._broker.complete_batched(
+                    BatchedLLMRequest(prompts=prompts, model=model)
+                )
+                results: list[str] = []
+                for prompt, cc in zip(prompts, completions, strict=True):
+                    self._pending_llm_calls.append(
+                        RLMChatCompletion(
+                            root_model=cc.root_model,
+                            prompt=prompt,
+                            response=cc.response,
+                            usage_summary=UsageSummary.from_dict(cc.usage_summary.to_dict()),
+                            execution_time=cc.execution_time,
+                        )
+                    )
+                    results.append(cc.response)
+                return results
+            except Exception as e:  # noqa: BLE001 - legacy behavior: return per-item errors
+                return [f"Error: LM query failed - {e}"] * len(prompts)
+
         if not self.lm_handler_address:
             return ["Error: No LM handler configured"] * len(prompts)
 
@@ -260,6 +309,40 @@ class LocalREPL(NonIsolatedEnv):
         finally:
             os.chdir(old_cwd)
 
+    @contextmanager
+    def _execution_timeout(self):
+        """
+        Best-effort execution timeout for runaway code.
+
+        This uses SIGALRM when available and only in the main thread.
+        """
+        timeout_s = self.execute_timeout_s
+        if timeout_s is None:
+            yield
+            return
+        if threading.current_thread() is not threading.main_thread():
+            # Can't safely use signal alarms outside the main thread.
+            yield
+            return
+        if not hasattr(signal, "SIGALRM"):
+            yield
+            return
+
+        prev_handler = signal.getsignal(signal.SIGALRM)
+        prev_timer = signal.getitimer(signal.ITIMER_REAL)
+
+        def _on_alarm(_signum: int, _frame):  # noqa: ANN001 - signal handler signature
+            raise TimeoutError(f"Execution timed out after {timeout_s}s")
+
+        signal.signal(signal.SIGALRM, _on_alarm)
+        signal.setitimer(signal.ITIMER_REAL, float(timeout_s))
+        try:
+            yield
+        finally:
+            # Restore any pre-existing timer/handler.
+            signal.setitimer(signal.ITIMER_REAL, prev_timer[0], prev_timer[1])
+            signal.signal(signal.SIGALRM, prev_handler)
+
     def execute_code(self, code: str) -> REPLResult:
         """Execute code in the persistent namespace and return result."""
         start_time = time.perf_counter()
@@ -269,20 +352,21 @@ class LocalREPL(NonIsolatedEnv):
 
         with self._capture_output() as (stdout_buf, stderr_buf):
             with self._temp_cwd():
-                try:
-                    combined = {**self.globals, **self.locals}
-                    exec(code, combined, combined)
+                with self._execution_timeout():
+                    try:
+                        combined = {**self.globals, **self.locals}
+                        exec(code, combined, combined)
 
-                    # Update locals with new variables
-                    for key, value in combined.items():
-                        if key not in self.globals and not key.startswith("_"):
-                            self.locals[key] = value
+                        # Update locals with new variables
+                        for key, value in combined.items():
+                            if key not in self.globals and not key.startswith("_"):
+                                self.locals[key] = value
 
-                    stdout = stdout_buf.getvalue()
-                    stderr = stderr_buf.getvalue()
-                except Exception as e:
-                    stdout = stdout_buf.getvalue()
-                    stderr = stderr_buf.getvalue() + f"\n{type(e).__name__}: {e}"
+                        stdout = stdout_buf.getvalue()
+                        stderr = stderr_buf.getvalue()
+                    except Exception as e:
+                        stdout = stdout_buf.getvalue()
+                        stderr = stderr_buf.getvalue() + f"\n{type(e).__name__}: {e}"
 
         return REPLResult(
             stdout=stdout,

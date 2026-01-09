@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import pytest
 
-from rlm._legacy.core.types import ModelUsageSummary as LegacyModelUsageSummary
-from rlm._legacy.core.types import RLMChatCompletion as LegacyChatCompletion
-from rlm._legacy.core.types import UsageSummary as LegacyUsageSummary
+from rlm._legacy.core.types import (
+    ModelUsageSummary as LegacyModelUsageSummary,
+)
+from rlm._legacy.core.types import (
+    REPLResult as LegacyReplResult,
+)
+from rlm._legacy.core.types import (
+    RLMChatCompletion as LegacyChatCompletion,
+)
+from rlm._legacy.core.types import (
+    UsageSummary as LegacyUsageSummary,
+)
 from rlm.adapters.legacy.mappers import (
     legacy_chat_completion_to_domain,
     legacy_model_usage_summary_to_domain,
+    legacy_repl_result_to_domain,
     legacy_usage_summary_to_domain,
 )
 
@@ -57,3 +67,20 @@ def test_legacy_chat_completion_to_domain_preserves_core_fields() -> None:
     assert dom.response == "answer"
     assert dom.execution_time == 0.123
     assert dom.usage_summary.model_usage_summaries["m"].total_calls == 1
+
+
+@pytest.mark.unit
+def test_legacy_repl_result_to_domain_execution_time_defaults_to_zero() -> None:
+    legacy_usage = LegacyUsageSummary(model_usage_summaries={})
+    call = LegacyChatCompletion(
+        root_model="m",
+        prompt="p",
+        response="r",
+        usage_summary=legacy_usage,
+        execution_time=0.0,
+    )
+    legacy = LegacyReplResult(
+        stdout="", stderr="", locals={}, execution_time=None, llm_calls=[call]
+    )
+    dom = legacy_repl_result_to_domain(legacy)
+    assert dom.execution_time == 0.0
