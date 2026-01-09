@@ -18,15 +18,19 @@ import textwrap
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
 
 from rlm._legacy.core.comms_utils import LMRequest, send_lm_request, send_lm_request_batched
-from rlm._legacy.core.types import REPLResult, RLMChatCompletion
+from rlm._legacy.core.types import REPLResult, RLMChatCompletion, UsageSummary
 from rlm._legacy.environments.base_env import NonIsolatedEnv
+from rlm.domain.models import LLMRequest as DomainLLMRequest
+from rlm.domain.ports import BrokerPort
 
 
 class LLMProxyHandler(BaseHTTPRequestHandler):
     """HTTP handler for LLM requests from the container."""
 
+    broker: BrokerPort | None = None
     lm_handler_address: tuple[str, int] | None = None
     pending_calls: list[RLMChatCompletion] = []
     lock: threading.Lock = threading.Lock()
@@ -35,7 +39,30 @@ class LLMProxyHandler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self):
-        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        try:
+            raw_len = self.headers.get("Content-Length")
+            if raw_len is None:
+                self._respond(400, {"error": "Missing Content-Length"})
+                return
+            try:
+                content_length = int(raw_len)
+            except ValueError:
+                self._respond(400, {"error": "Invalid Content-Length"})
+                return
+            if content_length <= 0:
+                self._respond(400, {"error": "Missing request body"})
+                return
+            body = json.loads(self.rfile.read(content_length))
+        except json.JSONDecodeError:
+            self._respond(400, {"error": "Invalid JSON payload"})
+            return
+        except Exception as exc:  # noqa: BLE001 - proxy boundary
+            self._respond(400, {"error": str(exc)})
+            return
+
+        if not isinstance(body, dict):
+            self._respond(400, {"error": "Request body must be a JSON object"})
+            return
 
         if self.path == "/llm_query":
             result = self._handle_single(body)
@@ -54,10 +81,51 @@ class LLMProxyHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode())
 
     def _handle_single(self, body: dict) -> dict:
+        broker = getattr(self, "broker", None)
+        if broker is not None:
+            prompt = body.get("prompt")
+            model = body.get("model")
+            correlation_id = body.get("correlation_id")  # reserved for later phases
+            if not isinstance(prompt, (str, dict, list)):
+                return {"error": "Invalid prompt"}
+            if model is not None and not isinstance(model, str):
+                return {"error": "Invalid model"}
+            if correlation_id is not None and not isinstance(correlation_id, str):
+                return {"error": "Invalid correlation_id"}
+            try:
+                cc = broker.complete(DomainLLMRequest(prompt=prompt, model=model))
+            except Exception as exc:  # noqa: BLE001 - proxy boundary
+                return {"error": str(exc)}
+
+            legacy_prompt: str | dict[str, Any]
+            if isinstance(prompt, (str, dict)):
+                legacy_prompt = prompt
+            else:
+                legacy_prompt = {"prompt": prompt}
+
+            with self.lock:
+                self.pending_calls.append(
+                    RLMChatCompletion(
+                        root_model=cc.root_model,
+                        prompt=legacy_prompt,
+                        response=cc.response,
+                        usage_summary=UsageSummary.from_dict(cc.usage_summary.to_dict()),
+                        execution_time=cc.execution_time,
+                    )
+                )
+
+            return {"response": cc.response}
+
         if not self.lm_handler_address:
             return {"error": "No LM handler configured"}
 
-        request = LMRequest(prompt=body.get("prompt"), model=body.get("model"))
+        prompt = body.get("prompt")
+        model = body.get("model")
+        if not isinstance(prompt, (str, dict)):
+            return {"error": "Invalid prompt"}
+        if model is not None and not isinstance(model, str):
+            return {"error": "Invalid model"}
+        request = LMRequest(prompt=prompt, model=model)
         response = send_lm_request(self.lm_handler_address, request)
 
         if not response.success:
@@ -69,13 +137,59 @@ class LLMProxyHandler(BaseHTTPRequestHandler):
         return {"response": response.chat_completion.response}
 
     def _handle_batched(self, body: dict) -> dict:
+        broker = getattr(self, "broker", None)
+        if broker is not None:
+            prompts = body.get("prompts", [])
+            model = body.get("model")
+            correlation_id = body.get("correlation_id")  # reserved for later phases
+            if not isinstance(prompts, list):
+                return {"error": "Invalid prompts"}
+            if model is not None and not isinstance(model, str):
+                return {"error": "Invalid model"}
+            if correlation_id is not None and not isinstance(correlation_id, str):
+                return {"error": "Invalid correlation_id"}
+
+            results: list[str] = []
+            for p in prompts:
+                if not isinstance(p, (str, dict, list)):
+                    results.append("Error: Invalid prompt")
+                    continue
+                try:
+                    cc = broker.complete(DomainLLMRequest(prompt=p, model=model))
+                except Exception as exc:  # noqa: BLE001 - per-item boundary
+                    results.append(f"Error: {exc}")
+                    continue
+
+                legacy_prompt: str | dict[str, Any]
+                if isinstance(p, (str, dict)):
+                    legacy_prompt = p
+                else:
+                    legacy_prompt = {"prompt": p}
+
+                with self.lock:
+                    self.pending_calls.append(
+                        RLMChatCompletion(
+                            root_model=cc.root_model,
+                            prompt=legacy_prompt,
+                            response=cc.response,
+                            usage_summary=UsageSummary.from_dict(cc.usage_summary.to_dict()),
+                            execution_time=cc.execution_time,
+                        )
+                    )
+                results.append(cc.response)
+
+            return {"responses": results}
+
         if not self.lm_handler_address:
             return {"error": "No LM handler configured"}
 
         prompts = body.get("prompts", [])
-        responses = send_lm_request_batched(
-            self.lm_handler_address, prompts, model=body.get("model")
-        )
+        model = body.get("model")
+        if not isinstance(prompts, list):
+            return {"error": "Invalid prompts"}
+        if model is not None and not isinstance(model, str):
+            return {"error": "Invalid model"}
+        responses = send_lm_request_batched(self.lm_handler_address, prompts, model=model)
 
         results = []
         for resp in responses:
@@ -95,7 +209,7 @@ def _build_exec_script(code: str, proxy_port: int) -> str:
 
     return textwrap.dedent(
         f"""
-import sys, io, json, base64, traceback, os, requests
+import sys, io, json, base64, traceback, os, requests, uuid
 try:
     import dill
 except ImportError:
@@ -103,18 +217,29 @@ except ImportError:
 
 PROXY = "http://host.docker.internal:{proxy_port}"
 STATE = "/workspace/state.dill"
+RUN_CORRELATION_ID = os.environ.get("RLM_CORRELATION_ID") or str(uuid.uuid4())
 
-def llm_query(prompt, model=None):
+def llm_query(prompt, model=None, correlation_id=None):
     try:
-        r = requests.post(f"{{PROXY}}/llm_query", json={{"prompt": prompt, "model": model}}, timeout=300)
+        cid = correlation_id or RUN_CORRELATION_ID
+        r = requests.post(
+            f"{{PROXY}}/llm_query",
+            json={{"prompt": prompt, "model": model, "correlation_id": cid}},
+            timeout=300,
+        )
         d = r.json()
         return d.get("response") or f"Error: {{d.get('error')}}"
     except Exception as e:
         return f"Error: {{e}}"
 
-def llm_query_batched(prompts, model=None):
+def llm_query_batched(prompts, model=None, correlation_id=None):
     try:
-        r = requests.post(f"{{PROXY}}/llm_query_batched", json={{"prompts": prompts, "model": model}}, timeout=300)
+        cid = correlation_id or RUN_CORRELATION_ID
+        r = requests.post(
+            f"{{PROXY}}/llm_query_batched",
+            json={{"prompts": prompts, "model": model, "correlation_id": cid}},
+            timeout=300,
+        )
         d = r.json()
         return d.get("responses") or [f"Error: {{d.get('error')}}"] * len(prompts)
     except Exception as e:
@@ -180,6 +305,7 @@ class DockerREPL(NonIsolatedEnv):
         self,
         image: str = "python:3.12-slim",
         lm_handler_address: tuple[str, int] | None = None,
+        broker: BrokerPort | None = None,
         context_payload: dict | list | str | None = None,
         setup_code: str | None = None,
         *,
@@ -190,6 +316,7 @@ class DockerREPL(NonIsolatedEnv):
 
         self.image = image
         self.lm_handler_address = lm_handler_address
+        self._broker = broker
         self.subprocess_timeout_s = subprocess_timeout_s
         self.container_id: str | None = None
         self.proxy_server: HTTPServer | None = None
@@ -219,6 +346,7 @@ class DockerREPL(NonIsolatedEnv):
                 "Handler",
                 (LLMProxyHandler,),
                 {
+                    "broker": self._broker,
                     "lm_handler_address": self.lm_handler_address,
                     "pending_calls": self.pending_calls,
                     "lock": self._calls_lock,

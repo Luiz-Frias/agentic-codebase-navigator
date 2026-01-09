@@ -7,13 +7,23 @@ Used for communication between LMHandler and environment subprocesses.
 
 from __future__ import annotations
 
-import json
 import socket
-import struct
 from dataclasses import dataclass
 from typing import Any
 
-from rlm._legacy.core.types import RLMChatCompletion
+from rlm._legacy.core.types import RLMChatCompletion, UsageSummary
+from rlm.infrastructure.comms.codec import (
+    DEFAULT_MAX_MESSAGE_BYTES,
+)
+from rlm.infrastructure.comms.codec import (
+    recv_frame as _recv_frame,
+)
+from rlm.infrastructure.comms.codec import (
+    request_response as _request_response,
+)
+from rlm.infrastructure.comms.codec import (
+    send_frame as _send_frame,
+)
 
 # =============================================================================
 # Message Dataclasses
@@ -147,8 +157,7 @@ def socket_send(sock: socket.socket, data: dict[str, Any]) -> None:
 
     Protocol: 4-byte big-endian length prefix + UTF-8 JSON payload.
     """
-    payload = json.dumps(data).encode("utf-8")
-    sock.sendall(struct.pack(">I", len(payload)) + payload)
+    _send_frame(sock, data)
 
 
 def socket_recv(sock: socket.socket) -> dict[str, Any]:
@@ -160,23 +169,11 @@ def socket_recv(sock: socket.socket) -> dict[str, Any]:
     Raises:
         ConnectionError: If connection closes mid-message.
     """
-    raw_len = b""
-    while len(raw_len) < 4:
-        chunk = sock.recv(4 - len(raw_len))
-        if not chunk:
-            # Connection closed before we received a full length prefix.
-            return {}
-        raw_len += chunk
-
-    length = struct.unpack(">I", raw_len)[0]
-    payload = bytearray()
-    while len(payload) < length:
-        chunk = sock.recv(length - len(payload))
-        if not chunk:
-            raise ConnectionError("Connection closed before message complete")
-        payload.extend(chunk)
-
-    return json.loads(payload.decode("utf-8"))
+    message = _recv_frame(sock, max_message_bytes=DEFAULT_MAX_MESSAGE_BYTES)
+    if message is None:
+        # Legacy behavior: empty dict indicates the peer closed before length prefix.
+        return {}
+    return message
 
 
 def socket_request(
@@ -194,11 +191,19 @@ def socket_request(
     Returns:
         Response dictionary.
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(timeout)
-        sock.connect(address)
-        socket_send(sock, data)
-        return socket_recv(sock)
+    try:
+        return _request_response(
+            address,
+            data,
+            timeout_s=float(timeout),
+            max_message_bytes=DEFAULT_MAX_MESSAGE_BYTES,
+        )
+    except ConnectionError as exc:
+        # Preserve legacy semantics: treat "closed before response frame" as empty dict,
+        # but do not swallow mid-payload truncation errors.
+        if str(exc) == "Connection closed before response frame":
+            return {}
+        raise
 
 
 # =============================================================================
@@ -219,6 +224,41 @@ def send_lm_request(address: tuple[str, int], request: LMRequest, timeout: int =
     """
     try:
         response_data = socket_request(address, request.to_dict(), timeout)
+        if not isinstance(response_data, dict):
+            return LMResponse.error_response("Invalid response (expected JSON object)")
+
+        # Compat: support both legacy LMHandler responses (chat_completion/chat_completions)
+        # and new wire protocol responses (error/results).
+        if "results" in response_data:
+            # WireResponse: {"correlation_id": ..., "error": str|None, "results": [...]|None}
+            if response_data.get("error"):
+                return LMResponse.error_response(str(response_data.get("error")))
+            results = response_data.get("results") or []
+            if not isinstance(results, list) or len(results) != 1:
+                return LMResponse.error_response("Invalid broker response: expected 1 result")
+            item = results[0]
+            if not isinstance(item, dict):
+                return LMResponse.error_response(
+                    "Invalid broker response: result must be an object"
+                )
+            if item.get("error"):
+                return LMResponse.error_response(str(item.get("error")))
+            cc = item.get("chat_completion")
+            if not isinstance(cc, dict):
+                return LMResponse.error_response("Invalid broker response: missing chat_completion")
+            # Map domain ChatCompletion dict -> legacy RLMChatCompletion
+            from rlm.domain.models import ChatCompletion as DomainChatCompletion
+
+            domain_cc = DomainChatCompletion.from_dict(cc)
+            legacy_cc = RLMChatCompletion(
+                root_model=domain_cc.root_model,
+                prompt=domain_cc.prompt,  # type: ignore[arg-type]
+                response=domain_cc.response,
+                usage_summary=UsageSummary.from_dict(domain_cc.usage_summary.to_dict()),
+                execution_time=domain_cc.execution_time,
+            )
+            return LMResponse.success_response(legacy_cc)
+
         return LMResponse.from_dict(response_data)
     except Exception as e:
         return LMResponse.error_response(f"Request failed: {e}")
@@ -244,6 +284,50 @@ def send_lm_request_batched(
     try:
         request = LMRequest(prompts=prompts, model=model)
         response_data = socket_request(address, request.to_dict(), timeout)
+        if not isinstance(response_data, dict):
+            return [LMResponse.error_response("Invalid response (expected JSON object)")] * len(
+                prompts
+            )
+
+        # Compat: wire protocol batched responses.
+        if "results" in response_data:
+            if response_data.get("error"):
+                return [LMResponse.error_response(str(response_data.get("error")))] * len(prompts)
+            results = response_data.get("results")
+            if not isinstance(results, list) or len(results) != len(prompts):
+                return [
+                    LMResponse.error_response("Invalid broker response: bad results length")
+                ] * len(prompts)
+
+            out: list[LMResponse] = []
+            from rlm.domain.models import ChatCompletion as DomainChatCompletion
+
+            for item in results:
+                if not isinstance(item, dict):
+                    out.append(LMResponse.error_response("Invalid broker result item"))
+                    continue
+                if item.get("error"):
+                    out.append(LMResponse.error_response(str(item.get("error"))))
+                    continue
+                cc = item.get("chat_completion")
+                if not isinstance(cc, dict):
+                    out.append(
+                        LMResponse.error_response(
+                            "Invalid broker response: missing chat_completion"
+                        )
+                    )
+                    continue
+                domain_cc = DomainChatCompletion.from_dict(cc)
+                legacy_cc = RLMChatCompletion(
+                    root_model=domain_cc.root_model,
+                    prompt=domain_cc.prompt,  # type: ignore[arg-type]
+                    response=domain_cc.response,
+                    usage_summary=UsageSummary.from_dict(domain_cc.usage_summary.to_dict()),
+                    execution_time=domain_cc.execution_time,
+                )
+                out.append(LMResponse.success_response(legacy_cc))
+            return out
+
         response = LMResponse.from_dict(response_data)
 
         if not response.success:

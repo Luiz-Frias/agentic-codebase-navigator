@@ -63,7 +63,7 @@ class _DockerEnvFactory:
         self._image = image
         self.last_env: _WrappedEnv | None = None
 
-    def build(self, broker_address: tuple[str, int], /) -> EnvironmentPort:
+    def build(self, _broker: BrokerPort, broker_address: tuple[str, int], /) -> EnvironmentPort:
         env = DockerREPL(image=self._image, lm_handler_address=broker_address)
         wrapped = _WrappedEnv(LegacyEnvironmentAdapter(env))
         self.last_env = wrapped

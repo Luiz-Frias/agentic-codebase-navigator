@@ -13,8 +13,11 @@ from contextlib import contextmanager
 from typing import Any
 
 from rlm._legacy.core.comms_utils import LMRequest, send_lm_request, send_lm_request_batched
-from rlm._legacy.core.types import REPLResult, RLMChatCompletion
+from rlm._legacy.core.types import REPLResult, RLMChatCompletion, UsageSummary
 from rlm._legacy.environments.base_env import NonIsolatedEnv
+from rlm.domain.models import BatchedLLMRequest
+from rlm.domain.models import LLMRequest as DomainLLMRequest
+from rlm.domain.ports import BrokerPort
 
 # =============================================================================
 # Safe Builtins
@@ -122,6 +125,7 @@ class LocalREPL(NonIsolatedEnv):
     def __init__(
         self,
         lm_handler_address: tuple[str, int] | None = None,
+        broker: BrokerPort | None = None,
         context_payload: dict | list | str | None = None,
         setup_code: str | None = None,
         **kwargs,
@@ -129,6 +133,7 @@ class LocalREPL(NonIsolatedEnv):
         super().__init__(**kwargs)
 
         self.lm_handler_address = lm_handler_address
+        self._broker = broker
         self.original_cwd = os.getcwd()
         self.temp_dir = tempfile.mkdtemp(prefix=f"repl_env_{uuid.uuid4()}_")
         self._lock = threading.Lock()
@@ -175,6 +180,22 @@ class LocalREPL(NonIsolatedEnv):
             prompt: The prompt to send to the LM.
             model: Optional model name to use (if handler has multiple clients).
         """
+        if self._broker is not None:
+            try:
+                cc = self._broker.complete(DomainLLMRequest(prompt=prompt, model=model))
+                self._pending_llm_calls.append(
+                    RLMChatCompletion(
+                        root_model=cc.root_model,
+                        prompt=prompt,
+                        response=cc.response,
+                        usage_summary=UsageSummary.from_dict(cc.usage_summary.to_dict()),
+                        execution_time=cc.execution_time,
+                    )
+                )
+                return cc.response
+            except Exception as e:  # noqa: BLE001 - legacy behavior: return error string
+                return f"Error: LM query failed - {e}"
+
         if not self.lm_handler_address:
             return "Error: No LM handler configured"
 
@@ -204,6 +225,27 @@ class LocalREPL(NonIsolatedEnv):
         Returns:
             List of responses in the same order as input prompts.
         """
+        if self._broker is not None:
+            try:
+                completions = self._broker.complete_batched(
+                    BatchedLLMRequest(prompts=prompts, model=model)
+                )
+                results: list[str] = []
+                for prompt, cc in zip(prompts, completions, strict=True):
+                    self._pending_llm_calls.append(
+                        RLMChatCompletion(
+                            root_model=cc.root_model,
+                            prompt=prompt,
+                            response=cc.response,
+                            usage_summary=UsageSummary.from_dict(cc.usage_summary.to_dict()),
+                            execution_time=cc.execution_time,
+                        )
+                    )
+                    results.append(cc.response)
+                return results
+            except Exception as e:  # noqa: BLE001 - legacy behavior: return per-item errors
+                return [f"Error: LM query failed - {e}"] * len(prompts)
+
         if not self.lm_handler_address:
             return ["Error: No LM handler configured"] * len(prompts)
 
