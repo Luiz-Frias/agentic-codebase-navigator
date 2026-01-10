@@ -43,3 +43,8 @@ logs/
 
 # Local References
 references/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
