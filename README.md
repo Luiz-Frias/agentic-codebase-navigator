@@ -81,6 +81,30 @@ assert cc.usage_summary.model_usage_summaries["root"].total_calls == 1
 assert cc.usage_summary.model_usage_summaries["sub"].total_calls == 1
 ```
 
+### Environment selection (Phase 05)
+
+You select an execution environment via `environment=...` and (optionally) `environment_kwargs=...`:
+
+- **local**: `LocalEnvironmentAdapter` (in-process, persistent namespace)
+  - Supported `environment_kwargs`:
+    - `execute_timeout_s`: `float | None` (best-effort SIGALRM timeout)
+    - `broker_timeout_s`: `float`
+    - `allowed_import_roots`: `set[str] | list[str] | tuple[str, ...]`
+    - `context_payload`: `str | dict | list`
+    - `setup_code`: `str`
+- **docker**: `DockerEnvironmentAdapter` (per-run container, persistent state file, host proxy for `llm_query`)
+  - Supported `environment_kwargs`:
+    - `image`: `str` (default `python:3.12-slim`)
+    - `subprocess_timeout_s`: `float`
+    - `proxy_http_timeout_s`: `float`
+    - `stop_grace_s`: `int`
+    - `cleanup_subprocess_timeout_s`: `float`
+    - `thread_join_timeout_s`: `float`
+    - `context_payload`: `str | dict | list`
+    - `setup_code`: `str`
+- **modal**: optional dependency + **not implemented yet** (fails fast with a helpful error)
+- **prime**: placeholder + **not implemented yet** (fails fast with a helpful error)
+
 ### Docker execution environment (Phase 1)
 
 The Docker execution environment (`DockerEnvironmentAdapter`) executes `repl` code blocks inside a per-run container,
