@@ -29,6 +29,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "unit: unit tests (fast, hermetic)")
     config.addinivalue_line("markers", "integration: integration tests (multi-component)")
     config.addinivalue_line("markers", "e2e: end-to-end tests (public API full flow)")
+    config.addinivalue_line("markers", "packaging: packaging smoke tests (build/install/import)")
     config.addinivalue_line("markers", "chaos: chaos or resilience tests")
     config.addinivalue_line("markers", "performance: performance or load tests")
     config.addinivalue_line("markers", "docker: requires a working local Docker daemon")
@@ -43,7 +44,7 @@ def docker_is_available() -> bool:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    category_markers = {"unit", "integration", "e2e", "chaos", "performance"}
+    category_markers = {"unit", "integration", "e2e", "packaging", "chaos", "performance"}
     tests_root = Path(__file__).resolve().parent
     errors: list[str] = []
 

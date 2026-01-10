@@ -72,7 +72,7 @@ class DefaultLLMRegistry(LLMRegistry):
             case "openai":
                 from rlm.adapters.llm.openai import build_openai_adapter
 
-                model = config.model_name or "gpt-4o-mini"
+                model = config.model_name or "gpt-5-nano"
                 return build_openai_adapter(model=model, **config.backend_kwargs)
             case "anthropic":
                 from rlm.adapters.llm.anthropic import build_anthropic_adapter
