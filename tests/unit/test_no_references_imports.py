@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.unit
 def test_src_code_does_not_import_references_snapshot() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     src_root = repo_root / "src"
 
     offenders: list[str] = []

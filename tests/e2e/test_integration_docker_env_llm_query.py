@@ -8,15 +8,14 @@ from rlm.domain.errors import ExecutionError
 from tests.fakes_ports import CollectingLogger, QueueLLM
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 @pytest.mark.docker
-def test_docker_env_state_persists_across_execute_code_calls() -> None:
+def test_docker_env_code_can_call_llm_query_and_result_is_returned_via_final_var() -> None:
     """
-    Integration: docker env must persist state across multiple `execute_code` calls.
+    Integration: domain orchestrator + docker environment + broker.
 
-    We validate this by:
-    - Iteration 0: set `x = 1` in a code block (no FINAL)
-    - Iteration 1: return `FINAL_VAR('x')` without redefining `x`
+    This is best-effort and should skip cleanly if Docker isn't available or
+    container startup/pulls are blocked in the environment running tests.
     """
 
     try:
@@ -27,8 +26,8 @@ def test_docker_env_state_persists_across_execute_code_calls() -> None:
     llm = QueueLLM(
         model_name="dummy",
         responses=[
-            "```repl\nx = 1\n```",
-            "FINAL_VAR('x')",
+            "```repl\nresp = llm_query('ping')\n```\nFINAL_VAR('resp')",
+            "pong",
         ],
     )
     logger = CollectingLogger()
@@ -46,8 +45,10 @@ def test_docker_env_state_persists_across_execute_code_calls() -> None:
             pytest.skip(str(exc))
         raise
 
-    assert cc.response == "1"
-    assert len(logger.iterations) >= 2
-    it0 = logger.iterations[0]
-    assert it0.code_blocks
-    assert it0.code_blocks[0].result.locals.get("x") == "1"
+    assert cc.response == "pong"
+
+    assert len(logger.iterations) == 1
+    iter0 = logger.iterations[0]
+    assert len(iter0.code_blocks) == 1
+    repl_result = iter0.code_blocks[0].result
+    assert [c.response for c in repl_result.llm_calls] == ["pong"]

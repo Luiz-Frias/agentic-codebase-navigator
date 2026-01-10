@@ -8,7 +8,7 @@ from rlm.application.config import EnvironmentConfig, LLMConfig, RLMConfig
 from tests.fakes_ports import QueueLLM
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_create_rlm_from_config_runs_end_to_end_local() -> None:
     registry = DictLLMRegistry(
         builders={
@@ -33,7 +33,7 @@ def test_create_rlm_from_config_runs_end_to_end_local() -> None:
     assert cc.response == "ok"
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 @pytest.mark.docker
 def test_create_rlm_from_config_runs_end_to_end_docker() -> None:
     registry = DictLLMRegistry(

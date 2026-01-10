@@ -6,7 +6,7 @@ from rlm.adapters.llm.mock import MockLLMAdapter
 from rlm.api import create_rlm
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_orchestrator_propagates_usage_summary_from_llm() -> None:
     """
     Boundary test: LLM usage accounting should propagate to the final completion.

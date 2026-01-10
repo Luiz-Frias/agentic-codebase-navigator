@@ -15,7 +15,6 @@ def _prompt_to_text(prompt: Prompt) -> str:
         case dict() as d:
             return str(d)
         case list() as items:
-            # Most legacy calls pass OpenAI-style message dicts; join `content`.
             parts: list[str] = []
             for it in items:
                 if isinstance(it, dict) and "content" in it:
@@ -27,37 +26,43 @@ def _prompt_to_text(prompt: Prompt) -> str:
             return str(prompt)
 
 
-class _ScriptedLLM:
-    """
-    Boundary-test LLM (no network).
+class _DockerLLMQueryLLM:
+    """LLM script that triggers an in-container `llm_query()` subcall."""
 
-    - Call 1: returns a `repl` code block (no FINAL) so the legacy loop executes it.
-    - Call 2: asserts the next prompt includes evidence of code execution, then FINALs.
-    """
-
-    # TODO(phase4/phase5): Add a parallel boundary test that uses a real provider adapter
-    # (opt-in via env vars) to validate the same facade wiring without scripted responses.
+    # TODO(phase4/phase5): Add a live-provider version of this test where the subcall
+    # is routed to a real adapter (OpenAI-compatible endpoint) instead of scripted strings.
 
     def __init__(self) -> None:
         self.model_name = "dummy"
-        self._calls = 0
+        self.root_calls = 0
+        self.sub_calls = 0
         self._usage = UsageSummary(model_usage_summaries={"dummy": ModelUsageSummary(1, 0, 0)})
 
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         prompt = request.prompt
-        self._calls += 1
-        if self._calls == 1:
+        # Root calls are message lists; subcalls from the container are strings.
+        if isinstance(prompt, str):
+            self.sub_calls += 1
             return ChatCompletion(
                 root_model=request.model or self.model_name,
                 prompt=prompt,
-                response='Let\'s run code first.\n\n```repl\nprint("HELLO_FROM_REPL")\nx = 123\n```\n',
+                response=f"subcall:{prompt}",
                 usage_summary=self._usage,
                 execution_time=0.0,
             )
-        if self._calls == 2:
+
+        self.root_calls += 1
+        if self.root_calls == 1:
+            return ChatCompletion(
+                root_model=request.model or self.model_name,
+                prompt=prompt,
+                response="```repl\nresp = llm_query('ping')\nprint(resp)\n```\n",
+                usage_summary=self._usage,
+                execution_time=0.0,
+            )
+        if self.root_calls == 2:
             text = _prompt_to_text(prompt)
-            assert "Code executed:" in text
-            assert "HELLO_FROM_REPL" in text
+            assert "subcall:ping" in text
             return ChatCompletion(
                 root_model=request.model or self.model_name,
                 prompt=prompt,
@@ -83,16 +88,25 @@ class _ScriptedLLM:
         return self._usage
 
 
-@pytest.mark.integration
-def test_facade_boundary_runs_legacy_loop_and_executes_local_repl_code_block() -> None:
-    llm: LLMPort = _ScriptedLLM()
-    rlm = create_rlm(llm, environment="local", max_iterations=3, verbose=False)
-    cc = rlm.completion("hello")
-    assert isinstance(cc, ChatCompletion)
-    assert cc.response == "ok"
-    assert cc.root_model == "dummy"
-    assert cc.prompt == "hello"
-    # The legacy loop should require two LLM calls here:
-    # 1) produce a repl code block (no FINAL)
-    # 2) after execution evidence is appended, return FINAL(...)
-    assert cc.usage_summary.model_usage_summaries["dummy"].total_calls == 2
+@pytest.mark.e2e
+@pytest.mark.docker
+def test_docker_env_llm_query_routes_to_llm_port() -> None:
+    llm = _DockerLLMQueryLLM()
+    llm_port: LLMPort = llm
+
+    try:
+        rlm = create_rlm(
+            llm_port,
+            environment="docker",
+            environment_kwargs={"image": "python:3.12-slim"},
+            max_iterations=3,
+            verbose=False,
+        )
+        cc = rlm.completion("hello")
+        assert cc.response == "ok"
+    except RuntimeError as e:
+        if "Failed to start container" in str(e):
+            pytest.skip(str(e))
+        raise
+
+    assert llm.sub_calls >= 1

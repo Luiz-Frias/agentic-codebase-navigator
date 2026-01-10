@@ -8,7 +8,7 @@ from rlm.domain.errors import ExecutionError
 from tests.fakes_ports import CollectingLogger, QueueLLM
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 @pytest.mark.docker
 def test_docker_env_llm_query_can_route_to_other_backend_by_model_name() -> None:
     """

@@ -8,13 +8,29 @@ from rlm.domain.errors import ExecutionError
 from tests.fakes_ports import CollectingLogger, QueueLLM
 
 
-@pytest.mark.integration
-@pytest.mark.docker
-def test_docker_env_llm_query_batched_preserves_order() -> None:
-    """
-    Integration: docker env nested llm_query_batched should preserve prompt ordering.
-    """
+@pytest.mark.e2e
+def test_local_env_llm_query_errors_propagate_as_error_string_without_hanging() -> None:
+    llm = QueueLLM(
+        model_name="dummy",
+        responses=[
+            "```repl\nresp = llm_query('ping')\n```\nFINAL_VAR('resp')",
+            RuntimeError("boom"),
+        ],
+    )
+    logger = CollectingLogger()
+    rlm = create_rlm(llm, environment="local", max_iterations=3, verbose=False, logger=logger)
 
+    cc = rlm.completion("hello")
+    assert "boom" in cc.response
+
+    # The nested call should not be recorded as a successful llm_call.
+    iter0 = logger.iterations[0]
+    assert iter0.code_blocks[0].result.llm_calls == []
+
+
+@pytest.mark.e2e
+@pytest.mark.docker
+def test_docker_env_llm_query_errors_propagate_as_error_string_without_hanging() -> None:
     try:
         ensure_docker_available(timeout_s=0.5)
     except RuntimeError as exc:
@@ -23,10 +39,8 @@ def test_docker_env_llm_query_batched_preserves_order() -> None:
     llm = QueueLLM(
         model_name="dummy",
         responses=[
-            "```repl\njoined = '|'.join(llm_query_batched(['a','b','c']))\n```\nFINAL_VAR('joined')",
-            "r1",
-            "r2",
-            "r3",
+            "```repl\nresp = llm_query('ping')\n```\nFINAL_VAR('resp')",
+            RuntimeError("boom"),
         ],
     )
     logger = CollectingLogger()
@@ -44,10 +58,4 @@ def test_docker_env_llm_query_batched_preserves_order() -> None:
             pytest.skip(str(exc))
         raise
 
-    assert cc.response == "r1|r2|r3"
-
-    assert len(logger.iterations) == 1
-    iter0 = logger.iterations[0]
-    assert len(iter0.code_blocks) == 1
-    repl_result = iter0.code_blocks[0].result
-    assert [c.response for c in repl_result.llm_calls] == ["r1", "r2", "r3"]
+    assert cc.response == "Error: boom"

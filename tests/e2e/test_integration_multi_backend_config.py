@@ -6,7 +6,7 @@ from rlm.api import create_rlm_from_config
 from rlm.application.config import EnvironmentConfig, LLMConfig, RLMConfig
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_create_rlm_from_config_registers_other_llms_and_env_can_route_by_model() -> None:
     """
     Integration: config -> registries -> RLM facade -> broker -> local env.
