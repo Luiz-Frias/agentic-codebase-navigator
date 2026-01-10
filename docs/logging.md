@@ -20,6 +20,8 @@ If you're using config + registries (`create_rlm_from_config`), `LoggerConfig.lo
 
 Each run produces a JSON Lines file with one JSON object per line.
 
+For the normative field listing, see `docs/log_schema_v1.md`.
+
 - **Metadata line** (first line in a run):
   - `type="metadata"`
   - `schema_version=1`

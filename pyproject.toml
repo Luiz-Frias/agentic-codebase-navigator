@@ -82,3 +82,12 @@ ignore = [
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.coverage.run]
+branch = true
+source = ["rlm"]
+
+[tool.coverage.report]
+fail_under = 99
+show_missing = true
+skip_covered = false

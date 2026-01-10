@@ -87,4 +87,4 @@ See `docs/logging.md` for JSONL logging configuration and schema.
 ## Migration notes
 
 The upstream snapshot remains available under `references/rlm/**` for reference only.
-Runtime code lives under `src/rlm/**`; legacy internals under `src/rlm/_legacy/**` are not part of the public API.
+Runtime code lives under `src/rlm/**`. Legacy has been fully removed.

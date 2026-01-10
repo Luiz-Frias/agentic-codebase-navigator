@@ -83,9 +83,4 @@ Interface shape:
 
 ## Transitional note (Phase 2 bridge)
 
-During Phase 2, runtime orchestration uses the **domain** orchestrator, but the broker and environments are still backed by legacy implementations via adapters:
-
-- `rlm.adapters.legacy.broker.LegacyBrokerAdapter`
-- `rlm.adapters.legacy.environment.LegacyEnvironmentAdapter`
-
-The legacy core loop (`rlm._legacy.core.rlm.RLM`) is kept for regression/boundary comparisons only.
+Legacy has been fully removed; all runtime code paths use native hexagonal adapters.

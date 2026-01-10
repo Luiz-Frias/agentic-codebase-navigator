@@ -1,10 +1,7 @@
 """
 Environment adapters (hexagonal).
 
-Phase 1 note:
-- Native adapters live here.
-- Legacy environment implementations live under `rlm._legacy` and are used only
-  as a migration bridge during the refactor (until Phase 05+ is complete).
+Native adapters live here. Legacy has been fully removed.
 """
 
 from __future__ import annotations

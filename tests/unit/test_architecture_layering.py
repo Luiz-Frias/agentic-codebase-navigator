@@ -69,10 +69,9 @@ def test_application_layer_does_not_depend_on_adapters_or_infra_except_bridge() 
             "rlm.adapters",
             "rlm.infrastructure",
             "rlm.api",
-            "rlm._legacy",
             "references",
         ),
-        forbidden_rlm_children=("adapters", "infrastructure", "api", "_legacy"),
+        forbidden_rlm_children=("adapters", "infrastructure", "api"),
     )
     assert not offenders, "Application layer imports forbidden modules:\n" + "\n".join(offenders)
 
@@ -88,9 +87,27 @@ def test_infrastructure_layer_does_not_depend_on_api_application_or_adapters() -
             "rlm.api",
             "rlm.application",
             "rlm.adapters",
-            "rlm._legacy",
             "references",
         ),
-        forbidden_rlm_children=("api", "application", "adapters", "_legacy"),
+        forbidden_rlm_children=("api", "application", "adapters"),
     )
     assert not offenders, "Infrastructure layer imports forbidden modules:\n" + "\n".join(offenders)
+
+
+@pytest.mark.unit
+def test_domain_layer_does_not_depend_on_outer_layers() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    domain_root = repo_root / "src" / "rlm" / "domain"
+
+    offenders = _scan_forbidden_imports(
+        domain_root,
+        forbidden_prefixes=(
+            "rlm.api",
+            "rlm.application",
+            "rlm.adapters",
+            "rlm.infrastructure",
+            "references",
+        ),
+        forbidden_rlm_children=("api", "application", "adapters", "infrastructure"),
+    )
+    assert not offenders, "Domain layer imports forbidden modules:\n" + "\n".join(offenders)

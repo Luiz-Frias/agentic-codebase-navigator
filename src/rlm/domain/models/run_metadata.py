@@ -46,6 +46,15 @@ class RunMetadata:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> RunMetadata:
         correlation_id = data.get("correlation_id")
+        raw_other = data.get("other_backends")
+        other_backends: list[str] | None
+        if raw_other is None:
+            other_backends = None
+        elif isinstance(raw_other, (list, tuple)):
+            other_backends = [str(x) for x in raw_other]
+        else:
+            # Back-compat: tolerate unexpected shapes by dropping the field.
+            other_backends = None
         return cls(
             root_model=str(data.get("root_model", "")),
             correlation_id=str(correlation_id) if correlation_id is not None else None,
@@ -55,5 +64,5 @@ class RunMetadata:
             backend_kwargs=dict(data.get("backend_kwargs", {}) or {}),
             environment_type=str(data.get("environment_type", "local")),
             environment_kwargs=dict(data.get("environment_kwargs", {}) or {}),
-            other_backends=list(data.get("other_backends")) if data.get("other_backends") else None,
+            other_backends=other_backends,
         )
