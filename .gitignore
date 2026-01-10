@@ -12,7 +12,7 @@ wheels/
 # IDEs
 .vscode/
 .idea/
-.cursor/
+.cursor/*.*
 .claude/
 
 
