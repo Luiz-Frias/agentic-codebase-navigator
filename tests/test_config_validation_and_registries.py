@@ -234,7 +234,7 @@ def test_default_logger_registry_legacy_jsonl_builds_logger(tmp_path: Any) -> No
 def test_default_environment_registry_builds_local_factory(monkeypatch: pytest.MonkeyPatch) -> None:
     created: list[object] = []
 
-    class _FakeLocalREPL:
+    class _FakeLocalEnv:
         def __init__(self, *args, **kwargs) -> None:
             created.append((args, kwargs))
 
@@ -247,17 +247,17 @@ def test_default_environment_registry_builds_local_factory(monkeypatch: pytest.M
         def cleanup(self) -> None:
             pass
 
-    import rlm._legacy.environments.local_repl as local_repl_mod
+    import rlm.adapters.environments.local as local_env_mod
 
-    monkeypatch.setattr(local_repl_mod, "LocalREPL", _FakeLocalREPL)
+    monkeypatch.setattr(local_env_mod, "LocalEnvironmentAdapter", _FakeLocalEnv)
 
     env_reg = DefaultEnvironmentRegistry()
     env_factory = env_reg.build(EnvironmentConfig(environment="local"))
     env = env_factory.build(("127.0.0.1", 12345))
 
-    assert created, "expected LocalREPL to be constructed"
+    assert created, "expected LocalEnvironmentAdapter to be constructed"
     _args, kwargs = created[0]
-    assert kwargs["lm_handler_address"] == ("127.0.0.1", 12345)
+    assert kwargs["broker_address"] == ("127.0.0.1", 12345)
     env.cleanup()
 
 

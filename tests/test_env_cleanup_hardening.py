@@ -79,3 +79,11 @@ def test_dockerrepl_cleanup_tolerates_partial_initialization() -> None:
 
     env = object.__new__(docker_mod.DockerREPL)
     docker_mod.DockerREPL.cleanup(env)  # should not raise
+
+
+@pytest.mark.unit
+def test_docker_environment_adapter_cleanup_tolerates_partial_initialization() -> None:
+    from rlm.adapters.environments.docker import DockerEnvironmentAdapter
+
+    env = object.__new__(DockerEnvironmentAdapter)
+    DockerEnvironmentAdapter.cleanup(env)  # should not raise

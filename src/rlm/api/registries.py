@@ -9,7 +9,8 @@ from typing import Protocol
 from rlm.application.config import EnvironmentConfig, LLMConfig, LoggerConfig
 from rlm.application.use_cases.run_completion import EnvironmentFactory
 from rlm.domain.policies.timeouts import DEFAULT_DOCKER_DAEMON_PROBE_TIMEOUT_S
-from rlm.domain.ports import LLMPort, LoggerPort
+from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
+from rlm.domain.types import ContextPayload
 
 
 class LLMRegistry(Protocol):
@@ -118,23 +119,242 @@ class DefaultLLMRegistry(LLMRegistry):
 @dataclass(frozen=True, slots=True)
 class DefaultEnvironmentRegistry(EnvironmentRegistry):
     """
-    Phase 2 environment registry.
+    Phase 05 environment registry.
 
-    Today this returns legacy Local/Docker REPL adapters via the same helper
-    used by the `RLM` facade defaults.
+    Builds an `EnvironmentFactory` from `EnvironmentConfig` and keeps optional
+    environment dependencies behind lazy imports.
     """
 
     def build(self, config: EnvironmentConfig, /) -> EnvironmentFactory:
         if config.environment == "docker":
             ensure_docker_available()
 
-        # Keep this import lazy so importing the API doesn't pull legacy env code
-        # unless the registry is actually used.
-        from rlm.api.rlm import _default_legacy_environment_factory
-
-        return _default_legacy_environment_factory(
-            config.environment, dict(config.environment_kwargs)
+        env_name = config.environment
+        env_kwargs = _validate_environment_kwargs(
+            env_name, dict(config.environment_kwargs), allow_legacy_keys=True
         )
+
+        def _build(
+            broker: BrokerPort | None,
+            broker_address: tuple[str, int],
+            correlation_id: str | None,
+            /,
+        ) -> EnvironmentPort:
+            match env_name:
+                case "local":
+                    from rlm.adapters.environments.local import LocalEnvironmentAdapter
+
+                    return LocalEnvironmentAdapter(
+                        broker=broker,
+                        broker_address=broker_address,
+                        correlation_id=correlation_id,
+                        **env_kwargs,
+                    )
+                case "docker":
+                    from rlm.adapters.environments.docker import DockerEnvironmentAdapter
+
+                    return DockerEnvironmentAdapter(
+                        broker=broker,
+                        broker_address=broker_address,
+                        correlation_id=correlation_id,
+                        **env_kwargs,
+                    )
+                case "modal":
+                    from rlm.adapters.environments.modal import ModalEnvironmentAdapter
+
+                    return ModalEnvironmentAdapter(**env_kwargs)
+                case "prime":
+                    from rlm.adapters.environments.prime import PrimeEnvironmentAdapter
+
+                    return PrimeEnvironmentAdapter(**env_kwargs)
+                case _:
+                    raise ValueError(f"Unknown environment: {env_name!r}")
+
+        class _Factory:
+            def build(self, *args: object) -> object:  # noqa: ANN401 - migration-compatible facade
+                """
+                Build an environment for a run.
+
+                Supported call shapes during migration:
+                - build(broker_address)
+                - build(broker, broker_address)
+                - build(broker, broker_address, correlation_id)
+                """
+
+                match args:
+                    case ((str() as host, int() as port),):
+                        return _build(None, (host, port), None)
+                    case (broker, (str() as host, int() as port)):
+                        return _build(broker, (host, port), None)  # type: ignore[arg-type]
+                    case (broker, (str() as host, int() as port), cid) if cid is None or isinstance(
+                        cid, str
+                    ):
+                        return _build(broker, (host, port), cid)  # type: ignore[arg-type]
+                    case ((str() as host, int() as port), cid) if isinstance(cid, str):
+                        return _build(None, (host, port), cid)
+                    case _:
+                        raise TypeError(
+                            "EnvironmentFactory.build() expects (broker_address) or (broker, broker_address[, correlation_id])"
+                        )
+
+        return _Factory()
+
+
+def _validate_environment_kwargs(
+    env: str,
+    kwargs: dict[str, object],
+    /,
+    *,
+    allow_legacy_keys: bool,
+) -> dict[str, object]:
+    """
+    Validate and normalize environment-specific kwargs.
+
+    This intentionally lives in the composition root layer (api) because it:
+    - is boundary validation (user-provided config)
+    - maps directly to adapter constructor kwargs
+    """
+
+    if allow_legacy_keys:
+        # Historical key: used when environments were wired via `_legacy`.
+        kwargs.pop("lm_handler_address", None)
+
+    def _expect_str(key: str) -> str:
+        v = kwargs.get(key)
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError(f"{env} environment requires {key!r} to be a non-empty string")
+        return v
+
+    def _expect_float(key: str, *, allow_none: bool = False) -> float | None:
+        v = kwargs.get(key)
+        if v is None and allow_none:
+            return None
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise ValueError(f"{env} environment requires {key!r} to be a number")
+        f = float(v)
+        if f <= 0:
+            raise ValueError(f"{env} environment requires {key!r} to be > 0")
+        return f
+
+    def _expect_int(key: str) -> int:
+        v = kwargs.get(key)
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise ValueError(f"{env} environment requires {key!r} to be an int")
+        if v < 0:
+            raise ValueError(f"{env} environment requires {key!r} to be >= 0")
+        return v
+
+    def _expect_setup_code() -> str | None:
+        v = kwargs.get("setup_code")
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError(
+                f"{env} environment requires 'setup_code' to be a string when provided"
+            )
+        return v
+
+    def _expect_context_payload() -> ContextPayload | None:
+        v = kwargs.get("context_payload")
+        if v is None:
+            return None
+        if not isinstance(v, (str, dict, list)):
+            raise ValueError(
+                f"{env} environment requires 'context_payload' to be one of str|dict|list when provided"
+            )
+        return v  # type: ignore[return-value]
+
+    match env:
+        case "local":
+            allowed = {
+                "execute_timeout_s",
+                "broker_timeout_s",
+                "allowed_import_roots",
+                "context_payload",
+                "setup_code",
+            }
+            unknown = set(kwargs) - allowed
+            if unknown:
+                raise ValueError(
+                    f"Unknown local environment kwargs: {sorted(unknown)}. Allowed: {sorted(allowed)}"
+                )
+
+            out: dict[str, object] = {}
+            if "execute_timeout_s" in kwargs:
+                out["execute_timeout_s"] = _expect_float("execute_timeout_s", allow_none=True)
+            if "broker_timeout_s" in kwargs:
+                out["broker_timeout_s"] = _expect_float("broker_timeout_s", allow_none=False)
+            if "allowed_import_roots" in kwargs:
+                v = kwargs.get("allowed_import_roots")
+                if isinstance(v, set):
+                    roots = v
+                elif isinstance(v, (list, tuple)):
+                    roots = set(v)
+                else:
+                    raise ValueError(
+                        "local environment requires 'allowed_import_roots' to be a set/list/tuple of strings"
+                    )
+                if not all(isinstance(x, str) and x.strip() for x in roots):
+                    raise ValueError(
+                        "local environment requires 'allowed_import_roots' to contain only non-empty strings"
+                    )
+                out["allowed_import_roots"] = roots
+            if (ctx := _expect_context_payload()) is not None:
+                out["context_payload"] = ctx
+            if (sc := _expect_setup_code()) is not None:
+                out["setup_code"] = sc
+            return out
+        case "docker":
+            allowed = {
+                "image",
+                "subprocess_timeout_s",
+                "proxy_http_timeout_s",
+                "stop_grace_s",
+                "cleanup_subprocess_timeout_s",
+                "thread_join_timeout_s",
+                "context_payload",
+                "setup_code",
+            }
+            unknown = set(kwargs) - allowed
+            if unknown:
+                raise ValueError(
+                    f"Unknown docker environment kwargs: {sorted(unknown)}. Allowed: {sorted(allowed)}"
+                )
+
+            out: dict[str, object] = {}
+            if "image" in kwargs:
+                out["image"] = _expect_str("image")
+            if "subprocess_timeout_s" in kwargs:
+                out["subprocess_timeout_s"] = _expect_float(
+                    "subprocess_timeout_s", allow_none=False
+                )
+            if "proxy_http_timeout_s" in kwargs:
+                out["proxy_http_timeout_s"] = _expect_float(
+                    "proxy_http_timeout_s", allow_none=False
+                )
+            if "stop_grace_s" in kwargs:
+                out["stop_grace_s"] = _expect_int("stop_grace_s")
+            if "cleanup_subprocess_timeout_s" in kwargs:
+                out["cleanup_subprocess_timeout_s"] = _expect_float(
+                    "cleanup_subprocess_timeout_s", allow_none=False
+                )
+            if "thread_join_timeout_s" in kwargs:
+                out["thread_join_timeout_s"] = _expect_float(
+                    "thread_join_timeout_s", allow_none=False
+                )
+            if (ctx := _expect_context_payload()) is not None:
+                out["context_payload"] = ctx
+            if (sc := _expect_setup_code()) is not None:
+                out["setup_code"] = sc
+            return out
+        case "modal" | "prime":
+            if kwargs:
+                raise ValueError(
+                    f"{env} environment does not accept kwargs in Phase 05 (got {sorted(kwargs)})"
+                )
+            return {}
+        case _:
+            raise ValueError(f"Unknown environment: {env!r}")
 
 
 @dataclass(frozen=True, slots=True)

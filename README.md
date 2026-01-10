@@ -83,14 +83,14 @@ assert cc.usage_summary.model_usage_summaries["sub"].total_calls == 1
 
 ### Docker execution environment (Phase 1)
 
-The legacy Docker execution environment (`DockerREPL`) is used in Phase 1 to execute `repl` code blocks inside a
-container, while proxying `llm_query()` calls back to the host.
+The Docker execution environment (`DockerEnvironmentAdapter`) executes `repl` code blocks inside a per-run container,
+while proxying `llm_query()` calls back to the host (so nested subcalls still route through the broker).
 
 - **Requirements**
   - A working local Docker installation (`docker` CLI available).
   - Docker daemon running and accessible (`docker info` succeeds).
   - Docker that supports `--add-host host.docker.internal:host-gateway` (Docker 20.10+).
-  - Network access to install in-container deps (`pip install dill requests`) if the image doesn’t already have them.
+  - No in-container package installs required (the exec script uses stdlib-only tooling).
 
 - **Default image**
   - `python:3.12-slim`

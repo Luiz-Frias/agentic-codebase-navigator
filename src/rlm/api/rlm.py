@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from rlm.application.config import EnvironmentName
+from rlm.application.config import EnvironmentConfig, EnvironmentName
 from rlm.application.use_cases.run_completion import (
     EnvironmentFactory,
     RunCompletionDeps,
@@ -48,9 +48,15 @@ class RLM:
         self._logger = logger
 
         self._broker_factory = broker_factory or _default_tcp_broker_factory
-        self._environment_factory = environment_factory or _default_legacy_environment_factory(
-            environment, environment_kwargs or {}
-        )
+        if environment_factory is None:
+            from rlm.api.registries import DefaultEnvironmentRegistry
+
+            environment_factory = DefaultEnvironmentRegistry().build(
+                EnvironmentConfig(
+                    environment=environment, environment_kwargs=environment_kwargs or {}
+                )
+            )
+        self._environment_factory = environment_factory
         self._system_prompt = system_prompt
 
     def completion(self, prompt: Prompt, *, root_prompt: str | None = None) -> ChatCompletion:
@@ -100,99 +106,3 @@ def _default_tcp_broker_factory(llm: LLMPort, /) -> BrokerPort:
     from rlm.adapters.broker.tcp import TcpBrokerAdapter
 
     return TcpBrokerAdapter(llm)
-
-
-def _default_legacy_environment_factory(
-    environment: EnvironmentName,
-    environment_kwargs: dict[str, Any],
-) -> EnvironmentFactory:
-    """
-    Default environment factory: legacy LocalREPL/DockerREPL adapters (Phase 2).
-
-    We keep imports lazy so default installs can still import `rlm` without
-    pulling optional dependencies unless selected.
-    """
-
-    def _build(
-        broker: BrokerPort | None,
-        broker_address: tuple[str, int],
-        correlation_id: str | None = None,
-        /,
-    ):
-        from rlm.adapters.legacy.environment import LegacyEnvironmentAdapter
-
-        match environment:
-            case "local":
-                from rlm._legacy.environments.local_repl import LocalREPL
-
-                kwargs = dict(environment_kwargs)
-                kwargs.pop("lm_handler_address", None)
-                # Prefer injecting the BrokerPort explicitly (no runtime monkey patching).
-                # Fallback is legacy socket transport (lm_handler_address).
-                if broker is not None:
-                    env = LocalREPL(
-                        lm_handler_address=broker_address,
-                        broker=broker,
-                        correlation_id=correlation_id,
-                        **kwargs,
-                    )
-                else:
-                    env = LocalREPL(
-                        lm_handler_address=broker_address,
-                        correlation_id=correlation_id,
-                        **kwargs,
-                    )
-                return LegacyEnvironmentAdapter(env)
-            case "docker":
-                from rlm._legacy.environments.docker_repl import DockerREPL
-
-                kwargs = dict(environment_kwargs)
-                kwargs.pop("lm_handler_address", None)
-                if broker is not None:
-                    env = DockerREPL(
-                        lm_handler_address=broker_address,
-                        broker=broker,
-                        correlation_id=correlation_id,
-                        **kwargs,
-                    )
-                else:
-                    env = DockerREPL(
-                        lm_handler_address=broker_address,
-                        correlation_id=correlation_id,
-                        **kwargs,
-                    )
-                return LegacyEnvironmentAdapter(env)
-            case "modal" | "prime":
-                raise NotImplementedError(
-                    f"Environment '{environment}' is not supported in Phase 2."
-                )
-            case _:
-                raise ValueError(f"Unknown environment: {environment!r}")
-
-    class _Factory:
-        def build(self, *args: object) -> object:  # noqa: ANN401 - migration-compatible facade
-            """
-            Build an environment for a run.
-
-            Supported call shapes during migration:
-            - build(broker_address)
-            - build(broker, broker_address)
-            """
-
-            match args:
-                case ((str() as host, int() as port),):
-                    return _build(None, (host, port), None)
-                case (broker, (str() as host, int() as port)):
-                    return _build(broker, (host, port), None)  # type: ignore[arg-type]
-                case (broker, (str() as host, int() as port), cid) if cid is None or isinstance(
-                    cid, str
-                ):
-                    return _build(broker, (host, port), cid)  # type: ignore[arg-type]
-                case ((str() as host, int() as port), cid) if isinstance(cid, str):
-                    return _build(None, (host, port), cid)
-                case _:
-                    raise TypeError(
-                        "EnvironmentFactory.build() expects (broker_address) or (broker, broker_address)"
-                    )
-
-    return _Factory()
