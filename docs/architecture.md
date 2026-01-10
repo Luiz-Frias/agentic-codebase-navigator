@@ -44,7 +44,7 @@ Registries (config → adapters) live in the API layer:
 
 - `rlm.api.registries.DictLLMRegistry` (generic)
 - `rlm.api.registries.DefaultEnvironmentRegistry` (local + docker, Phase 2)
-- `rlm.api.registries.DefaultLoggerRegistry` (none + legacy_jsonl, Phase 2)
+- `rlm.api.registries.DefaultLoggerRegistry` (none + jsonl + console, Phase 2)
 
 ## Extension points (Phase 2)
 

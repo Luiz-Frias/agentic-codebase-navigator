@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 EnvironmentName = Literal["local", "modal", "docker", "prime"]
-LoggerName = Literal["none", "legacy_jsonl"]
+LoggerName = Literal["none", "jsonl", "console"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,9 +57,9 @@ class LoggerConfig:
     logger_kwargs: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.logger not in ("none", "legacy_jsonl"):
+        if self.logger not in ("none", "jsonl", "console"):
             raise ValueError(
-                f"LoggerConfig.logger must be one of ['none','legacy_jsonl'], got {self.logger!r}"
+                f"LoggerConfig.logger must be one of ['none','jsonl','console'], got {self.logger!r}"
             )
         if not isinstance(self.logger_kwargs, dict):
             raise ValueError("LoggerConfig.logger_kwargs must be a dict")

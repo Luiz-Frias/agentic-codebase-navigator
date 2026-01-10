@@ -5,8 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from rlm._legacy.logger.rlm_logger import RLMLogger
-from rlm.adapters.legacy.logger import LegacyLoggerAdapter
+from rlm.adapters.logger.jsonl import JsonlLoggerAdapter
 from rlm.domain.models import (
     ChatCompletion,
     CodeBlock,
@@ -19,9 +18,9 @@ from rlm.domain.models import (
 
 
 @pytest.mark.integration
-def test_legacy_jsonl_logger_roundtrips_usage_fields(tmp_path: Path) -> None:
+def test_jsonl_logger_roundtrips_usage_fields(tmp_path: Path) -> None:
     """
-    Integration: legacy JSONL logger writes usage fields and they parse back into domain models.
+    Integration: JSONL logger writes usage fields and they parse back into domain models.
 
     This is our Phase-4 contract: usage summary must be visible in logs without
     leaking provider internals and without relying on in-memory objects.
@@ -29,8 +28,7 @@ def test_legacy_jsonl_logger_roundtrips_usage_fields(tmp_path: Path) -> None:
 
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    legacy = RLMLogger(log_dir=str(log_dir), file_name="usage_roundtrip")
-    logger = LegacyLoggerAdapter(legacy)
+    logger = JsonlLoggerAdapter(log_dir=log_dir, file_name="usage_roundtrip")
 
     # metadata event
     logger.log_metadata(
@@ -93,7 +91,8 @@ def test_legacy_jsonl_logger_roundtrips_usage_fields(tmp_path: Path) -> None:
     logger.log_iteration(it)
 
     # Read JSONL back.
-    path = legacy.log_file_path
+    path = logger.log_file_path
+    assert path is not None
     with open(path) as f:
         lines = [line.strip() for line in f if line.strip()]
 

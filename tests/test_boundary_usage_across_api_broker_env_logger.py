@@ -5,9 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from rlm._legacy.logger.rlm_logger import RLMLogger
-from rlm.adapters.legacy.logger import LegacyLoggerAdapter
 from rlm.adapters.llm.mock import MockLLMAdapter
+from rlm.adapters.logger.jsonl import JsonlLoggerAdapter
 from rlm.api import create_rlm
 from rlm.domain.models.usage import UsageSummary
 
@@ -19,12 +18,11 @@ def test_usage_is_correct_across_api_broker_env_and_logger(tmp_path: Path) -> No
     - Public API (`create_rlm`) drives the app use case
     - TCP broker routes subcalls by model name
     - Local environment executes code and calls `llm_query()`
-    - Legacy JSONL logger persists usage fields
+    - JSONL logger persists usage fields
     """
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    legacy = RLMLogger(log_dir=str(log_dir), file_name="usage_boundary")
-    logger = LegacyLoggerAdapter(legacy)
+    logger = JsonlLoggerAdapter(log_dir=log_dir, file_name="usage_boundary")
 
     root_script = "```repl\nresp = llm_query('ping', model='sub')\n```\nFINAL_VAR('resp')"
     rlm = create_rlm(
@@ -45,7 +43,9 @@ def test_usage_is_correct_across_api_broker_env_and_logger(tmp_path: Path) -> No
     assert cc.usage_summary.model_usage_summaries["sub"].total_calls == 1
 
     # Verify the JSONL output preserves usage subtrees end-to-end.
-    with open(legacy.log_file_path) as f:
+    path = logger.log_file_path
+    assert path is not None
+    with open(path) as f:
         lines = [line.strip() for line in f if line.strip()]
 
     assert len(lines) >= 2  # metadata + at least one iteration
@@ -72,8 +72,8 @@ def test_usage_is_correct_across_api_broker_env_and_logger(tmp_path: Path) -> No
     # Nested environment llm_calls should include the subcall usage.
     assert entry["code_blocks"]
     result = entry["code_blocks"][0]["result"]
-    assert result["llm_calls"]
-    nested = result["llm_calls"][0]
+    assert result["rlm_calls"]
+    nested = result["rlm_calls"][0]
     assert nested["root_model"] == "sub"
     nested_usage = UsageSummary.from_dict(nested["usage_summary"])
     assert nested_usage.model_usage_summaries["sub"].total_calls == 1
