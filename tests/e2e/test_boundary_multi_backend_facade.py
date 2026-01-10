@@ -6,7 +6,7 @@ from rlm.adapters.llm.mock import MockLLMAdapter
 from rlm.api import create_rlm
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_facade_multi_backend_routes_subcalls_by_model_and_merges_usage() -> None:
     """
     Boundary: public facade -> application use case -> broker -> local env -> subcall routing.
