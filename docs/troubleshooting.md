@@ -8,7 +8,7 @@
 
 - **Docker env hangs / never returns from code execution**
   - Likely: `docker exec` is blocked/stuck.
-  - Mitigation: lower `DockerREPL(subprocess_timeout_s=...)` (see **Docker exec timeout** below). The timeout path triggers cleanup.
+  - Mitigation: lower `DockerEnvironmentAdapter(subprocess_timeout_s=...)` via `environment_kwargs` (see **Docker exec timeout** below). The timeout path triggers cleanup.
 
 - **Cleanup flakiness / orphaned docker containers**
   - Likely: partial initialization or transient docker command failures.
@@ -46,18 +46,18 @@ When using the TCP protocol client helpers (e.g. `request_completions_batched(..
 
 ## Docker exec timeout
 
-`DockerREPL.execute_code(...)` uses a subprocess timeout for `docker exec`. On timeout it:
+`DockerEnvironmentAdapter.execute_code(...)` uses a subprocess timeout for `docker exec`. On timeout it:
 
 - returns a **safe** `TimeoutExpired: docker exec exceeded ...` error in `stderr`
 - triggers `cleanup()` (stop container + stop proxy)
 
-Configure via `DockerREPL(subprocess_timeout_s=...)`.
+Configure via `environment_kwargs={"subprocess_timeout_s": ...}` when using `environment="docker"`.
 
 ## Local execution timeout (best-effort)
 
-`LocalREPL.execute_code(...)` can enforce a best-effort timeout via `SIGALRM`:
+`LocalEnvironmentAdapter.execute_code(...)` can enforce a best-effort timeout via `SIGALRM`:
 
 - only works on platforms where `SIGALRM` is available
 - requires running on the **main thread**
 
-Configure via `LocalREPL(execute_timeout_s=...)`.
+Configure via `environment_kwargs={"execute_timeout_s": ...}` when using `environment="local"`.

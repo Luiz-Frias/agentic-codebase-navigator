@@ -143,13 +143,17 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
         try:
             if deps.logger is not None:
                 # Best-effort environment type inference without importing adapters/legacy.
-                inner = getattr(env, "_env", None)
-                inner_name = type(inner).__name__ if inner is not None else type(env).__name__
-                env_type = "unknown"
-                if "DockerREPL" in inner_name:
-                    env_type = "docker"
-                elif "LocalREPL" in inner_name:
-                    env_type = "local"
+                env_type: str = "unknown"
+                declared = getattr(env, "environment_type", None)
+                if isinstance(declared, str) and declared.strip():
+                    env_type = declared
+                else:
+                    inner = getattr(env, "_env", None)
+                    inner_name = type(inner).__name__ if inner is not None else type(env).__name__
+                    if "DockerREPL" in inner_name:
+                        env_type = "docker"
+                    elif "LocalREPL" in inner_name:
+                        env_type = "local"
 
                 deps.logger.log_metadata(
                     RunMetadata(
