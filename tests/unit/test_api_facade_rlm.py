@@ -40,3 +40,11 @@ def test_api_rlm_completion_returns_final_answer() -> None:
     rlm = RLM(llm, max_iterations=2, verbose=False)
     cc = rlm.completion("hello")
     assert cc.response == "ok"
+
+
+@pytest.mark.unit
+async def test_api_rlm_acompletion_returns_final_answer() -> None:
+    llm: LLMPort = _DummyLLM()
+    rlm = RLM(llm, max_iterations=2, verbose=False)
+    cc = await rlm.acompletion("hello")
+    assert cc.response == "ok"

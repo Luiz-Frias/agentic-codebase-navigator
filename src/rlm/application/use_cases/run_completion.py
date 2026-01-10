@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import uuid
 from dataclasses import dataclass
@@ -116,6 +117,22 @@ class RunCompletionRequest:
     max_iterations: int = 30
 
 
+def _infer_environment_type(env: EnvironmentPort, /) -> str:
+    # Best-effort environment type inference without importing adapters/legacy.
+    env_type: str = "unknown"
+    declared = getattr(env, "environment_type", None)
+    if isinstance(declared, str) and declared.strip():
+        env_type = declared
+    else:
+        inner = getattr(env, "_env", None)
+        inner_name = type(inner).__name__ if inner is not None else type(env).__name__
+        if "DockerREPL" in inner_name:
+            env_type = "docker"
+        elif "LocalREPL" in inner_name:
+            env_type = "local"
+    return env_type
+
+
 def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) -> ChatCompletion:
     """
     Use case: run an RLM completion using the domain orchestrator.
@@ -142,19 +159,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
 
         try:
             if deps.logger is not None:
-                # Best-effort environment type inference without importing adapters/legacy.
-                env_type: str = "unknown"
-                declared = getattr(env, "environment_type", None)
-                if isinstance(declared, str) and declared.strip():
-                    env_type = declared
-                else:
-                    inner = getattr(env, "_env", None)
-                    inner_name = type(inner).__name__ if inner is not None else type(env).__name__
-                    if "DockerREPL" in inner_name:
-                        env_type = "docker"
-                    elif "LocalREPL" in inner_name:
-                        env_type = "local"
-
+                env_type = _infer_environment_type(env)
                 deps.logger.log_metadata(
                     RunMetadata(
                         root_model=deps.llm.model_name,
@@ -203,3 +208,85 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
             env.cleanup()
     finally:
         deps.broker.stop()
+
+
+async def arun_completion(
+    request: RunCompletionRequest, *, deps: RunCompletionDeps
+) -> ChatCompletion:
+    """
+    Async use case: run an RLM completion using the domain orchestrator.
+
+    Notes:
+    - `BrokerPort` / `EnvironmentPort` are sync; we execute their blocking methods via
+      `asyncio.to_thread` so callers can safely run this in an event loop.
+    - Cleanup is cancellation-safe via `asyncio.shield(...)`.
+    """
+
+    correlation_id = uuid.uuid4().hex
+    try:
+        broker_addr = await asyncio.to_thread(deps.broker.start)
+    except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+        raise BrokerError("Failed to start broker") from e
+
+    try:
+        try:
+            env = await asyncio.to_thread(
+                _build_environment,
+                deps.environment_factory,
+                deps.broker,
+                broker_addr,
+                correlation_id,
+            )
+        except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+            raise ExecutionError("Failed to build environment") from e
+
+        try:
+            if deps.logger is not None:
+                env_type = _infer_environment_type(env)
+                await asyncio.to_thread(
+                    deps.logger.log_metadata,
+                    RunMetadata(
+                        root_model=deps.llm.model_name,
+                        max_depth=request.max_depth,
+                        max_iterations=request.max_iterations,
+                        backend=deps.llm.model_name,
+                        backend_kwargs={},
+                        environment_type=env_type,
+                        environment_kwargs={},
+                        other_backends=None,
+                        correlation_id=correlation_id,
+                    ),
+                )
+
+            orch = RLMOrchestrator(
+                llm=deps.llm,
+                environment=env,
+                logger=deps.logger,
+                system_prompt=deps.system_prompt,
+            )
+            try:
+                cc = await orch.acompletion(
+                    request.prompt,
+                    root_prompt=request.root_prompt,
+                    max_depth=request.max_depth,
+                    depth=0,
+                    max_iterations=request.max_iterations,
+                    correlation_id=correlation_id,
+                )
+                broker_usage = await asyncio.to_thread(deps.broker.get_usage_summary)
+                merged_usage = merge_usage_summaries([cc.usage_summary, broker_usage])
+                return ChatCompletion(
+                    root_model=cc.root_model,
+                    prompt=cc.prompt,
+                    response=cc.response,
+                    usage_summary=merged_usage,
+                    execution_time=cc.execution_time,
+                )
+            except RLMError:
+                raise
+            except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+                raise RLMError("RLM run failed") from e
+        finally:
+            await asyncio.shield(asyncio.to_thread(env.cleanup))
+    finally:
+        await asyncio.shield(asyncio.to_thread(deps.broker.stop))

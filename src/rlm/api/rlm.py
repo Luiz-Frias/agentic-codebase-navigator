@@ -8,6 +8,7 @@ from rlm.application.use_cases.run_completion import (
     EnvironmentFactory,
     RunCompletionDeps,
     RunCompletionRequest,
+    arun_completion,
     run_completion,
 )
 from rlm.domain.errors import ValidationError
@@ -95,6 +96,41 @@ class RLM:
             max_iterations=self._max_iterations,
         )
         return run_completion(req, deps=deps)
+
+    async def acompletion(
+        self, prompt: Prompt, *, root_prompt: str | None = None
+    ) -> ChatCompletion:
+        broker = self._broker_factory(self._llm)
+        # Register additional models for subcalls (Phase 4 multi-backend).
+        seen = {self._llm.model_name}
+        for other in self._other_llms:
+            name = other.model_name
+            if name in seen:
+                raise ValidationError(f"Duplicate model registered: {name!r}")
+            seen.add(name)
+            broker.register_llm(name, other)
+        if self._system_prompt is None:
+            deps = RunCompletionDeps(
+                llm=self._llm,
+                broker=broker,
+                environment_factory=self._environment_factory,
+                logger=self._logger,
+            )
+        else:
+            deps = RunCompletionDeps(
+                llm=self._llm,
+                broker=broker,
+                environment_factory=self._environment_factory,
+                logger=self._logger,
+                system_prompt=self._system_prompt,
+            )
+        req = RunCompletionRequest(
+            prompt=prompt,
+            root_prompt=root_prompt,
+            max_depth=self._max_depth,
+            max_iterations=self._max_iterations,
+        )
+        return await arun_completion(req, deps=deps)
 
 
 def _default_tcp_broker_factory(llm: LLMPort, /) -> BrokerPort:
