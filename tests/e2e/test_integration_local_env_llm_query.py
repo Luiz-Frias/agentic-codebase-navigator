@@ -6,7 +6,7 @@ from rlm.api.factory import create_rlm
 from tests.fakes_ports import CollectingLogger, QueueLLM
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_local_env_code_can_call_llm_query_and_result_is_returned_via_final_var() -> None:
     """
     Integration: domain orchestrator + local environment + broker.

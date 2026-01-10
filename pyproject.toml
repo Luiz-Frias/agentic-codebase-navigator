@@ -1,6 +1,6 @@
 [project]
 name = "agentic-codebase-navigator"
-version = "0.1.0"
+version = "0.1.1"
 description = "Agentic codebase navigator built on Recursive Language Model (RLM) patterns."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -16,7 +16,7 @@ llm-litellm = ["litellm>=1.0.0"]
 llm-azure-openai = ["openai>=2.14.0"]
 
 # Environment adapters (installed only when needed)
-env-modal = ["modal>=0.73.0", "dill>=0.3.7"]
+env-modal = ["modal>=0.73.0"]
 # Docker uses the local Docker CLI; no Python dependency is required, but we keep an explicit extra.
 env-docker = []
 
@@ -47,6 +47,15 @@ testpaths = ["tests"]
 norecursedirs = ["references", ".git", "__pycache__", "*.egg-info"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+addopts = ["--strict-markers"]
+markers = [
+    "unit: unit tests (fast, hermetic)",
+    "integration: integration tests (multi-component)",
+    "e2e: end-to-end tests (public API full flow)",
+    "chaos: chaos or resilience tests",
+    "performance: performance or load tests",
+    "docker: requires a working local Docker daemon",
+]
 
 [tool.ruff]
 line-length = 100

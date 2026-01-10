@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.unit
 def test_domain_layer_has_no_third_party_or_outer_layer_imports() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     domain_root = repo_root / "src" / "rlm" / "domain"
 
     # We keep this allowlist intentionally small and focused on preventing

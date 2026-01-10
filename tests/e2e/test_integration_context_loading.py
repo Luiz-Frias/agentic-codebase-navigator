@@ -8,7 +8,7 @@ from rlm.domain.errors import ExecutionError
 from tests.fakes_ports import CollectingLogger, QueueLLM
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_local_env_load_context_sets_context_variable_for_str_prompt() -> None:
     llm = QueueLLM(
         responses=[
@@ -26,7 +26,7 @@ def test_local_env_load_context_sets_context_variable_for_str_prompt() -> None:
     assert repl_result.stdout.strip() == "hello"
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_local_env_load_context_sets_context_variable_for_dict_prompt() -> None:
     llm = QueueLLM(
         responses=[
@@ -43,7 +43,7 @@ def test_local_env_load_context_sets_context_variable_for_dict_prompt() -> None:
     assert repl_result.stdout.strip() == "hello"
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 @pytest.mark.docker
 def test_docker_env_load_context_sets_context_variable_for_str_prompt() -> None:
     try:

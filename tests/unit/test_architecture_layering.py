@@ -47,7 +47,7 @@ def _scan_forbidden_imports(
 
 @pytest.mark.unit
 def test_adapters_layer_does_not_depend_on_application_or_api() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     adapters_root = repo_root / "src" / "rlm" / "adapters"
 
     offenders = _scan_forbidden_imports(
@@ -60,7 +60,7 @@ def test_adapters_layer_does_not_depend_on_application_or_api() -> None:
 
 @pytest.mark.unit
 def test_application_layer_does_not_depend_on_adapters_or_infra_except_bridge() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     application_root = repo_root / "src" / "rlm" / "application"
 
     offenders = _scan_forbidden_imports(
@@ -79,7 +79,7 @@ def test_application_layer_does_not_depend_on_adapters_or_infra_except_bridge() 
 
 @pytest.mark.unit
 def test_infrastructure_layer_does_not_depend_on_api_application_or_adapters() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     infra_root = repo_root / "src" / "rlm" / "infrastructure"
 
     offenders = _scan_forbidden_imports(

@@ -11,30 +11,23 @@ from rlm.domain.ports import BrokerPort, LLMPort
 from tests.fakes_ports import CollectingLogger
 
 
-class _OrchestratorThenBarrierLLM(LLMPort):
+class _OrchestratorThenHangingAsyncLLM(LLMPort):
     """
-    LLM that:
-    - returns a single code-block response that calls llm_query_batched([...])
-    - implements `acomplete()` with a barrier so the broker must run batched calls concurrently
+    Boundary helper:
+    - sync `complete()` returns code that calls llm_query_batched(...)
+    - async `acomplete()` never returns (broker must time out/cancel)
     """
-
-    def __init__(self, *, expected_subcalls: int) -> None:
-        self._model_name = "dummy"
-        self._expected = expected_subcalls
-        self._started = 0
-        self._all_started: asyncio.Event | None = None
 
     @property
     def model_name(self) -> str:
-        return self._model_name
+        return "dummy"
 
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
-        # One-shot orchestrator response: execute a batched subcall and return it as FINAL_VAR.
         response = (
             "```repl\njoined = '|'.join(llm_query_batched(['a','b','c']))\n```\nFINAL_VAR('joined')"
         )
         return ChatCompletion(
-            root_model=self._model_name,
+            root_model=self.model_name,
             prompt=request.prompt,
             response=response,
             usage_summary=UsageSummary(model_usage_summaries={}),
@@ -42,20 +35,11 @@ class _OrchestratorThenBarrierLLM(LLMPort):
         )
 
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
-        # Lazily create the barrier event in the running loop.
-        if self._all_started is None:
-            self._all_started = asyncio.Event()
-
-        self._started += 1
-        if self._started >= self._expected:
-            self._all_started.set()
-        await self._all_started.wait()
-
-        # Echo back per-prompt so ordering is easy to assert.
+        await asyncio.sleep(3600)
         return ChatCompletion(
-            root_model=request.model or self._model_name,
+            root_model=self.model_name,
             prompt=request.prompt,
-            response=f"R({request.prompt})",
+            response="unreachable",
             usage_summary=UsageSummary(model_usage_summaries={}),
             execution_time=0.0,
         )
@@ -67,19 +51,19 @@ class _OrchestratorThenBarrierLLM(LLMPort):
         return UsageSummary(model_usage_summaries={})
 
 
-@pytest.mark.integration
-def test_local_env_llm_query_batched_executes_subcalls_concurrently_via_broker() -> None:
-    llm = _OrchestratorThenBarrierLLM(expected_subcalls=3)
+@pytest.mark.e2e
+def test_timeouts_and_correlation_id_are_visible_end_to_end_in_logger_and_replresult() -> None:
+    llm = _OrchestratorThenHangingAsyncLLM()
     logger = CollectingLogger()
 
     def _broker_factory(default_llm: LLMPort, /) -> BrokerPort:
         from rlm.adapters.broker.tcp import TcpBrokerAdapter
 
-        # Protect the test from hangs if concurrency regresses.
+        # Keep the boundary test fast and non-hanging.
         return TcpBrokerAdapter(
             default_llm,
-            timeouts=BrokerTimeouts(batched_completion_timeout_s=0.5),
-            cancellation=CancellationPolicy(grace_timeout_s=0.1),
+            timeouts=BrokerTimeouts(batched_completion_timeout_s=0.2),
+            cancellation=CancellationPolicy(grace_timeout_s=0.05),
         )
 
     rlm = create_rlm(
@@ -92,10 +76,18 @@ def test_local_env_llm_query_batched_executes_subcalls_concurrently_via_broker()
     )
 
     cc = rlm.completion("hello")
-    assert cc.response == "R(a)|R(b)|R(c)"
+    assert "timed out" in cc.response.lower()
+    assert "traceback" not in cc.response.lower()
+
+    # Correlation ID must be consistent across metadata + iteration + repl result.
+    assert len(logger.metadata) == 1
+    md = logger.metadata[0]
+    assert md.correlation_id is not None
+    assert md.environment_type == "local"
 
     assert len(logger.iterations) == 1
-    iter0 = logger.iterations[0]
-    assert len(iter0.code_blocks) == 1
-    repl = iter0.code_blocks[0].result
-    assert [c.response for c in repl.llm_calls] == ["R(a)", "R(b)", "R(c)"]
+    it0 = logger.iterations[0]
+    assert it0.correlation_id == md.correlation_id
+    assert len(it0.code_blocks) == 1
+    repl = it0.code_blocks[0].result
+    assert repl.correlation_id == md.correlation_id
