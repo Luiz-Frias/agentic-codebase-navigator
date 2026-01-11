@@ -132,10 +132,7 @@ from rlm import create_rlm
 from rlm.adapters.llm import MockLLMAdapter
 
 # Root model generates code that calls a sub-model
-root_script = """```repl
-response = llm_query("What is the capital of France?", model="sub")
-```
-FINAL_VAR('response')"""
+root_script = """```repl\nresponse = llm_query("What is the capital of France?", model="sub")```\nFINAL_VAR('response')"""
 
 rlm = create_rlm(
     MockLLMAdapter(model="root", script=[root_script]),
@@ -182,6 +179,36 @@ rlm completion "Calculate pi" --backend mock --json
 
 # Enable JSONL logging
 rlm completion "Hello" --backend mock --jsonl-log-dir ./logs
+```
+
+## Development & Testing
+
+This repo uses pytest markers to keep the suite fast and predictable:
+
+```bash
+# Fast, hermetic unit tests
+uv run --group test pytest -m unit
+
+# Integration tests (wire protocol, multi-component boundaries)
+uv run --group test pytest -m integration
+
+# End-to-end tests (public API full flows). Docker-marked tests auto-skip if Docker isn't available.
+uv run --group test pytest -m e2e
+
+# Performance/regression tests (opt-in)
+uv run --group test pytest -m performance
+
+# Packaging smoke tests (build/install/import/CLI)
+uv run --group test pytest -m packaging
+```
+
+### Live provider smoke tests (opt-in)
+
+There are opt-in tests that hit real provider APIs (skipped by default to avoid accidental spend):
+
+```bash
+RLM_RUN_LIVE_LLM_TESTS=1 OPENAI_API_KEY=... uv run --group test pytest -m "integration and live_llm"
+RLM_RUN_LIVE_LLM_TESTS=1 ANTHROPIC_API_KEY=... uv run --group test pytest -m "integration and live_llm"
 ```
 
 ## Configuration-Driven Usage
