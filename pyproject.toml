@@ -20,14 +20,15 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+dependencies = [
+    "openai>=2.14.0",
+]
+
 [project.urls]
 Repository = "https://github.com/Luiz-Frias/agentic-codebase-navigator"
 Issues = "https://github.com/Luiz-Frias/agentic-codebase-navigator/issues"
 Changelog = "https://github.com/Luiz-Frias/agentic-codebase-navigator/blob/main/CHANGELOG.md"
 Documentation = "https://github.com/Luiz-Frias/agentic-codebase-navigator#readme"
-dependencies = [
-    "openai>=2.14.0",
-]
 
 [project.optional-dependencies]
 # LLM/provider adapters (installed only when needed)
