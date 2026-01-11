@@ -121,7 +121,9 @@ def test_usage_totals_accumulation_fast() -> None:
     timing.iterations = iterations
 
     # Should handle 1000 merges quickly (< 10ms total)
-    assert timing.elapsed_seconds < 0.01, f"Usage accumulation too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.01, (
+        f"Usage accumulation too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
     # Verify correctness
     for model in models:
@@ -214,7 +216,9 @@ def test_orchestrator_max_depth_bypass_fast() -> None:
     timing.iterations = iterations
 
     # Each max-depth call should be very fast (< 1ms average)
-    assert timing.per_iteration_ms < 2, f"Max-depth bypass too slow: {timing.per_iteration_ms:.2f}ms"
+    assert timing.per_iteration_ms < 2, (
+        f"Max-depth bypass too slow: {timing.per_iteration_ms:.2f}ms"
+    )
 
 
 @pytest.mark.performance
@@ -236,7 +240,9 @@ async def test_async_orchestrator_completes_efficiently() -> None:
     assert "done after 5 iterations" in result.response
 
     # Async should be similarly fast
-    assert timing.elapsed_seconds < 0.1, f"Async orchestrator too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.1, (
+        f"Async orchestrator too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
 
 @pytest.mark.performance
@@ -265,7 +271,9 @@ def test_empty_code_blocks_no_overhead() -> None:
         )
 
     assert result.response == "done"
-    assert timing.elapsed_seconds < 0.05, f"No-code-block case too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.05, (
+        f"No-code-block case too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
 
 @pytest.mark.performance
@@ -295,12 +303,16 @@ def test_orchestrator_single_iteration_timing() -> None:
 
     if is_live_llm_enabled():
         # Live LLM: just verify it completes in reasonable time
-        print(f"\n[Live LLM: {provider_info['provider']}/{provider_info['model']}] "
-              f"Single iteration: {timing.elapsed_seconds:.2f}s")
+        print(
+            f"\n[Live LLM: {provider_info['provider']}/{provider_info['model']}] "
+            f"Single iteration: {timing.elapsed_seconds:.2f}s"
+        )
         assert timing.elapsed_seconds < 60, f"Live LLM too slow: {timing.elapsed_seconds:.2f}s"
     else:
         # Mock: should be very fast
-        assert timing.elapsed_seconds < 0.1, f"Mock orchestrator too slow: {timing.elapsed_seconds:.3f}s"
+        assert timing.elapsed_seconds < 0.1, (
+            f"Mock orchestrator too slow: {timing.elapsed_seconds:.3f}s"
+        )
 
 
 @pytest.mark.performance
@@ -326,11 +338,17 @@ def test_orchestrator_multi_iteration_benchmark() -> None:
     assert result.response is not None
 
     if is_live_llm_enabled():
-        print(f"\n[Live LLM: {provider_info['provider']}/{provider_info['model']}] "
-              f"Multi-iteration ({3} iters): {timing.elapsed_seconds:.2f}s, "
-              f"avg: {timing.elapsed_seconds/3:.2f}s/iter")
+        print(
+            f"\n[Live LLM: {provider_info['provider']}/{provider_info['model']}] "
+            f"Multi-iteration ({3} iters): {timing.elapsed_seconds:.2f}s, "
+            f"avg: {timing.elapsed_seconds / 3:.2f}s/iter"
+        )
         # Live: allow more time but still bounded
-        assert timing.elapsed_seconds < 120, f"Live LLM multi-iter too slow: {timing.elapsed_seconds:.2f}s"
+        assert timing.elapsed_seconds < 120, (
+            f"Live LLM multi-iter too slow: {timing.elapsed_seconds:.2f}s"
+        )
     else:
         # Mock: should complete quickly
-        assert timing.elapsed_seconds < 0.1, f"Mock multi-iter too slow: {timing.elapsed_seconds:.3f}s"
+        assert timing.elapsed_seconds < 0.1, (
+            f"Mock multi-iter too slow: {timing.elapsed_seconds:.3f}s"
+        )

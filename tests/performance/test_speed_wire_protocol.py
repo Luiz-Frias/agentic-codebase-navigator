@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import socket
 import threading
-import time
 
 import pytest
 
@@ -40,12 +39,14 @@ def test_encode_frame_throughput() -> None:
 
         with perf_timer() as timing:
             for _ in range(1000):
-                frame = encode_frame(msg)
+                _frame = encode_frame(msg)
 
         throughput_mb_s = (size * 1000) / timing.elapsed_seconds / 1_000_000
 
         # Should encode at least 100MB/s
-        assert throughput_mb_s > 10, f"Encode throughput too low for {size} bytes: {throughput_mb_s:.1f}MB/s"
+        assert throughput_mb_s > 10, (
+            f"Encode throughput too low for {size} bytes: {throughput_mb_s:.1f}MB/s"
+        )
 
 
 @pytest.mark.performance
@@ -149,10 +150,10 @@ def test_wire_request_validation_overhead() -> None:
             WireRequest.from_dict(batched_data)
 
     # Single should be fast
-    assert single_timing.elapsed_seconds < 0.1, f"Single request validation too slow"
+    assert single_timing.elapsed_seconds < 0.1, "Single request validation too slow"
 
     # Batched has more validation but should still be reasonable
-    assert batched_timing.elapsed_seconds < 0.5, f"Batched request validation too slow"
+    assert batched_timing.elapsed_seconds < 0.5, "Batched request validation too slow"
 
 
 @pytest.mark.performance
@@ -184,7 +185,9 @@ def test_wire_response_construction() -> None:
             # Also test to_dict which is used for transmission
             _ = response.to_dict()
 
-    assert timing.elapsed_seconds < 0.5, f"Response construction too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.5, (
+        f"Response construction too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
 
 @pytest.mark.performance
@@ -217,7 +220,8 @@ def test_socket_frame_roundtrip() -> None:
                     received_count[0] += 1
                     # Echo back
                     send_frame(conn, frame)
-            except Exception:
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                # Expected: client disconnected during performance test teardown
                 pass
             finally:
                 conn.close()
@@ -255,7 +259,7 @@ def test_json_serialization_vs_frame_encoding() -> None:
     """
     message = {
         "prompt": "A test prompt " * 100,
-        "metadata": {"key": f"value_{i}" for i in range(50)},
+        "metadata": {f"key_{i}": f"value_{i}" for i in range(50)},
         "results": [{"item": i, "data": "x" * 100} for i in range(20)],
     }
 
@@ -269,7 +273,9 @@ def test_json_serialization_vs_frame_encoding() -> None:
 
     # Frame encoding is JSON + length prefix + struct pack
     # Overhead may vary but should not be excessive (< 100%)
-    overhead = (frame_timing.elapsed_seconds - json_timing.elapsed_seconds) / json_timing.elapsed_seconds
+    overhead = (
+        frame_timing.elapsed_seconds - json_timing.elapsed_seconds
+    ) / json_timing.elapsed_seconds
     assert overhead < 1.0, f"Frame encoding overhead too high: {overhead * 100:.1f}%"
 
 
@@ -288,11 +294,19 @@ def test_large_response_parsing() -> None:
                 "chat_completion": {
                     "root_model": "large-model",
                     "prompt": f"prompt_{i}",
-                    "response": f"Response content " * 500,  # ~8KB per response
+                    "response": "Response content " * 500,  # ~8KB per response
                     "usage_summary": {
                         "model_usage_summaries": {
-                            "model-a": {"total_calls": 1, "total_input_tokens": 1000, "total_output_tokens": 500},
-                            "model-b": {"total_calls": 2, "total_input_tokens": 2000, "total_output_tokens": 1000},
+                            "model-a": {
+                                "total_calls": 1,
+                                "total_input_tokens": 1000,
+                                "total_output_tokens": 500,
+                            },
+                            "model-b": {
+                                "total_calls": 2,
+                                "total_input_tokens": 2000,
+                                "total_output_tokens": 1000,
+                            },
                         }
                     },
                     "execution_time": 1.5,
@@ -308,4 +322,6 @@ def test_large_response_parsing() -> None:
             assert len(response.results) == 50
 
     # 10 parses of 50 results with 8KB each should be fast
-    assert timing.elapsed_seconds < 0.5, f"Large response parsing too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.5, (
+        f"Large response parsing too slow: {timing.elapsed_seconds:.3f}s"
+    )

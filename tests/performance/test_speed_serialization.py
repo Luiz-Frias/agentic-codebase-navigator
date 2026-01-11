@@ -10,13 +10,12 @@ Tests focus on:
 from __future__ import annotations
 
 import json
-import struct
 
 import pytest
 
 from rlm.domain.models.query_metadata import QueryMetadata
 from rlm.domain.models.serialization import serialize_value
-from rlm.infrastructure.comms.codec import encode_frame, recv_frame
+from rlm.infrastructure.comms.codec import encode_frame
 
 from .perf_utils import (
     generate_deep_nested_data,
@@ -37,7 +36,9 @@ def test_serialize_value_flat_dict() -> None:
             result = serialize_value(data)
 
     assert len(result) == 100
-    assert timing.elapsed_seconds < 0.1, f"Flat dict serialization too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.1, (
+        f"Flat dict serialization too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
 
 @pytest.mark.performance
@@ -55,7 +56,7 @@ def test_serialize_value_nested_structures() -> None:
 
         with perf_timer() as timing:
             for _ in range(100):
-                result = serialize_value(data)
+                _result = serialize_value(data)
 
         results.append((depth, timing.elapsed_seconds))
 
@@ -83,7 +84,7 @@ def test_serialize_value_large_lists() -> None:
         results.append((size, timing.elapsed_seconds, len(result)))
 
     # Verify all items serialized
-    for size, elapsed, result_len in results:
+    for size, _elapsed, result_len in results:
         assert result_len == size
 
     # 10000 items should still be reasonable
@@ -129,7 +130,9 @@ def test_query_metadata_from_context_dict() -> None:
             metadata = QueryMetadata.from_context(context)
 
     assert metadata.context_type == "dict"
-    assert timing.elapsed_seconds < 0.5, f"Dict context metadata too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.5, (
+        f"Dict context metadata too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
 
 @pytest.mark.performance
@@ -144,7 +147,9 @@ def test_query_metadata_from_context_list() -> None:
             metadata = QueryMetadata.from_context(context)
 
     assert metadata.context_type == "list"
-    assert timing.elapsed_seconds < 0.5, f"List context metadata too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.5, (
+        f"List context metadata too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
 
 @pytest.mark.performance
@@ -160,7 +165,9 @@ def test_query_metadata_from_context_string() -> None:
 
     assert metadata.context_type == "str"
     assert metadata.context_total_length == 100_000
-    assert timing.elapsed_seconds < 0.1, f"String context metadata too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.1, (
+        f"String context metadata too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
 
 @pytest.mark.performance
@@ -240,7 +247,9 @@ def test_serialize_value_recursion_depth() -> None:
 
         # Should complete without stack overflow
         assert result is not None
-        assert timing.elapsed_seconds < 0.5, f"Deep recursion too slow: {timing.elapsed_seconds:.3f}s"
+        assert timing.elapsed_seconds < 0.5, (
+            f"Deep recursion too slow: {timing.elapsed_seconds:.3f}s"
+        )
 
     finally:
         sys.setrecursionlimit(original_limit)

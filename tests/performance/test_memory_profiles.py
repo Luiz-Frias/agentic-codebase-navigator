@@ -14,7 +14,7 @@ import gc
 
 import pytest
 
-from rlm.domain.models import CodeBlock, Iteration, ReplResult
+from rlm.domain.models import CodeBlock, ReplResult
 from rlm.domain.models.serialization import serialize_value
 from rlm.domain.services.parsing import format_iteration
 from rlm.domain.services.rlm_orchestrator import RLMOrchestrator
@@ -71,7 +71,7 @@ def test_serialization_memory_overhead() -> None:
 
     with memory_tracker() as mem:
         for _ in range(10):
-            result = serialize_value(data)
+            _result = serialize_value(data)
 
     # Serialization shouldn't use more than 10x the original size per call
     per_call_overhead = mem.delta_bytes / 10
@@ -101,7 +101,7 @@ def test_large_context_memory_handling() -> None:
         env = BenchmarkEnvironment()
 
         orchestrator = RLMOrchestrator(llm=llm, environment=env)
-        result = orchestrator.completion(
+        _result = orchestrator.completion(
             prompt=large_context,
             max_iterations=5,
         )
@@ -123,12 +123,14 @@ def test_format_iteration_memory_efficiency() -> None:
 
     with memory_tracker() as mem:
         for iteration in iterations:
-            messages = format_iteration(iteration)
+            _messages = format_iteration(iteration)
 
     # Should not create excessive copies
     # 10 iterations with 5KB output each = ~50KB
     # With formatting overhead, should be less than 500KB
-    assert mem.delta_bytes < 500_000, f"Format iteration memory too high: {mem.delta_bytes / 1024:.1f}KB"
+    assert mem.delta_bytes < 500_000, (
+        f"Format iteration memory too high: {mem.delta_bytes / 1024:.1f}KB"
+    )
 
 
 @pytest.mark.performance
@@ -163,7 +165,7 @@ def test_repl_result_locals_memory() -> None:
 
     with memory_tracker() as mem:
         for _ in range(100):
-            result = ReplResult(
+            _result = ReplResult(
                 stdout="output",
                 stderr="",
                 locals=many_locals.copy(),  # Copy simulates snapshot
@@ -173,7 +175,9 @@ def test_repl_result_locals_memory() -> None:
 
     # 100 copies of 100 variables shouldn't explode memory
     # Each copy ~50KB, 100 copies = ~5MB
-    assert mem.peak_bytes < 10_000_000, f"Locals memory too high: {mem.peak_bytes / 1024 / 1024:.1f}MB"
+    assert mem.peak_bytes < 10_000_000, (
+        f"Locals memory too high: {mem.peak_bytes / 1024 / 1024:.1f}MB"
+    )
 
 
 @pytest.mark.performance
@@ -183,7 +187,7 @@ def test_code_block_accumulation_memory() -> None:
     """
     gc.collect()
 
-    with memory_tracker() as mem:
+    with memory_tracker() as _mem:
         code_blocks: list[CodeBlock] = []
         for i in range(100):
             code_blocks.append(
@@ -256,7 +260,9 @@ def test_prompt_list_memory_growth() -> None:
 
     # 60 messages with ~500 chars each = ~30KB
     # With dict overhead, should be < 200KB
-    assert mem.delta_bytes < 200_000, f"Message history memory too high: {mem.delta_bytes / 1024:.1f}KB"
+    assert mem.delta_bytes < 200_000, (
+        f"Message history memory too high: {mem.delta_bytes / 1024:.1f}KB"
+    )
 
 
 @pytest.mark.performance

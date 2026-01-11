@@ -367,7 +367,7 @@ def test_thread_safety_of_usage_tracking() -> None:
 
     def record_usage(thread_id: int):
         try:
-            for i in range(100):
+            for _i in range(100):
                 tracker.record(
                     f"model-{thread_id}",
                     calls=1,

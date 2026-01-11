@@ -46,7 +46,7 @@ def test_find_code_blocks_scales_with_text_size() -> None:
         results.append((size, timing.elapsed_seconds, len(blocks)))
 
     # All sizes should find 10 blocks
-    for size, elapsed, block_count in results:
+    for size, _elapsed, block_count in results:
         assert block_count == 10, f"Expected 10 blocks for size {size}"
 
     # Performance should scale sub-linearly (not O(n^2))
@@ -74,7 +74,9 @@ def test_find_code_blocks_many_blocks() -> None:
     assert len(blocks) == num_blocks
 
     # 100 extractions of 50 blocks should be fast
-    assert timing.elapsed_seconds < 0.5, f"Many blocks extraction too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.5, (
+        f"Many blocks extraction too slow: {timing.elapsed_seconds:.3f}s"
+    )
 
 
 @pytest.mark.performance
@@ -97,7 +99,7 @@ def test_find_final_answer_long_text() -> None:
         results.append((size, timing.elapsed_seconds, answer))
 
     # All should find the answer
-    for size, elapsed, answer in results:
+    for size, _elapsed, answer in results:
         assert answer == "the answer is 42", f"Failed to find answer in {size} chars"
 
     # Even 1MB text should be fast (< 1s for 100 iterations)
@@ -159,7 +161,7 @@ def test_format_iteration_scales_with_blocks() -> None:
         results.append((num_blocks, timing.elapsed_seconds, len(messages)))
 
     # Message count should be 1 (assistant) + num_blocks (user results)
-    for num_blocks, elapsed, msg_count in results:
+    for num_blocks, _elapsed, msg_count in results:
         assert msg_count == 1 + num_blocks
 
     # 100 formats of 20 blocks should still be fast
@@ -255,4 +257,6 @@ def test_code_block_regex_pathological_input() -> None:
 
     assert len(blocks) == 1
     assert blocks[0] == "real_code"
-    assert timing.elapsed_seconds < 0.1, f"Pathological input too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.1, (
+        f"Pathological input too slow: {timing.elapsed_seconds:.3f}s"
+    )

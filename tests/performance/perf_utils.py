@@ -23,9 +23,10 @@ import os
 import sys
 import time
 import tracemalloc
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Generator
+from typing import Any
 
 from rlm.domain.models import (
     ChatCompletion,
@@ -100,7 +101,9 @@ def memory_tracker(top_n: int = 10) -> Generator[MemoryResult, None, None]:
 
     current, peak = tracemalloc.get_traced_memory()
     before = MemorySnapshot(
-        current_bytes=current, peak_bytes=peak, traced_blocks=len(tracemalloc.take_snapshot().traces)
+        current_bytes=current,
+        peak_bytes=peak,
+        traced_blocks=len(tracemalloc.take_snapshot().traces),
     )
 
     result = MemoryResult(

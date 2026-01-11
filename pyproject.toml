@@ -114,3 +114,37 @@ source = ["rlm"]
 fail_under = 90
 show_missing = true
 skip_covered = false
+
+[tool.bandit]
+# Skip assert_used (B101) - assertions are standard pytest practice
+skips = ["B101"]
+exclude_dirs = [".venv", ".tox", ".pytest_cache", "__pycache__", "build", "dist"]
+
+[tool.mypy]
+python_version = "3.12"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "src"
+
+files = ["src/rlm", "tests"]
+exclude = ["^references/", "^src/rlm/_legacy/"]
+
+check_untyped_defs = true
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_configs = true
+warn_redundant_casts = true
+
+show_error_codes = true
+show_error_context = true
+pretty = true
+
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "rlm.domain.*"
+disallow_untyped_defs = true
