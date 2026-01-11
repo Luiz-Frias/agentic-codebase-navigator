@@ -4,7 +4,12 @@ import pytest
 
 from rlm.api import create_rlm, create_rlm_from_config
 from rlm.application.config import EnvironmentConfig, LLMConfig, RLMConfig
-from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
+from rlm.domain.models import (
+    ChatCompletion,
+    LLMRequest,
+    ModelUsageSummary,
+    UsageSummary,
+)
 from rlm.domain.ports import LLMPort
 
 
@@ -92,7 +97,11 @@ def test_create_rlm_from_config_builds_default_llm_registry_when_llm_passed_and_
     cfg = RLMConfig(
         llm=LLMConfig(backend="openai", model_name="ignored"),
         other_llms=[
-            LLMConfig(backend="mock", model_name="other", backend_kwargs={"script": ["FINAL(x)"]})
+            LLMConfig(
+                backend="mock",
+                model_name="other",
+                backend_kwargs={"script": ["FINAL(x)"]},
+            )
         ],
         env=EnvironmentConfig(environment="local"),
         max_iterations=1,

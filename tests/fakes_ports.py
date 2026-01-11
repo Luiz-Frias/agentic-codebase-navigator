@@ -53,7 +53,12 @@ class QueueLLM(LLMPort):
     Provide a sequence of responses (strings) or exceptions. Each call pops one.
     """
 
-    def __init__(self, *, model_name: str = "mock", responses: list[str | Exception] | None = None):
+    def __init__(
+        self,
+        *,
+        model_name: str = "mock",
+        responses: list[str | Exception] | None = None,
+    ):
         self._model_name = model_name
         self._queue: list[str | Exception] = list(responses or [])
         self._total_calls = 0
@@ -93,7 +98,9 @@ class QueueLLM(LLMPort):
         return UsageSummary(
             model_usage_summaries={
                 self._model_name: ModelUsageSummary(
-                    total_calls=self._total_calls, total_input_tokens=0, total_output_tokens=0
+                    total_calls=self._total_calls,
+                    total_input_tokens=0,
+                    total_output_tokens=0,
                 )
             }
         )

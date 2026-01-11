@@ -73,7 +73,9 @@ def test_default_llm_registry_builds_mock_llm() -> None:
 
 
 @pytest.mark.unit
-def test_default_llm_registry_openai_build_is_lazy_import(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_llm_registry_openai_build_is_lazy_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # This ensures we don't import the optional `openai` dependency during registry build.
     import builtins
 
@@ -231,7 +233,9 @@ def test_default_logger_registry_jsonl_builds_logger(tmp_path: Any) -> None:
 
 
 @pytest.mark.unit
-def test_default_environment_registry_builds_local_factory(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_environment_registry_builds_local_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     created: list[object] = []
 
     class _FakeLocalEnv:

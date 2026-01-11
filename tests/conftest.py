@@ -59,7 +59,14 @@ def docker_is_available() -> bool:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    category_markers = {"unit", "integration", "e2e", "packaging", "chaos", "performance"}
+    category_markers = {
+        "unit",
+        "integration",
+        "e2e",
+        "packaging",
+        "chaos",
+        "performance",
+    }
     tests_root = Path(__file__).resolve().parent
     errors: list[str] = []
 

@@ -9,7 +9,9 @@ from rlm.domain.models import Iteration, RunMetadata
 
 
 @pytest.mark.unit
-def test_jsonl_logger_can_write_many_iterations_without_buffering(tmp_path: Path) -> None:
+def test_jsonl_logger_can_write_many_iterations_without_buffering(
+    tmp_path: Path,
+) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 

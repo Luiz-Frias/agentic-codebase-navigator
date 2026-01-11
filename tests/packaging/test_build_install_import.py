@@ -35,7 +35,9 @@ def _run(
 
 
 @pytest.mark.packaging
-def test_build_wheel_and_sdist_excludes_references_and_installs_cleanly(tmp_path: Path) -> None:
+def test_build_wheel_and_sdist_excludes_references_and_installs_cleanly(
+    tmp_path: Path,
+) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     dist_dir = tmp_path / "dist"
     dist_dir.mkdir(parents=True, exist_ok=True)
@@ -96,7 +98,10 @@ def test_build_wheel_and_sdist_excludes_references_and_installs_cleanly(tmp_path
             f"ensurepip failed:\nSTDOUT:\n{cp2.stdout}\nSTDERR:\n{cp2.stderr}"
         )
 
-    cp = _run([str(py), "-m", "pip", "install", "--no-deps", str(wheel)], cwd=repo_root)
+    # Install the wheel with dependencies. The "no-network" aspect of this test
+    # refers to using the mock LLM backend (no external API calls), not pip install.
+    # Core dependencies like loguru must be installed for the package to function.
+    cp = _run([str(py), "-m", "pip", "install", str(wheel)], cwd=repo_root)
     assert cp.returncode == 0, f"pip install failed:\nSTDOUT:\n{cp.stdout}\nSTDERR:\n{cp.stderr}"
 
     smoke_code = r"""
@@ -121,7 +126,17 @@ assert cc.response == "ok"
     cp = _run([str(py), "-m", "rlm", "--version"], cwd=repo_root)
     assert cp.returncode == 0, f"cli --version failed:\nSTDOUT:\n{cp.stdout}\nSTDERR:\n{cp.stderr}"
     cp = _run(
-        [str(py), "-m", "rlm", "completion", "hello", "--backend", "mock", "--final", "ok"],
+        [
+            str(py),
+            "-m",
+            "rlm",
+            "completion",
+            "hello",
+            "--backend",
+            "mock",
+            "--final",
+            "ok",
+        ],
         cwd=repo_root,
     )
     assert cp.returncode == 0, f"cli completion failed:\nSTDOUT:\n{cp.stdout}\nSTDERR:\n{cp.stderr}"

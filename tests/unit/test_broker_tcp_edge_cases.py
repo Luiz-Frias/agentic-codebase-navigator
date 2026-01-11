@@ -4,7 +4,11 @@ import asyncio
 
 import pytest
 
-from rlm.adapters.broker.tcp import TcpBrokerAdapter, _AsyncLoopThread, _safe_error_message
+from rlm.adapters.broker.tcp import (
+    TcpBrokerAdapter,
+    _AsyncLoopThread,
+    _safe_error_message,
+)
 from rlm.domain.errors import LLMError, ValidationError
 from rlm.domain.models import (
     BatchedLLMRequest,
@@ -73,7 +77,11 @@ def test_async_loop_thread_start_stop_idempotent_and_run_timeout_path() -> None:
         await asyncio.sleep(1)
 
     with pytest.raises(TimeoutError, match="Batched request timed out"):
-        loop.run(_slow(), timeout_s=0.01, cancellation=CancellationPolicy(grace_timeout_s=0.01))
+        loop.run(
+            _slow(),
+            timeout_s=0.01,
+            cancellation=CancellationPolicy(grace_timeout_s=0.01),
+        )
 
     loop.stop()
     loop.stop()  # idempotent

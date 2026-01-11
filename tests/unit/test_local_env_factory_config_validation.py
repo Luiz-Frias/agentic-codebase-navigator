@@ -50,7 +50,10 @@ def test_default_environment_registry_local_passes_broker_and_kwargs(
     factory = DefaultEnvironmentRegistry().build(
         EnvironmentConfig(
             environment="local",
-            environment_kwargs={"context_payload": {"x": 1}, "setup_code": "print('hi')"},
+            environment_kwargs={
+                "context_payload": {"x": 1},
+                "setup_code": "print('hi')",
+            },
         )
     )
     env = factory.build(broker, ("127.0.0.1", 12345))

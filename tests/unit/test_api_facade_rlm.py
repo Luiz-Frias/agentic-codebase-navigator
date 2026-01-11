@@ -3,7 +3,12 @@ from __future__ import annotations
 import pytest
 
 from rlm.api.rlm import RLM
-from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
+from rlm.domain.models import (
+    ChatCompletion,
+    LLMRequest,
+    ModelUsageSummary,
+    UsageSummary,
+)
 from rlm.domain.ports import LLMPort
 
 

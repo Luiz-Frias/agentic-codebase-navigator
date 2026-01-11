@@ -19,7 +19,9 @@ def test_cli_version_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 @pytest.mark.unit
-def test_cli_completion_mock_prints_final_answer(capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_completion_mock_prints_final_answer(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     code = main(
         [
             "completion",

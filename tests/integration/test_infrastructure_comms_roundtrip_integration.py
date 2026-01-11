@@ -7,7 +7,11 @@ from typing import ClassVar
 import pytest
 
 from rlm.domain.models import ChatCompletion, ModelUsageSummary, UsageSummary
-from rlm.infrastructure.comms.codec import DEFAULT_MAX_MESSAGE_BYTES, recv_frame, send_frame
+from rlm.infrastructure.comms.codec import (
+    DEFAULT_MAX_MESSAGE_BYTES,
+    recv_frame,
+    send_frame,
+)
 from rlm.infrastructure.comms.messages import WireResponse, WireResult
 from rlm.infrastructure.comms.protocol import (
     request_completion,

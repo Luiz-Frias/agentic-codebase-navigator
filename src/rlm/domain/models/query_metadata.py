@@ -44,20 +44,19 @@ class QueryMetadata:
             )
 
         if isinstance(context, dict):
-            lengths: list[int] = []
+            dict_lengths: list[int] = []
             for chunk in context.values():
                 if isinstance(chunk, str):
-                    lengths.append(len(chunk))
+                    dict_lengths.append(len(chunk))
                     continue
                 try:
-                    lengths.append(len(json.dumps(chunk, default=str)))
+                    dict_lengths.append(len(json.dumps(chunk, default=str)))
                 except Exception:
-                    lengths.append(len(repr(chunk)))
-            ctx_type = "dict"
+                    dict_lengths.append(len(repr(chunk)))
             return cls(
-                context_lengths=lengths,
-                context_total_length=sum(lengths),
-                context_type=ctx_type,
+                context_lengths=dict_lengths,
+                context_total_length=sum(dict_lengths),
+                context_type="dict",
             )
 
         if isinstance(context, list):

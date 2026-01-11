@@ -145,7 +145,12 @@ async def test_orchestrator_acompletion_out_of_iterations_final_prompt() -> None
 class _CapturingQueueLLM(QueueLLM):
     """QueueLLM variant that captures prompts for assertions."""
 
-    def __init__(self, *, model_name: str = "mock", responses: list[str | Exception] | None = None):
+    def __init__(
+        self,
+        *,
+        model_name: str = "mock",
+        responses: list[str | Exception] | None = None,
+    ):
         super().__init__(model_name=model_name, responses=responses)
         self.prompts: list[object] = []
 

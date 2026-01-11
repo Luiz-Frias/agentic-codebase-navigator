@@ -19,8 +19,12 @@ from rlm.domain.policies.timeouts import (
 )
 from rlm.domain.ports import BrokerPort
 from rlm.domain.types import ContextPayload, Prompt
-from rlm.infrastructure.comms.protocol import request_completion, request_completions_batched
+from rlm.infrastructure.comms.protocol import (
+    request_completion,
+    request_completions_batched,
+)
 from rlm.infrastructure.execution_namespace_policy import ExecutionNamespacePolicy
+from rlm.infrastructure.logging import warn_cleanup_failure
 
 # -----------------------------------------------------------------------------
 # Process-wide safety guards
@@ -118,7 +122,10 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
 
         # Persistent namespace (globals==locals).
         builtins_dict = self._policy.build_builtins(session_dir=self._session_dir)
-        self._ns: dict[str, Any] = {"__builtins__": builtins_dict, "__name__": "__main__"}
+        self._ns: dict[str, Any] = {
+            "__builtins__": builtins_dict,
+            "__name__": "__main__",
+        }
 
         # Inject helpers + context variables.
         self._ns["FINAL_VAR"] = self._final_var
@@ -163,7 +170,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
                 os.chdir(self._session_dir)
                 with _execution_timeout(self._execute_timeout_s):
                     try:
-                        exec(code, self._ns, self._ns)  # noqa: S102 - intended (controlled namespace)
+                        exec(code, self._ns, self._ns)  # noqa: S102  # nosec B102 - core feature: controlled code execution
                     except Exception as exc:  # noqa: BLE001 - capture into stderr, legacy-style
                         # Keep formatting stable: no tracebacks, just type + message.
                         stderr_buf.write(f"\n{type(exc).__name__}: {exc}")
@@ -184,8 +191,8 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         # Best-effort idempotency.
         try:
             self._tmp.cleanup()
-        except Exception:  # noqa: BLE001 - cleanup must not raise at boundary
-            pass
+        except Exception as exc:  # noqa: BLE001  # nosec B110
+            warn_cleanup_failure("LocalEnvironment.cleanup_tmp", exc)
         self._ns.clear()
         self._pending_llm_calls.clear()
 

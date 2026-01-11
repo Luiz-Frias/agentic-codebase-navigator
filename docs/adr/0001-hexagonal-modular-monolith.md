@@ -28,4 +28,3 @@ Adopt a **hexagonal modular monolith**:
 - We can unit-test the domain with fake ports (fast, deterministic).
 - New providers/environments are added by implementing ports (OCP/DIP).
 - We enforce the dependency rule via import-boundary tests under `tests/unit/test_architecture_layering.py`.
-

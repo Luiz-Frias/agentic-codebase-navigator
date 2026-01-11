@@ -29,4 +29,3 @@ Nested subcalls executed inside environments are persisted under `code_blocks[*]
 
 - Logs can be appended incrementally and processed as a stream.
 - The schema can evolve with explicit migrations when needed.
-

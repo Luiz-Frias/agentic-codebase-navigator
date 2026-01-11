@@ -5,7 +5,11 @@ from types import SimpleNamespace
 import pytest
 
 import rlm.adapters.llm.openai as openai_mod
-from rlm.adapters.llm.openai import OpenAIAdapter, _safe_openai_error_message, build_openai_adapter
+from rlm.adapters.llm.openai import (
+    OpenAIAdapter,
+    _safe_openai_error_message,
+    build_openai_adapter,
+)
 from rlm.domain.errors import LLMError
 from rlm.domain.models import LLMRequest
 
@@ -58,7 +62,9 @@ def test_openai_adapter_get_client_requires_expected_sdk_api() -> None:
 
 
 @pytest.mark.unit
-def test_openai_adapter_complete_success_and_error_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openai_adapter_complete_success_and_error_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     resp_ok = {
         "choices": [{"message": {"content": "hello"}}],
         "usage": {"prompt_tokens": 1, "completion_tokens": 2},
@@ -119,7 +125,9 @@ def test_openai_adapter_complete_success_and_error_paths(monkeypatch: pytest.Mon
 
 
 @pytest.mark.unit
-async def test_openai_adapter_acomplete_success(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_openai_adapter_acomplete_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     resp_ok = {
         "choices": [{"message": {"content": "hello"}}],
         "usage": {"input_tokens": 1, "output_tokens": 2},

@@ -6,7 +6,12 @@ from threading import Lock
 
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.domain.errors import LLMError
-from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
+from rlm.domain.models import (
+    ChatCompletion,
+    LLMRequest,
+    ModelUsageSummary,
+    UsageSummary,
+)
 from rlm.domain.types import Prompt
 
 

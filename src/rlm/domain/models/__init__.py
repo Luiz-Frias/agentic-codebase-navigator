@@ -11,7 +11,11 @@ from __future__ import annotations
 from rlm.domain.models.completion import ChatCompletion
 from rlm.domain.models.iteration import CodeBlock, Iteration
 from rlm.domain.models.llm_request import BatchedLLMRequest, LLMRequest
-from rlm.domain.models.model_spec import ModelRoutingRules, ModelSpec, build_routing_rules
+from rlm.domain.models.model_spec import (
+    ModelRoutingRules,
+    ModelSpec,
+    build_routing_rules,
+)
 from rlm.domain.models.query_metadata import QueryMetadata
 from rlm.domain.models.repl import ReplResult
 from rlm.domain.models.run_metadata import RunMetadata

@@ -10,7 +10,9 @@ from rlm.application.config import EnvironmentConfig, LLMConfig, LoggerConfig, R
 
 
 @pytest.mark.integration
-def test_create_rlm_from_config_can_build_jsonl_logger_and_write_events(tmp_path: Path) -> None:
+def test_create_rlm_from_config_can_build_jsonl_logger_and_write_events(
+    tmp_path: Path,
+) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 

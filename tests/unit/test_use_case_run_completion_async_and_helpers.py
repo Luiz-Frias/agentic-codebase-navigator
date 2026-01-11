@@ -13,7 +13,12 @@ from rlm.application.use_cases.run_completion import (
 )
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.ports import BrokerPort, EnvironmentPort
-from tests.fakes_ports import CollectingLogger, InMemoryBroker, QueueEnvironment, QueueLLM
+from tests.fakes_ports import (
+    CollectingLogger,
+    InMemoryBroker,
+    QueueEnvironment,
+    QueueLLM,
+)
 
 
 @pytest.mark.unit
@@ -40,7 +45,11 @@ def test_build_environment_selects_call_shape_by_signature() -> None:
             self.seen: tuple[object, ...] | None = None
 
         def build(
-            self, broker: BrokerPort, broker_address: tuple[str, int], correlation_id: str | None, /
+            self,
+            broker: BrokerPort,
+            broker_address: tuple[str, int],
+            correlation_id: str | None,
+            /,
         ) -> EnvironmentPort:
             self.seen = (broker, broker_address, correlation_id)
             return env
@@ -89,7 +98,9 @@ def test_build_environment_fallbacks_when_signature_introspection_fails(
 
     # Force the `except (TypeError, ValueError)` path inside _build_environment.
     monkeypatch.setattr(
-        inspect, "signature", lambda *_args, **_kwargs: (_ for _ in ()).throw(TypeError())
+        inspect,
+        "signature",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(TypeError()),
     )
     assert _build_environment(OneArgFactory(), broker, addr, cid) is env
 

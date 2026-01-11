@@ -100,7 +100,10 @@ def _extract_usage_tokens(response: Any, /) -> tuple[int, int]:
 
     if isinstance(usage, dict):
         return (_int(usage.get("input_tokens")), _int(usage.get("output_tokens")))
-    return (_int(getattr(usage, "input_tokens", None)), _int(getattr(usage, "output_tokens", None)))
+    return (
+        _int(getattr(usage, "input_tokens", None)),
+        _int(getattr(usage, "output_tokens", None)),
+    )
 
 
 @dataclass
@@ -134,7 +137,11 @@ class AnthropicAdapter(BaseLLMAdapter):
         try:
             if system is not None:
                 resp = client.messages.create(
-                    model=model, messages=messages, system=system, max_tokens=max_tokens, **kwargs
+                    model=model,
+                    messages=messages,
+                    system=system,
+                    max_tokens=max_tokens,
+                    **kwargs,
                 )
             else:
                 resp = client.messages.create(
@@ -178,7 +185,11 @@ class AnthropicAdapter(BaseLLMAdapter):
         try:
             if system is not None:
                 resp = await client.messages.create(
-                    model=model, messages=messages, system=system, max_tokens=max_tokens, **kwargs
+                    model=model,
+                    messages=messages,
+                    system=system,
+                    max_tokens=max_tokens,
+                    **kwargs,
                 )
             else:
                 resp = await client.messages.create(

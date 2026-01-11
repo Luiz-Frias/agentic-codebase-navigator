@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import time
+from collections.abc import Coroutine
 from socketserver import StreamRequestHandler, ThreadingTCPServer
 from threading import Event, Lock, Thread
 from typing import Any, Final
@@ -26,9 +27,14 @@ from rlm.domain.policies.timeouts import (
     CancellationPolicy,
 )
 from rlm.domain.ports import LLMPort
-from rlm.infrastructure.comms.codec import DEFAULT_MAX_MESSAGE_BYTES, recv_frame, send_frame
+from rlm.infrastructure.comms.codec import (
+    DEFAULT_MAX_MESSAGE_BYTES,
+    recv_frame,
+    send_frame,
+)
 from rlm.infrastructure.comms.messages import WireRequest, WireResponse, WireResult
 from rlm.infrastructure.comms.protocol import try_parse_request
+from rlm.infrastructure.logging import warn_cleanup_failure
 
 
 def _safe_error_message(exc: BaseException, /) -> str:
@@ -108,7 +114,7 @@ class _AsyncLoopThread:
 
     def run(
         self,
-        coro: asyncio.Future[Any] | asyncio.coroutines.Coroutine[Any, Any, Any],
+        coro: Coroutine[Any, Any, Any],
         /,
         *,
         timeout_s: float | None = None,
@@ -131,8 +137,8 @@ class _AsyncLoopThread:
             if grace > 0:
                 try:
                     fut.result(timeout=grace)
-                except Exception:  # noqa: BLE001 - best-effort cancellation cleanup
-                    pass
+                except Exception as exc:  # noqa: BLE001  # nosec B110
+                    warn_cleanup_failure("TcpBrokerAdapter.cancellation_grace", exc)
             raise TimeoutError("Batched request timed out") from None
 
 
@@ -362,9 +368,10 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                 )
 
             llm = self._select_llm(request.model)
+            prompts = request.prompts  # Capture for closure type narrowing
 
             async def _run() -> list[WireResult]:
-                out = await _acomplete_prompts_batched(llm, request.prompts, llm.model_name)
+                out = await _acomplete_prompts_batched(llm, prompts, llm.model_name)
                 results: list[WireResult] = []
                 for item in out:
                     if isinstance(item, Exception):

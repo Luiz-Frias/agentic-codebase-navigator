@@ -66,4 +66,3 @@ Top-level fields:
 
 - We keep the key name **`rlm_calls`** for nested calls to remain compatible with the upstream visualizer.
 - `usage_summary` is the canonical structured usage signal; token counts are convenience fields.
-
