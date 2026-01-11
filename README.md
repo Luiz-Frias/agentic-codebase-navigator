@@ -335,6 +335,35 @@ uv run --group dev ty check src/rlm
 - **Environment**: `LocalEnvironmentAdapter`, `DockerEnvironmentAdapter`
 - **Logger**: `JsonlLoggerAdapter`, `ConsoleLoggerAdapter`, `NoopLoggerAdapter`
 
+## Acknowledgments
+
+This project is built upon the excellent **Recursive Language Models (RLM)** research by Alex Zhang and colleagues from MIT OASYS Lab.
+
+| Resource | Link |
+|----------|------|
+| **Original Repository** | [github.com/alexzhang13/rlm](https://github.com/alexzhang13/rlm) |
+| **Research Paper** | [arXiv:2512.24601](https://arxiv.org/abs/2512.24601) |
+| **Authors** | Alex L. Zhang, Tim Kraska, Omar Khattab |
+
+This repository refactors the original RLM implementation into a hexagonal/modular monolith architecture while maintaining API compatibility. See [ATTRIBUTION.md](ATTRIBUTION.md) for full details.
+
+### Citation
+
+```bibtex
+@misc{zhang2025recursivelanguagemodels,
+      title={Recursive Language Models},
+      author={Alex L. Zhang and Tim Kraska and Omar Khattab},
+      year={2025},
+      eprint={2512.24601},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2512.24601},
+}
+```
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+- Original work: Copyright (c) 2025 Alex Zhang
+- Refactored work: Copyright (c) 2026 Luiz Frias

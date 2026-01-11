@@ -1,21 +1,30 @@
 [project]
 name = "agentic-codebase-navigator"
-version = "0.1.2"
+version = "1.0.0"
 description = "Agentic codebase navigator built on Recursive Language Model (RLM) patterns."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
 authors = [{ name = "Luiz Frias" }]
-keywords = ["rlm", "agentic", "llm", "code-execution", "codebase"]
+maintainers = [{ name = "Luiz Frias" }]
+keywords = ["rlm", "agentic", "llm", "code-execution", "codebase", "recursive-language-models"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
-urls = { Repository = "https://github.com/Luiz-Frias/agentic-codebase-navigator", Issues = "https://github.com/Luiz-Frias/agentic-codebase-navigator/issues" }
+
+[project.urls]
+Repository = "https://github.com/Luiz-Frias/agentic-codebase-navigator"
+Issues = "https://github.com/Luiz-Frias/agentic-codebase-navigator/issues"
+Changelog = "https://github.com/Luiz-Frias/agentic-codebase-navigator/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/Luiz-Frias/agentic-codebase-navigator#readme"
 dependencies = [
     "openai>=2.14.0",
 ]
