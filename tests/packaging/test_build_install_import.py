@@ -98,7 +98,10 @@ def test_build_wheel_and_sdist_excludes_references_and_installs_cleanly(
             f"ensurepip failed:\nSTDOUT:\n{cp2.stdout}\nSTDERR:\n{cp2.stderr}"
         )
 
-    cp = _run([str(py), "-m", "pip", "install", "--no-deps", str(wheel)], cwd=repo_root)
+    # Install the wheel with dependencies. The "no-network" aspect of this test
+    # refers to using the mock LLM backend (no external API calls), not pip install.
+    # Core dependencies like loguru must be installed for the package to function.
+    cp = _run([str(py), "-m", "pip", "install", str(wheel)], cwd=repo_root)
     assert cp.returncode == 0, f"pip install failed:\nSTDOUT:\n{cp.stdout}\nSTDERR:\n{cp.stderr}"
 
     smoke_code = r"""
