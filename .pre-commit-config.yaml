@@ -113,34 +113,39 @@ repos:
           - "pyproject.toml"
           - "-q"
 
-  - repo: https://github.com/pypa/pip-audit
-    rev: v2.9.0
-    hooks:
-      - id: pip-audit
-        stages: [pre-push]
-        args:
-          - "--progress-spinner=off"
-          - "--desc"
-          - "on"
-          # - "-P"
-          - "."
+  # NOTE: pip-audit disabled - uses ensurepip internally which conflicts with uv-managed
+  # Python environments (causes SIGABRT). Consider running `uv pip audit` manually or in CI.
+  # - repo: https://github.com/pypa/pip-audit
+  #   rev: v2.9.0
+  #   hooks:
+  #     - id: pip-audit
+  #       stages: [pre-push]
+  #       args:
+  #         - "--progress-spinner=off"
+  #         - "--desc"
+  #         - "on"
+  #         - "."
 
-  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
-    rev: v1.4.2
-    hooks:
-      - id: python-safety-dependencies-check
-        name: safety (python deps)
-        stages: [pre-push]
-        args:
-          - "--disable-optional-telemetry-data"
+  # NOTE: safety hook disabled - requires Poetry ([tool.poetry] in pyproject.toml).
+  # This project uses setuptools. Consider running safety check in CI workflow instead.
+  # - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+  #   rev: v1.4.2
+  #   hooks:
+  #     - id: python-safety-dependencies-check
+  #       name: safety (python deps)
+  #       stages: [pre-push]
+  #       args:
+  #         - "--disable-optional-telemetry-data"
 
-  - repo: https://github.com/the-cashman/pre-commit-trufflehog
-    rev: 0849fdcf97d03e3ee90be8e8b187774ff4f062ab  # pragma: allowlist secret
-    hooks:
-      - id: trufflehog
-        name: trufflehog (entropy scan)
-        stages: [pre-push]
-        pass_filenames: false
+  # NOTE: trufflehog hook disabled - has executable permission bug (trufflehog.sh is 644).
+  # Secret scanning is already covered by gitleaks above.
+  # - repo: https://github.com/the-cashman/pre-commit-trufflehog
+  #   rev: 0849fdcf97d03e3ee90be8e8b187774ff4f062ab  # pragma: allowlist secret
+  #   hooks:
+  #     - id: trufflehog
+  #       name: trufflehog (entropy scan)
+  #       stages: [pre-push]
+  #       pass_filenames: false
 
   # =============================================================================
   # GENERAL HYGIENE
