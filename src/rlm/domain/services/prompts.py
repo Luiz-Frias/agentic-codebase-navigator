@@ -101,11 +101,13 @@ def build_rlm_system_prompt(
     # If there are more than 100 chunks, truncate to the first 100 chunks.
     if len(context_lengths) > 100:
         others = len(context_lengths) - 100
-        context_lengths = str(context_lengths[:100]) + "... [" + str(others) + " others]"
+        lengths_display = str(context_lengths[:100]) + "... [" + str(others) + " others]"
+    else:
+        lengths_display = str(context_lengths)
 
     metadata_prompt = (
         f"Your context is a {context_type} with {context_total_length} total characters, "
-        f"and is broken up into chunks of char lengths: {context_lengths}."
+        f"and is broken up into chunks of char lengths: {lengths_display}."
     )
 
     return [

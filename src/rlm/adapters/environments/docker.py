@@ -197,16 +197,16 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001 - proxy boundary
             return {"error": str(exc)}
 
-        results: list[str] = []
+        wire_responses: list[str] = []
         for r in wire_results:
             if r.error is not None:
-                results.append(f"Error: {r.error}")
+                wire_responses.append(f"Error: {r.error}")
                 continue
             assert r.chat_completion is not None
             with self.lock:
                 self.pending_calls.append(r.chat_completion)
-            results.append(r.chat_completion.response)
-        return {"responses": results}
+            wire_responses.append(r.chat_completion.response)
+        return {"responses": wire_responses}
 
 
 def _build_exec_script(
@@ -486,10 +486,12 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
             except Exception as cleanup_exc:  # noqa: BLE001  # nosec B110
                 warn_cleanup_failure("DockerEnvironment.execute_timeout", cleanup_exc)
 
+            raw_stderr = exc.stderr or b""
+            raw_stdout = exc.stdout or b""
             stderr = (
-                exc.stderr or ""
+                raw_stderr.decode() if isinstance(raw_stderr, bytes) else raw_stderr
             ) + f"\nTimeoutExpired: docker exec exceeded {self._subprocess_timeout_s}s"
-            stdout = exc.stdout or ""
+            stdout = raw_stdout.decode() if isinstance(raw_stdout, bytes) else raw_stdout
             return ReplResult(
                 stdout=stdout,
                 stderr=stderr,

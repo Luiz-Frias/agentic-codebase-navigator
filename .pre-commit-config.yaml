@@ -251,6 +251,8 @@ repos:
     hooks:
       - id: mypy
         args: ["--config-file=pyproject.toml"]
+        files: ^src/rlm/
+        exclude: ^(tests/|build/|references/)
         additional_dependencies:
           - pydantic>=2.10.5
           - pydantic-settings>=2.7.1
@@ -260,17 +262,17 @@ repos:
           - types-toml>=0.10.8.20240310
           - numpy>=2.2.2
           - loguru>=0.7.0
-          - pytest>=8.0.0
 
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.406
     hooks:
       - id: pyright
         stages: [pre-commit]
+        files: ^src/rlm/
+        exclude: ^(tests/|build/|references/)
         args:
           - "--pythonversion"
           - "3.12"
-          # - "--ignoreexternal"
         additional_dependencies: []
 
   # =============================================================================

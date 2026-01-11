@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import time
+from collections.abc import Coroutine
 from socketserver import StreamRequestHandler, ThreadingTCPServer
 from threading import Event, Lock, Thread
 from typing import Any, Final
@@ -113,7 +114,7 @@ class _AsyncLoopThread:
 
     def run(
         self,
-        coro: asyncio.Future[Any] | asyncio.coroutines.Coroutine[Any, Any, Any],
+        coro: Coroutine[Any, Any, Any],
         /,
         *,
         timeout_s: float | None = None,
@@ -367,9 +368,10 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                 )
 
             llm = self._select_llm(request.model)
+            prompts = request.prompts  # Capture for closure type narrowing
 
             async def _run() -> list[WireResult]:
-                out = await _acomplete_prompts_batched(llm, request.prompts, llm.model_name)
+                out = await _acomplete_prompts_batched(llm, prompts, llm.model_name)
                 results: list[WireResult] = []
                 for item in out:
                     if isinstance(item, Exception):
