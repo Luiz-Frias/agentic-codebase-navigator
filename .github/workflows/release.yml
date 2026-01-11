@@ -22,6 +22,8 @@ on:
 
 env:
   PYTHON_VERSION: "3.12"
+  # Enable Docker host network mode for container→host communication in CI.
+  RLM_DOCKER_USE_HOST_NETWORK: "1"
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────

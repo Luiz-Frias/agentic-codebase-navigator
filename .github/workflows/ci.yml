@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+env:
+  # Enable Docker host network mode for container→host communication in CI.
+  # This allows llm_query() calls from inside Docker containers to reach the host proxy.
+  RLM_DOCKER_USE_HOST_NETWORK: "1"
+
 jobs:
   unit:
     runs-on: ubuntu-latest

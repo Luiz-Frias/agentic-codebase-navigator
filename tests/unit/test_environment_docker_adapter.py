@@ -31,6 +31,7 @@ def _make_env(tmp_path: Path) -> DockerEnvironmentAdapter:
     env._tmp = SimpleNamespace(cleanup=lambda: None)
     env._proxy_server = None
     env._proxy_thread = None
+    env._use_host_network = False  # CI env var not set during unit tests
     return env
 
 

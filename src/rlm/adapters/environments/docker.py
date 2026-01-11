@@ -25,6 +25,23 @@ from rlm.domain.types import ContextPayload
 from rlm.infrastructure.comms.protocol import request_completion, request_completions_batched
 
 
+def _use_host_network() -> bool:
+    """
+    Check if Docker should use host networking mode.
+
+    When RLM_DOCKER_USE_HOST_NETWORK=1, the container shares the host's network
+    namespace. This is useful in CI environments (like GitHub Actions) where
+    `host.docker.internal` doesn't reliably resolve.
+
+    With host networking:
+    - Container uses `localhost:PORT` instead of `host.docker.internal:PORT`
+    - No `--add-host` flag needed
+    - `--network=host` is added to docker run
+    """
+    raw = (os.environ.get("RLM_DOCKER_USE_HOST_NETWORK") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 class DockerLLMProxyHandler(BaseHTTPRequestHandler):
     """
     Host-side HTTP proxy for `llm_query()` calls issued from within a container.
@@ -190,6 +207,7 @@ def _build_exec_script(
     /,
     *,
     proxy_timeout_s: float = DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S,
+    use_host_network: bool = False,
 ) -> str:
     """
     Build the container-side Python script.
@@ -203,6 +221,9 @@ def _build_exec_script(
     """
 
     code_b64 = base64.b64encode(code.encode()).decode()
+    # When using host network mode, the container shares the host's network namespace,
+    # so we use localhost. Otherwise, use Docker's special DNS name.
+    proxy_host = "localhost" if use_host_network else "host.docker.internal"
 
     # NOTE: The string checks in tests intentionally depend on this script shape.
     return textwrap.dedent(
@@ -210,7 +231,7 @@ def _build_exec_script(
 import sys, io, json, base64, os, uuid, pickle
 from urllib import request as _urlreq
 
-PROXY = "http://host.docker.internal:{proxy_port}"
+PROXY = "http://{proxy_host}:{proxy_port}"
 STATE = "/workspace/state.pkl"
 RUN_CORRELATION_ID = os.environ.get("RLM_CORRELATION_ID") or str(uuid.uuid4())
 
@@ -355,6 +376,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         self._stop_grace_s = stop_grace_s
         self._cleanup_subprocess_timeout_s = cleanup_subprocess_timeout_s
         self._thread_join_timeout_s = thread_join_timeout_s
+        self._use_host_network = _use_host_network()
 
         self._tmp = tempfile.TemporaryDirectory(prefix="rlm_docker_env_")
         self._host_workspace = self._tmp.name
@@ -428,7 +450,10 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
             self._pending_calls.clear()
 
         script = _build_exec_script(
-            code, self._proxy_port, proxy_timeout_s=self._proxy_http_timeout_s
+            code,
+            self._proxy_port,
+            proxy_timeout_s=self._proxy_http_timeout_s,
+            use_host_network=self._use_host_network,
         )
 
         cmd: list[str] = ["docker", "exec", "--workdir", "/workspace"]
@@ -579,7 +604,10 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                 "timeout_s": self._proxy_http_timeout_s,
             },
         )
-        self._proxy_server = HTTPServer(("127.0.0.1", 0), handler)
+        # When using host network mode, bind to all interfaces so the container
+        # (which shares the host's network namespace) can reach localhost:PORT.
+        bind_addr = "0.0.0.0" if self._use_host_network else "127.0.0.1"
+        self._proxy_server = HTTPServer((bind_addr, 0), handler)
         self._proxy_port = self._proxy_server.server_address[1]
         self._proxy_thread = threading.Thread(
             target=self._proxy_server.serve_forever, name="rlm-docker-llm-proxy", daemon=True
@@ -587,21 +615,26 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         self._proxy_thread.start()
 
     def _start_container(self) -> None:
+        cmd = [
+            "docker",
+            "run",
+            "-d",
+            "--rm",
+            "-v",
+            f"{self._host_workspace}:/workspace",
+        ]
+        if self._use_host_network:
+            # Host network mode: container shares host's network namespace.
+            # No need for --add-host; container uses localhost directly.
+            cmd.append("--network=host")
+        else:
+            # Bridge network (default): use Docker's special DNS to reach host.
+            cmd.extend(["--add-host", "host.docker.internal:host-gateway"])
+
+        cmd.extend([self.image, "tail", "-f", "/dev/null"])
+
         result = subprocess.run(
-            [
-                "docker",
-                "run",
-                "-d",
-                "--rm",
-                "-v",
-                f"{self._host_workspace}:/workspace",
-                "--add-host",
-                "host.docker.internal:host-gateway",
-                self.image,
-                "tail",
-                "-f",
-                "/dev/null",
-            ],
+            cmd,
             capture_output=True,
             text=True,
             timeout=self._subprocess_timeout_s,
