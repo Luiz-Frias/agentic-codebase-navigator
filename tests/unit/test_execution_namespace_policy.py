@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from rlm.adapters.environments.local import LocalEnvironmentAdapter
 from rlm.infrastructure.execution_namespace_policy import ExecutionNamespacePolicy
-from tests.fakes_ports import LocalEnvironmentAdapter
 
 
 @pytest.mark.unit
