@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import sys
 import types
+from types import SimpleNamespace
 
 import pytest
 
+from rlm.domain.errors import LLMError
 from rlm.domain.models import LLMRequest
 
 
@@ -161,3 +163,68 @@ async def test_azure_openai_adapter_acomplete_maps_prompt_and_extracts_text_and_
     call = created[-1].completions.calls[-1]
     assert call["model"] == "dep-test"
     assert call["messages"] == [{"role": "user", "content": "hello"}]
+
+
+@pytest.mark.unit
+def test_azure_openai_adapter_validations_client_cache_and_error_mapping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rlm.adapters.llm.azure_openai import AzureOpenAIAdapter, build_azure_openai_adapter
+
+    with pytest.raises(ValueError, match="non-empty 'deployment'"):
+        build_azure_openai_adapter(deployment="")
+
+    adapter = AzureOpenAIAdapter(deployment="dep")
+    with pytest.raises(ImportError, match="expected `openai\\.AzureOpenAI`"):
+        adapter._get_client(SimpleNamespace())
+    with pytest.raises(ImportError, match="expected `openai\\.AsyncAzureOpenAI`"):
+        adapter._get_async_client(SimpleNamespace())
+
+    resp = _Response("ok", prompt_tokens=1, completion_tokens=2)
+    created: list[_FakeClient] = []
+
+    class AzureOpenAI:  # noqa: N801 - matches SDK naming
+        def __init__(self, **kwargs):
+            client = _FakeClient(response=resp, **kwargs)
+            created.append(client)
+
+        @property
+        def chat(self):
+            return created[-1].chat
+
+    fake_openai = types.ModuleType("openai")
+    fake_openai.AzureOpenAI = AzureOpenAI
+    fake_openai.AsyncAzureOpenAI = object()
+    monkeypatch.setitem(sys.modules, "openai", fake_openai)
+
+    llm = AzureOpenAIAdapter(
+        deployment="dep-test",
+        api_key="k",
+        endpoint="https://example.openai.azure.com",
+        api_version="2024-06-01",
+    )
+    cc1 = llm.complete(LLMRequest(prompt="hello"))
+    cc2 = llm.complete(LLMRequest(prompt="hello"))
+    assert cc1.response == "ok"
+    assert cc2.response == "ok"
+    assert len(created) == 1  # cached client
+
+    # Provider exception => mapped to LLMError.
+    class AzureOpenAITimeout:  # noqa: N801 - matches SDK naming
+        def __init__(self, **_kwargs):
+            client = _FakeClient(response=resp, **_kwargs)
+            client.completions.create = lambda **_k: (_ for _ in ()).throw(TimeoutError())  # type: ignore[method-assign]
+            created2.append(client)
+
+        @property
+        def chat(self):
+            return created2[-1].chat
+
+    created2: list[_FakeClient] = []
+    fake_openai2 = types.ModuleType("openai")
+    fake_openai2.AzureOpenAI = AzureOpenAITimeout
+    fake_openai2.AsyncAzureOpenAI = object()
+    monkeypatch.setitem(sys.modules, "openai", fake_openai2)
+
+    with pytest.raises(LLMError, match="Azure OpenAI request timed out"):
+        AzureOpenAIAdapter(deployment="dep-test").complete(LLMRequest(prompt="hello"))
