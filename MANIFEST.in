@@ -1,0 +1,20 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include pyproject.toml
+include uv.lock
+
+recursive-include src *.py
+recursive-include docs *.md
+
+# Keep the upstream snapshot reference-only (never ship it).
+prune references
+
+# Dev/IDE artifacts
+prune build
+prune logs
+prune .cursor
+prune .venv
+
+global-exclude *.py[cod]
+global-exclude __pycache__
