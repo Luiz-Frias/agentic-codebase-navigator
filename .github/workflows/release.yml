@@ -1,0 +1,213 @@
+# Release workflow: build, test, and publish to PyPI
+#
+# Triggered on:
+#   - Push to release/v* branches (for release candidates)
+#   - Push of v*.*.* tags (for final releases)
+#
+# Publishing options:
+#   1. Trusted Publishing (recommended): Configure at pypi.org/manage/project/.../settings/publishing/
+#   2. API Token: Set PYPI_API_TOKEN secret in repository settings
+#
+# For TestPyPI, set TEST_PYPI_API_TOKEN secret and use the testpypi job.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"          # v1.0.0, v2.1.3, etc.
+      - "v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+" # v1.0.0-rc.1, v1.0.0-rc.2, etc.
+    branches:
+      - "release/v*"                      # release/v1.0.0, etc. (for RC workflow)
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Quality Gates (same as CI, but required before release)
+  # ─────────────────────────────────────────────────────────────────────────────
+  quality:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --group dev --group test
+
+      - name: Ruff format (check)
+        run: uv run --group dev ruff format --check .
+
+      - name: Ruff lint
+        run: uv run --group dev ruff check .
+
+      - name: Unit tests
+        run: uv run --group test pytest -m unit
+
+      - name: Integration tests
+        run: uv run --group test pytest -m integration
+
+      - name: E2E tests
+        run: uv run --group test pytest -m e2e
+
+      - name: Packaging smoke tests
+        run: uv run --group test pytest -m packaging
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build artifacts (wheel + sdist)
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build Distribution
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build wheel and sdist
+        run: uv build --wheel --sdist
+
+      - name: Verify build artifacts
+        run: |
+          ls -la dist/
+          # Check that both artifacts exist
+          test -f dist/*.whl
+          test -f dist/*.tar.gz
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Publish to TestPyPI (for release candidates and manual testing)
+  # ─────────────────────────────────────────────────────────────────────────────
+  testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Only run for RC tags or release branches
+    if: contains(github.ref, '-rc.') || startsWith(github.ref, 'refs/heads/release/')
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/agentic-codebase-navigator/
+    permissions:
+      id-token: write  # Required for trusted publishing
+    steps:
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        run: uv publish --index-url https://test.pypi.org/simple/ dist/*
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Publish to PyPI (final releases only)
+  # ─────────────────────────────────────────────────────────────────────────────
+  pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Only run for final version tags (not RC)
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-rc.')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/agentic-codebase-navigator/
+    permissions:
+      id-token: write  # Required for trusted publishing
+    steps:
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        run: uv publish dist/*
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Create GitHub Release (after PyPI publish succeeds)
+  # ─────────────────────────────────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to create releases
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          # Extract version number without 'v' prefix
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NUM="${VERSION#v}"
+
+          # Extract changelog section for this version
+          # Looks for ## X.Y.Z and captures until the next ## or EOF
+          CHANGELOG=$(awk "/^## ${VERSION_NUM//./\\.}/,/^## [0-9]/" CHANGELOG.md | head -n -1)
+
+          # If no specific section found, use a default message
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="See [CHANGELOG.md](CHANGELOG.md) for details."
+          fi
+
+          # Write to output (handle multiline)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          body: |
+            ## Installation
+
+            ```bash
+            pip install agentic-codebase-navigator==${{ steps.version.outputs.version }}
+            # or
+            uv pip install agentic-codebase-navigator==${{ steps.version.outputs.version }}
+            ```
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## Links
+
+            - [PyPI](https://pypi.org/project/agentic-codebase-navigator/${{ steps.version.outputs.version }}/)
+            - [Documentation](https://github.com/Luiz-Frias/agentic-codebase-navigator)
+          files: dist/*
+          draft: false
+          prerelease: false
