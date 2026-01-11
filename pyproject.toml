@@ -1,0 +1,116 @@
+[project]
+name = "agentic-codebase-navigator"
+version = "1.0.0"
+description = "Agentic codebase navigator built on Recursive Language Model (RLM) patterns."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "Luiz Frias" }]
+maintainers = [{ name = "Luiz Frias" }]
+keywords = ["rlm", "agentic", "llm", "code-execution", "codebase", "recursive-language-models"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "openai>=2.14.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Luiz-Frias/agentic-codebase-navigator"
+Issues = "https://github.com/Luiz-Frias/agentic-codebase-navigator/issues"
+Changelog = "https://github.com/Luiz-Frias/agentic-codebase-navigator/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/Luiz-Frias/agentic-codebase-navigator#readme"
+
+[project.optional-dependencies]
+# LLM/provider adapters (installed only when needed)
+llm-openai = ["openai>=2.14.0"]
+llm-anthropic = ["anthropic>=0.75.0"]
+llm-gemini = ["google-genai>=1.56.0"]
+llm-portkey = ["portkey-ai>=2.1.0"]
+llm-litellm = ["litellm>=1.0.0"]
+llm-azure-openai = ["openai>=2.14.0"]
+
+# Environment adapters (installed only when needed)
+env-modal = ["modal>=0.73.0"]
+# Docker uses the local Docker CLI; no Python dependency is required, but we keep an explicit extra.
+env-docker = []
+
+[project.scripts]
+rlm = "rlm.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["rlm", "rlm.*"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.10",
+    "ty>=0.0.7",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["references", ".git", "__pycache__", "*.egg-info"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = ["--strict-markers"]
+markers = [
+    "unit: unit tests (fast, hermetic)",
+    "integration: integration tests (multi-component)",
+    "e2e: end-to-end tests (public API full flow)",
+    "packaging: packaging smoke tests (build/install/import)",
+    "chaos: chaos or resilience tests",
+    "performance: performance or load tests",
+    "docker: requires a working local Docker daemon",
+    "live_llm: opt-in tests that call real provider APIs (requires RLM_RUN_LIVE_LLM_TESTS=1)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.coverage.run]
+branch = true
+source = ["rlm"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = false

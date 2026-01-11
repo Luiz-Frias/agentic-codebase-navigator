@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  # Enable Docker host network mode for container→host communication in CI.
+  # This allows llm_query() calls from inside Docker containers to reach the host proxy.
+  RLM_DOCKER_USE_HOST_NETWORK: "1"
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps (dev + test)
+        run: uv sync --group dev --group test
+      - name: Ruff format (check)
+        run: uv run --group dev ruff format --check .
+      - name: Ruff lint
+        run: uv run --group dev ruff check .
+      - name: Unit tests
+        run: uv run --group test pytest -m unit
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps (test)
+        run: uv sync --group test
+      - name: Integration tests
+        run: uv run --group test pytest -m integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps (test)
+        run: uv sync --group test
+      - name: E2E tests (docker tests included; auto-skip if docker unavailable)
+        run: uv run --group test pytest -m e2e
+
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps (test)
+        run: uv sync --group test
+      - name: Packaging smoke tests
+        run: uv run --group test pytest -m packaging
+

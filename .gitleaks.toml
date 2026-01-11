@@ -1,0 +1,29 @@
+# =============================================================================
+# GITLEAKS CONFIGURATION - SECRET DETECTION
+# =============================================================================
+# Detects hardcoded secrets, API keys, tokens, and credentials in code.
+# =============================================================================
+
+title = "Gitleaks Configuration"
+
+[extend]
+# useDefault will extend the base configuration with the default gitleaks config:
+# https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+useDefault = true
+
+[allowlist]
+description = "Allowlisted paths and patterns"
+paths = [
+    '''\.git/''',
+    '''\.gitleaks\.toml''',
+    '''\.secrets\.baseline''',
+    '''\.env\..*\.template''',
+    '''\.envrc\.local\.template''',
+    '''CLAUDE\.md''',
+    '''CLAUDE\.local\.md''',
+    '''README\.md''',
+    '''CHANGELOG\.md''',
+    '''/tests/fixtures/''',
+    '''/tests/unit/fixtures/''',
+    '''/docs/examples/'''
+]

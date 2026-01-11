@@ -1,0 +1,9 @@
+{
+  "include": ["src/rlm/domain", "src/rlm/application"],
+  "exclude": ["src/rlm/_legacy", "references", "tests", "**/__pycache__"],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false
+}
+
