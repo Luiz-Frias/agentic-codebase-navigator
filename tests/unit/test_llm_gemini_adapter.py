@@ -97,7 +97,10 @@ def test_gemini_adapter_complete_success_error_and_client_cache(
             self.models = _Models(
                 resp={
                     "text": "ok",
-                    "usage_metadata": {"prompt_token_count": 1, "candidates_token_count": 2},
+                    "usage_metadata": {
+                        "prompt_token_count": 1,
+                        "candidates_token_count": 2,
+                    },
                 }
             )
 

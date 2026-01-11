@@ -7,7 +7,11 @@ from threading import Lock
 from typing import Any
 
 from rlm.adapters.base import BaseLLMAdapter
-from rlm.adapters.llm.provider_base import UsageTracker, prompt_to_text, safe_provider_error_message
+from rlm.adapters.llm.provider_base import (
+    UsageTracker,
+    prompt_to_text,
+    safe_provider_error_message,
+)
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
 

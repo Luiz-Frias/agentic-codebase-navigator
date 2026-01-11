@@ -5,7 +5,12 @@ from dataclasses import dataclass
 import pytest
 
 from rlm.adapters.broker.tcp import TcpBrokerAdapter
-from rlm.domain.models import ChatCompletion, LLMRequest, ModelUsageSummary, UsageSummary
+from rlm.domain.models import (
+    ChatCompletion,
+    LLMRequest,
+    ModelUsageSummary,
+    UsageSummary,
+)
 from rlm.domain.ports import LLMPort
 from rlm.infrastructure.comms.protocol import request_completions_batched
 

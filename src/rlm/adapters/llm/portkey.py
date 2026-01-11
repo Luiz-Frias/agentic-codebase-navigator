@@ -172,5 +172,8 @@ def build_portkey_adapter(
     if base_url is not None and (not isinstance(base_url, str) or not base_url.strip()):
         raise ValueError("PortkeyAdapter.base_url must be a non-empty string when provided")
     return PortkeyAdapter(
-        model=model, api_key=api_key, base_url=base_url, default_request_kwargs=dict(kwargs)
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        default_request_kwargs=dict(kwargs),
     )

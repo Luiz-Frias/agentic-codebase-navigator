@@ -194,7 +194,9 @@ def test_openai_adapter_maps_provider_errors_to_safe_messages(
 
 
 @pytest.mark.unit
-def test_openai_adapter_usage_accumulates_across_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openai_adapter_usage_accumulates_across_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from rlm.adapters.llm.openai import OpenAIAdapter
 
     resp = _Response("hi", prompt_tokens=3, completion_tokens=5)

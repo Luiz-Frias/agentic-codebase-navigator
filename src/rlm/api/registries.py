@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import subprocess
+import subprocess  # nosec B404 - required for Docker daemon health check
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from shutil import which
@@ -151,7 +151,9 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
                         **env_kwargs,
                     )
                 case "docker":
-                    from rlm.adapters.environments.docker import DockerEnvironmentAdapter
+                    from rlm.adapters.environments.docker import (
+                        DockerEnvironmentAdapter,
+                    )
 
                     return DockerEnvironmentAdapter(
                         broker=broker,
@@ -423,7 +425,7 @@ def ensure_docker_available(*, timeout_s: float = DEFAULT_DOCKER_DAEMON_PROBE_TI
             "Install Docker Desktop (macOS) or the Docker Engine (Linux) and retry."
         )
     try:
-        subprocess.run(
+        subprocess.run(  # nosec B603 B607 - safe list-form command, Docker CLI health check
             ["docker", "info"],
             check=True,
             stdout=subprocess.DEVNULL,

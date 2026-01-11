@@ -26,9 +26,14 @@ from rlm.domain.policies.timeouts import (
     CancellationPolicy,
 )
 from rlm.domain.ports import LLMPort
-from rlm.infrastructure.comms.codec import DEFAULT_MAX_MESSAGE_BYTES, recv_frame, send_frame
+from rlm.infrastructure.comms.codec import (
+    DEFAULT_MAX_MESSAGE_BYTES,
+    recv_frame,
+    send_frame,
+)
 from rlm.infrastructure.comms.messages import WireRequest, WireResponse, WireResult
 from rlm.infrastructure.comms.protocol import try_parse_request
+from rlm.infrastructure.logging import warn_cleanup_failure
 
 
 def _safe_error_message(exc: BaseException, /) -> str:
@@ -131,8 +136,8 @@ class _AsyncLoopThread:
             if grace > 0:
                 try:
                     fut.result(timeout=grace)
-                except Exception:  # noqa: BLE001 - best-effort cancellation cleanup
-                    pass
+                except Exception as exc:  # noqa: BLE001  # nosec B110
+                    warn_cleanup_failure("TcpBrokerAdapter.cancellation_grace", exc)
             raise TimeoutError("Batched request timed out") from None
 
 

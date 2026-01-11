@@ -8,7 +8,12 @@ from rlm.application.use_cases.run_completion import (
     run_completion,
 )
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
-from rlm.domain.models import BatchedLLMRequest, ChatCompletion, LLMRequest, UsageSummary
+from rlm.domain.models import (
+    BatchedLLMRequest,
+    ChatCompletion,
+    LLMRequest,
+    UsageSummary,
+)
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort
 from rlm.domain.types import ContextPayload
 from tests.fakes_ports import InMemoryBroker, QueueEnvironment, QueueLLM

@@ -28,7 +28,10 @@ def test_model_routing_rules_validations_and_resolution() -> None:
 
     with pytest.raises(ValidationError, match="Duplicate model name"):
         build_routing_rules(
-            [ModelSpec(name="m1", aliases=("m2",), is_default=True), ModelSpec(name="m2")]
+            [
+                ModelSpec(name="m1", aliases=("m2",), is_default=True),
+                ModelSpec(name="m2"),
+            ]
         )
 
     with pytest.raises(ValidationError, match="ambiguous"):
@@ -41,7 +44,10 @@ def test_model_routing_rules_validations_and_resolution() -> None:
 
     with pytest.raises(ValidationError, match="Exactly one ModelSpec"):
         build_routing_rules(
-            [ModelSpec(name="m1", is_default=True), ModelSpec(name="m2", is_default=True)]
+            [
+                ModelSpec(name="m1", is_default=True),
+                ModelSpec(name="m2", is_default=True),
+            ]
         )
 
     with pytest.raises(ValidationError, match="requires exactly one default"):

@@ -55,7 +55,9 @@ def test_selecting_modal_without_dependency_yields_helpful_error(
 
     # LLM won't be used because env construction fails first.
     rlm = create_rlm(
-        QueueLLM(model_name="dummy", responses=[]), environment="modal", max_iterations=1
+        QueueLLM(model_name="dummy", responses=[]),
+        environment="modal",
+        max_iterations=1,
     )
     with pytest.raises(ExecutionError) as excinfo:
         rlm.completion("hello")
@@ -70,7 +72,9 @@ def test_selecting_modal_without_dependency_yields_helpful_error(
 @pytest.mark.unit
 def test_selecting_prime_yields_helpful_not_implemented_error() -> None:
     rlm = create_rlm(
-        QueueLLM(model_name="dummy", responses=[]), environment="prime", max_iterations=1
+        QueueLLM(model_name="dummy", responses=[]),
+        environment="prime",
+        max_iterations=1,
     )
     with pytest.raises(ExecutionError) as excinfo:
         rlm.completion("hello")

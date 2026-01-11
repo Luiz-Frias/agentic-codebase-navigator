@@ -169,7 +169,10 @@ def test_anthropic_adapter_helpers_and_validations() -> None:
         ]
     )
     assert system == "sys"
-    assert msgs == [{"role": "user", "content": "u"}, {"role": "assistant", "content": "a"}]
+    assert msgs == [
+        {"role": "user", "content": "u"},
+        {"role": "assistant", "content": "a"},
+    ]
 
     assert _extract_text({"content": [{"text": "hi"}]}) == "hi"
 

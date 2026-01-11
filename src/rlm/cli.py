@@ -81,7 +81,9 @@ def _completion(args: argparse.Namespace) -> int:
 
     cfg = RLMConfig(
         llm=LLMConfig(
-            backend=args.backend, model_name=args.model_name, backend_kwargs=backend_kwargs
+            backend=args.backend,
+            model_name=args.model_name,
+            backend_kwargs=backend_kwargs,
         ),
         env=EnvironmentConfig(environment=args.environment),
         logger=logger_cfg,

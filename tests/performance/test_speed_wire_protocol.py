@@ -220,7 +220,12 @@ def test_socket_frame_roundtrip() -> None:
                     received_count[0] += 1
                     # Echo back
                     send_frame(conn, frame)
-            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            except (
+                BrokenPipeError,
+                ConnectionResetError,
+                ConnectionAbortedError,
+                OSError,
+            ):
                 # Expected: client disconnected during performance test teardown
                 pass
             finally:

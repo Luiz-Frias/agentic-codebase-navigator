@@ -7,4 +7,8 @@ Must not import adapters.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from rlm.infrastructure.logging import warn_cleanup_failure
+
+__all__: list[str] = [
+    "warn_cleanup_failure",
+]

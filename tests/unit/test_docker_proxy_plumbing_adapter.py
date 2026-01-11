@@ -140,7 +140,10 @@ def test_docker_proxy_handler_do_post_validations_and_routing() -> None:
 
     # Missing Content-Length
     dummy = SimpleNamespace(
-        headers={}, rfile=SimpleNamespace(read=lambda _n: b""), path="/llm_query", _respond=_respond
+        headers={},
+        rfile=SimpleNamespace(read=lambda _n: b""),
+        path="/llm_query",
+        _respond=_respond,
     )
     DockerLLMProxyHandler.do_POST(dummy)  # type: ignore[arg-type]
     assert recorded.pop() == (400, {"error": "Missing Content-Length"})
@@ -244,7 +247,12 @@ def test_docker_proxy_handler_do_post_handles_unexpected_exception() -> None:
 
 @pytest.mark.unit
 def test_docker_proxy_handler_respond_and_log_message_are_noops() -> None:
-    recorded: dict[str, object] = {"status": None, "headers": [], "ended": False, "body": b""}
+    recorded: dict[str, object] = {
+        "status": None,
+        "headers": [],
+        "ended": False,
+        "body": b"",
+    }
 
     def send_response(status: int) -> None:
         recorded["status"] = status

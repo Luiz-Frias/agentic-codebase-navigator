@@ -22,6 +22,7 @@ classifiers = [
 
 dependencies = [
     "openai>=2.14.0",
+    "loguru>=0.7.0",  # Infrastructure logging (cleanup failures, observability)
 ]
 
 [project.urls]
@@ -62,6 +63,9 @@ include = ["rlm", "rlm.*"]
 dev = [
     "ruff>=0.14.10",
     "ty>=0.0.7",
+    "mypy>=1.14.1",
+    "pyright>=1.1.406",
+    "bandit>=1.8.6",
 ]
 test = [
     "pytest>=8.0.0",
@@ -100,7 +104,8 @@ select = [
     "UP",  # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long (handled by formatter)
+    "E501",   # line too long (handled by formatter)
+    "UP038",  # isinstance tuple -> union (deprecated rule, version mismatch between local/pre-commit)
 ]
 
 [tool.ruff.format]
@@ -117,8 +122,10 @@ skip_covered = false
 
 [tool.bandit]
 # Skip assert_used (B101) - assertions are standard pytest practice
+# All other security warnings must be explicitly documented with inline # nosec comments
 skips = ["B101"]
-exclude_dirs = [".venv", ".tox", ".pytest_cache", "__pycache__", "build", "dist"]
+# Exclude tests/ from security scanning - focus on src/rlm/** production code
+exclude_dirs = [".venv", ".tox", ".pytest_cache", "__pycache__", "build", "dist", "tests"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -148,3 +155,7 @@ disallow_untyped_defs = false
 [[tool.mypy.overrides]]
 module = "rlm.domain.*"
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "loguru"
+ignore_missing_imports = true
