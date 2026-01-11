@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from rlm.domain.errors import BrokerError
 from rlm.domain.models import ChatCompletion, ModelUsageSummary, UsageSummary
+from rlm.infrastructure.comms.messages import WireResponse, WireResult
 from rlm.infrastructure.comms.protocol import request_completion, request_completions_batched
 
 
@@ -93,3 +96,105 @@ def test_request_completions_batched_raises_on_length_mismatch(
 
     with pytest.raises(BrokerError, match="expected 2 results, got 1"):
         request_completions_batched(("127.0.0.1", 1234), ["p1", "p2"], correlation_id="cid")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("exc", "msg"),
+    [
+        (json.JSONDecodeError("bad", "doc", 0), "Invalid JSON payload"),
+        (OSError("boom"), "Connection error"),
+        (TimeoutError(), "Request timed out"),
+        (ConnectionError("boom"), "Connection error"),
+        (RuntimeError("boom"), "Internal broker error"),
+    ],
+)
+def test_request_completion_maps_transport_errors_to_safe_broker_errors(
+    monkeypatch: pytest.MonkeyPatch, exc: BaseException, msg: str
+) -> None:
+    def _stub_request_response(*args, **kwargs):
+        raise exc
+
+    import rlm.infrastructure.comms.protocol as proto
+
+    monkeypatch.setattr(proto, "request_response", _stub_request_response)
+
+    with pytest.raises(BrokerError, match=msg):
+        request_completion(("127.0.0.1", 1234), "hello", correlation_id="cid")
+
+
+@pytest.mark.unit
+def test_request_completion_raises_if_server_returns_invalid_response_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _stub_request_response(*args, **kwargs):
+        # `results` must be a list (this forces parse_response to raise TypeError).
+        return {"correlation_id": "cid", "error": None, "results": "nope"}
+
+    import rlm.infrastructure.comms.protocol as proto
+
+    monkeypatch.setattr(proto, "request_response", _stub_request_response)
+
+    with pytest.raises(BrokerError, match="WireResponse.results must be a list"):
+        request_completion(("127.0.0.1", 1234), "hello", correlation_id="cid")
+
+
+@pytest.mark.unit
+def test_request_completion_raises_if_results_count_is_not_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _stub_request_response(*args, **kwargs):
+        return {
+            "correlation_id": "cid",
+            "error": None,
+            "results": [
+                {"error": None, "chat_completion": _fake_cc_dict(response="r1")},
+                {"error": None, "chat_completion": _fake_cc_dict(response="r2")},
+            ],
+        }
+
+    import rlm.infrastructure.comms.protocol as proto
+
+    monkeypatch.setattr(proto, "request_response", _stub_request_response)
+
+    with pytest.raises(BrokerError, match="expected exactly 1 result"):
+        request_completion(("127.0.0.1", 1234), "hello", correlation_id="cid")
+
+
+@pytest.mark.unit
+def test_request_completion_raises_if_chat_completion_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import rlm.infrastructure.comms.protocol as proto
+
+    def _stub_send_request(*args, **kwargs):
+        return WireResponse(
+            correlation_id="cid",
+            error=None,
+            results=[WireResult(error=None, chat_completion=None)],
+        )
+
+    monkeypatch.setattr(proto, "send_request", _stub_send_request)
+
+    with pytest.raises(BrokerError, match="missing chat_completion"):
+        request_completion(("127.0.0.1", 1234), "hello", correlation_id="cid")
+
+
+@pytest.mark.unit
+def test_request_completions_batched_empty_short_circuits() -> None:
+    assert request_completions_batched(("127.0.0.1", 1234), [], correlation_id="cid") == []
+
+
+@pytest.mark.unit
+def test_request_completions_batched_raises_if_results_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _stub_request_response(*args, **kwargs):
+        return {"correlation_id": "cid", "error": None, "results": None}
+
+    import rlm.infrastructure.comms.protocol as proto
+
+    monkeypatch.setattr(proto, "request_response", _stub_request_response)
+
+    with pytest.raises(BrokerError, match="missing results"):
+        request_completions_batched(("127.0.0.1", 1234), ["p1"], correlation_id="cid")

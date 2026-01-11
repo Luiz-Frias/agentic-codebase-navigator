@@ -20,12 +20,12 @@ def _safe_error_message(exc: BaseException, /) -> str:
     match exc:
         case json.JSONDecodeError():
             return "Invalid JSON payload"
-        case OSError():
-            # Includes socket.timeout and connection-level failures.
-            return "Connection error"
         case TimeoutError():
             return "Request timed out"
         case ConnectionError():
+            return "Connection error"
+        case OSError():
+            # Includes socket-level failures not covered by the more specific cases above.
             return "Connection error"
         case ValueError() | TypeError():
             # These are expected validation errors; keep the message.
