@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rlm.domain.models.repl import ReplResult
+from rlm.domain.models.serialization import serialize_value
 from rlm.domain.models.usage import UsageSummary
 
 
@@ -40,7 +41,7 @@ class Iteration:
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
-            "prompt": self.prompt,
+            "prompt": serialize_value(self.prompt),
             "response": self.response,
             "code_blocks": [b.to_dict() for b in self.code_blocks],
             "final_answer": self.final_answer,

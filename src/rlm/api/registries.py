@@ -72,7 +72,7 @@ class DefaultLLMRegistry(LLMRegistry):
             case "openai":
                 from rlm.adapters.llm.openai import build_openai_adapter
 
-                model = config.model_name or "gpt-4o-mini"
+                model = config.model_name or "gpt-5-nano"
                 return build_openai_adapter(model=model, **config.backend_kwargs)
             case "anthropic":
                 from rlm.adapters.llm.anthropic import build_anthropic_adapter
@@ -364,29 +364,45 @@ class DefaultLoggerRegistry(LoggerRegistry):
 
     Supported values:
     - logger='none': disables logging
-    - logger='legacy_jsonl': legacy JSONL logger adapter (requires `log_dir`)
+    - logger='jsonl': JSONL logger adapter (requires `log_dir`)
+    - logger='console': minimal stdout logger (optional; `enabled` flag)
     """
 
     def build(self, config: LoggerConfig, /) -> LoggerPort | None:
         match config.logger:
             case "none":
                 return None
-            case "legacy_jsonl":
+            case "jsonl":
                 log_dir = config.logger_kwargs.get("log_dir")
                 if not isinstance(log_dir, str) or not log_dir.strip():
-                    raise ValueError(
-                        "LoggerConfig for 'legacy_jsonl' requires logger_kwargs['log_dir']"
-                    )
+                    raise ValueError("LoggerConfig for 'jsonl' requires logger_kwargs['log_dir']")
                 file_name = config.logger_kwargs.get("file_name", "rlm")
                 if not isinstance(file_name, str) or not file_name.strip():
                     raise ValueError(
                         "LoggerConfig.logger_kwargs['file_name'] must be a non-empty string"
                     )
 
-                from rlm._legacy.logger.rlm_logger import RLMLogger
-                from rlm.adapters.legacy.logger import LegacyLoggerAdapter
+                rotate_per_run = config.logger_kwargs.get("rotate_per_run", True)
+                if not isinstance(rotate_per_run, bool):
+                    raise ValueError(
+                        "LoggerConfig.logger_kwargs['rotate_per_run'] must be a bool when provided"
+                    )
 
-                return LegacyLoggerAdapter(RLMLogger(log_dir=log_dir, file_name=file_name))
+                from rlm.adapters.logger.jsonl import JsonlLoggerAdapter
+
+                return JsonlLoggerAdapter(
+                    log_dir=log_dir, file_name=file_name, rotate_per_run=rotate_per_run
+                )
+            case "console":
+                enabled = config.logger_kwargs.get("enabled", True)
+                if not isinstance(enabled, bool):
+                    raise ValueError(
+                        "LoggerConfig.logger_kwargs['enabled'] must be a bool when provided"
+                    )
+
+                from rlm.adapters.logger.console import ConsoleLoggerAdapter
+
+                return ConsoleLoggerAdapter(enabled=enabled)
             case _:
                 # Should be prevented by LoggerConfig validation, but keep a defensive
                 # error here since this is a composition root.

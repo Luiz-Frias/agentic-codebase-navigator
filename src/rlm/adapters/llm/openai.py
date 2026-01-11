@@ -29,7 +29,7 @@ def _require_openai() -> Any:
     except Exception as e:  # noqa: BLE001 - dependency boundary
         raise ImportError(
             "OpenAI adapter selected but the 'openai' package is not installed. "
-            "Install the optional extra: `agentic-codebase-navigator[llm-openai]`."
+            "Install it with: `pip install rlm[llm-openai]`."
         ) from e
     return openai
 

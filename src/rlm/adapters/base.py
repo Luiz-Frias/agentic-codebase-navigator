@@ -73,6 +73,8 @@ class BaseEnvironmentAdapter(ABC):
 class BaseLoggerAdapter(ABC):
     """Optional ABC base for adapters implementing `LoggerPort`."""
 
+    __slots__ = ()
+
     @abstractmethod
     def log_metadata(self, metadata: RunMetadata, /) -> None: ...
 

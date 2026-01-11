@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from functools import lru_cache
 from pathlib import Path
@@ -25,16 +26,31 @@ def _docker_available() -> bool:
     return True
 
 
+def _live_llm_enabled() -> bool:
+    """
+    Opt-in gate for tests that hit real provider APIs.
+
+    These tests are skipped by default to keep CI hermetic and avoid accidental
+    spend. Enable with:
+      - RLM_RUN_LIVE_LLM_TESTS=1
+    """
+
+    raw = (os.environ.get("RLM_RUN_LIVE_LLM_TESTS") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "unit: unit tests (fast, hermetic)")
     config.addinivalue_line("markers", "integration: integration tests (multi-component)")
     config.addinivalue_line("markers", "e2e: end-to-end tests (public API full flow)")
+    config.addinivalue_line("markers", "packaging: packaging smoke tests (build/install/import)")
     config.addinivalue_line("markers", "chaos: chaos or resilience tests")
     config.addinivalue_line("markers", "performance: performance or load tests")
     config.addinivalue_line("markers", "docker: requires a working local Docker daemon")
-    # TODO(phase4/phase5): Add a `live_llm` marker + opt-in env gate (no CI by default)
-    # for integration tests that exercise real provider adapters (e.g. OpenAIAdapter)
-    # against either a local OpenAI-compatible endpoint or real APIs via env vars.
+    config.addinivalue_line(
+        "markers",
+        "live_llm: opt-in tests that call real provider APIs (requires RLM_RUN_LIVE_LLM_TESTS=1)",
+    )
 
 
 @pytest.fixture(scope="session")
@@ -43,7 +59,7 @@ def docker_is_available() -> bool:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    category_markers = {"unit", "integration", "e2e", "chaos", "performance"}
+    category_markers = {"unit", "integration", "e2e", "packaging", "chaos", "performance"}
     tests_root = Path(__file__).resolve().parent
     errors: list[str] = []
 
@@ -78,3 +94,5 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 def pytest_runtest_setup(item: pytest.Item) -> None:
     if "docker" in item.keywords and not _docker_available():
         pytest.skip("Docker not available (no docker binary or daemon not reachable)")
+    if "live_llm" in item.keywords and not _live_llm_enabled():
+        pytest.skip("Live LLM tests disabled (set RLM_RUN_LIVE_LLM_TESTS=1 to enable)")

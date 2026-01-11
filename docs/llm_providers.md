@@ -1,12 +1,14 @@
 # LLM providers (Phase 4)
 
-This project keeps **provider SDKs optional** so the default install remains lightweight and fully testable.
+This project keeps most **provider SDKs optional** so the default install remains lightweight and fully testable.
+
+The OpenAI SDK is installed by default (so the `openai` backend works out of the box once `OPENAI_API_KEY` is set).
 
 ## Optional extras
 
 Install provider adapters via extras:
 
-- **OpenAI**: `agentic-codebase-navigator[llm-openai]`
+- **OpenAI**: included by default (optional extra still exists): `agentic-codebase-navigator[llm-openai]`
 - **Anthropic**: `agentic-codebase-navigator[llm-anthropic]`
 - **Gemini (Google GenAI)**: `agentic-codebase-navigator[llm-gemini]`
 - **Portkey**: `agentic-codebase-navigator[llm-portkey]`
@@ -32,7 +34,7 @@ from rlm.api import create_rlm_from_config
 from rlm.application.config import EnvironmentConfig, LLMConfig, RLMConfig
 
 cfg = RLMConfig(
-    llm=LLMConfig(backend="openai", model_name="gpt-4o-mini"),
+    llm=LLMConfig(backend="openai", model_name="gpt-5-nano"),
     env=EnvironmentConfig(environment="local"),
     max_iterations=10,
 )

@@ -24,7 +24,8 @@ class ReplResult:
             "stderr": self.stderr,
             "locals": {k: serialize_value(v) for k, v in self.locals.items()},
             "execution_time": self.execution_time,
-            "llm_calls": [c.to_dict() for c in self.llm_calls],
+            # Keep upstream key name `rlm_calls` for log/schema compatibility.
+            "rlm_calls": [c.to_dict() for c in self.llm_calls],
         }
         if self.correlation_id is not None:
             d["correlation_id"] = self.correlation_id
@@ -32,11 +33,11 @@ class ReplResult:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ReplResult:
-        # Back-compat: legacy logs use `rlm_calls` as the JSON key (upstream schema).
-        if "llm_calls" in data:
-            raw_calls = data.get("llm_calls") or []
-        else:
+        # Back-compat: accept either key name (canonical: `rlm_calls`).
+        if "rlm_calls" in data:
             raw_calls = data.get("rlm_calls") or []
+        else:
+            raw_calls = data.get("llm_calls") or []
         correlation_id = data.get("correlation_id")
         return cls(
             correlation_id=str(correlation_id) if correlation_id is not None else None,

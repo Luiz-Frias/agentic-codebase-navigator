@@ -5,6 +5,27 @@ from pathlib import Path
 import pytest
 
 from rlm.adapters.environments.local import LocalEnvironmentAdapter
+from rlm.infrastructure.execution_namespace_policy import ExecutionNamespacePolicy
+
+
+@pytest.mark.unit
+def test_execution_namespace_policy_import_and_open_validations(tmp_path: Path) -> None:
+    policy = ExecutionNamespacePolicy()
+    builtins_dict = policy.build_builtins(session_dir=tmp_path)
+
+    controlled_import = builtins_dict["__import__"]
+    with pytest.raises(ImportError, match="Relative imports are not allowed"):
+        controlled_import("math", level=1)
+
+    with pytest.raises(ImportError, match="Invalid import name"):
+        controlled_import(123)  # type: ignore[arg-type]
+
+    restricted_open = builtins_dict["open"]
+    with pytest.raises(PermissionError, match="file descriptor"):
+        restricted_open(0)
+
+    with pytest.raises(PermissionError, match="path-like"):
+        restricted_open(object())
 
 
 @pytest.mark.unit

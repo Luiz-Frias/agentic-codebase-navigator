@@ -20,8 +20,6 @@ def test_domain_layer_has_no_third_party_or_outer_layer_imports() -> None:
         "rlm.infrastructure",
         "rlm.api",
         "rlm.application",
-        # Transitional/legacy code should not leak into domain.
-        "rlm._legacy",
         "references",
         # Known third-party deps (we want domain to stay dependency-free)
         "openai",

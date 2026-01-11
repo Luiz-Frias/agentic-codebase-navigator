@@ -198,18 +198,18 @@ def test_default_logger_registry_none_returns_none() -> None:
 
 
 @pytest.mark.unit
-def test_default_logger_registry_legacy_jsonl_requires_log_dir() -> None:
+def test_default_logger_registry_jsonl_requires_log_dir() -> None:
     reg = DefaultLoggerRegistry()
     with pytest.raises(ValueError, match="log_dir"):
-        reg.build(LoggerConfig(logger="legacy_jsonl", logger_kwargs={}))
+        reg.build(LoggerConfig(logger="jsonl", logger_kwargs={}))
 
 
 @pytest.mark.unit
-def test_default_logger_registry_legacy_jsonl_builds_logger(tmp_path: Any) -> None:
+def test_default_logger_registry_jsonl_builds_logger(tmp_path: Any) -> None:
     reg = DefaultLoggerRegistry()
     logger = reg.build(
         LoggerConfig(
-            logger="legacy_jsonl",
+            logger="jsonl",
             logger_kwargs={"log_dir": str(tmp_path), "file_name": "test"},
         )
     )

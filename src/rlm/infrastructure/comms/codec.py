@@ -49,8 +49,6 @@ def recv_frame(
         raw_len.extend(chunk)
 
     length = struct.unpack(">I", raw_len)[0]
-    if length < 0:
-        raise ValueError("Invalid negative frame length")
     if length > max_message_bytes:
         raise ValueError(f"Frame too large: {length} bytes (max {max_message_bytes})")
 
