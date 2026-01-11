@@ -181,36 +181,6 @@ rlm completion "Calculate pi" --backend mock --json
 rlm completion "Hello" --backend mock --jsonl-log-dir ./logs
 ```
 
-## Development & Testing
-
-This repo uses pytest markers to keep the suite fast and predictable:
-
-```bash
-# Fast, hermetic unit tests
-uv run --group test pytest -m unit
-
-# Integration tests (wire protocol, multi-component boundaries)
-uv run --group test pytest -m integration
-
-# End-to-end tests (public API full flows). Docker-marked tests auto-skip if Docker isn't available.
-uv run --group test pytest -m e2e
-
-# Performance/regression tests (opt-in)
-uv run --group test pytest -m performance
-
-# Packaging smoke tests (build/install/import/CLI)
-uv run --group test pytest -m packaging
-```
-
-### Live provider smoke tests (opt-in)
-
-There are opt-in tests that hit real provider APIs (skipped by default to avoid accidental spend):
-
-```bash
-RLM_RUN_LIVE_LLM_TESTS=1 OPENAI_API_KEY=... uv run --group test pytest -m "integration and live_llm"
-RLM_RUN_LIVE_LLM_TESTS=1 ANTHROPIC_API_KEY=... uv run --group test pytest -m "integration and live_llm"
-```
-
 ## Configuration-Driven Usage
 
 For complex setups, use configuration objects:
@@ -302,29 +272,48 @@ uv sync --group dev --group test
 
 ```bash
 # Unit tests (fast, hermetic)
-uv run pytest -m unit
+uv run --group test pytest -m unit
 
-# Integration tests (may use Docker)
-uv run pytest -m integration
+# Integration tests (multi-component boundaries)
+uv run --group test pytest -m integration
+
+# End-to-end tests (public API flows). Docker-marked tests auto-skip if Docker isn't available.
+uv run --group test pytest -m e2e
+
+# Packaging smoke tests (build/install/import/CLI)
+uv run --group test pytest -m packaging
+
+# Performance/regression tests (opt-in)
+uv run --group test pytest -m performance
 
 # All tests
-uv run pytest
+uv run --group test pytest
 
 # With coverage
-uv run pytest --cov=rlm --cov-report=term-missing
+uv run --group test pytest --cov=rlm --cov-report=term-missing
+```
+
+#### Live provider smoke tests (opt-in)
+
+These tests are skipped by default to avoid accidental spend. Enable with `RLM_RUN_LIVE_LLM_TESTS=1`
+and the relevant API key:
+
+```bash
+RLM_RUN_LIVE_LLM_TESTS=1 OPENAI_API_KEY=... uv run --group test pytest -m "integration and live_llm"
+RLM_RUN_LIVE_LLM_TESTS=1 ANTHROPIC_API_KEY=... uv run --group test pytest -m "integration and live_llm"
 ```
 
 ### Code Quality
 
 ```bash
 # Format
-uv run ruff format src tests
+uv run --group dev ruff format src tests
 
 # Lint
-uv run ruff check src tests --fix
+uv run --group dev ruff check src tests --fix
 
 # Type check
-uv run ty check src/rlm
+uv run --group dev ty check src/rlm
 ```
 
 ## API Reference

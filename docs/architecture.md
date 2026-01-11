@@ -54,6 +54,15 @@ You can customize wiring without touching the domain:
 - Override `broker_factory`, `environment_factory`, or `logger` when constructing `RLM(...)`.
 - Provide custom `EnvironmentRegistry` / `LoggerRegistry` to `create_rlm_from_config(...)`.
 
+## Goal 2 reserved namespace
+
+Goal 2 (codebase indexing/chunking/context management) is planned to live behind domain ports in
+`src/rlm/domain/goal2_ports.py`, with concrete implementations under the reserved namespace:
+
+- `src/rlm/codebase/`
+
+Goal 1 runtime paths must remain independent of Goal 2 (no imports or required deps).
+
 ## Scope note
 
 `references/rlm/**` remains a read-only upstream snapshot. All runtime code must live in `src/**`.

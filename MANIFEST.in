@@ -1,4 +1,6 @@
 include README.md
+include LICENSE
+include CHANGELOG.md
 include pyproject.toml
 include uv.lock
 
@@ -9,6 +11,7 @@ recursive-include docs *.md
 prune references
 
 # Dev/IDE artifacts
+prune build
 prune logs
 prune .cursor
 prune .venv
