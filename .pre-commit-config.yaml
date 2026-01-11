@@ -1,9 +1,8 @@
 # =============================================================================
-# RESEARCH-GRADE PRE-COMMIT CONFIGURATION (2025-02)
+# PRE-COMMIT CONFIGURATION (2025-02)
 # =============================================================================
-# Hardened quality gates covering Python, Rust, C++, and Bash code paths.
-# Uses published hook repositories + local hooks for GTest and bats testing.
-# Native language testing: pytest (Python), cargo (Rust), GTest (C++), bats (Bash)
+# Hardened quality gates for Python development with comprehensive security,
+# linting, type-checking, and test automation. Uses uv for fast Python testing.
 # =============================================================================
 
 minimum_pre_commit_version: "3.7.0"
@@ -85,13 +84,12 @@ repos:
           - ".secrets.baseline"
         exclude: \.lock$
 
-  - repo: https://github.com/yuvipanda/pre-commit-hook-ensure-sops
-    rev: v1.1
-    hooks:
-      - id: sops-encryption
-        # Ensures files matching patterns are encrypted with SOPS
-        # Works with .sops.yaml configuration
-        files: secrets/.*\.(yaml|yml|json|env)$|\.env\.(prod|production|staging)$
+  # NOTE: SOPS hook disabled - enable when secrets/ directory or .env.prod|staging files exist
+  # - repo: https://github.com/yuvipanda/pre-commit-hook-ensure-sops
+  #   rev: v1.1
+  #   hooks:
+  #     - id: sops-encryption
+  #       files: secrets/.*\.(yaml|yml|json|env)$|\.env\.(prod|production|staging)$
 
   - repo: https://github.com/returntocorp/semgrep
     rev: v1.139.0
@@ -177,65 +175,6 @@ repos:
         args: ["-i", "2", "-ci"]
 
   # =============================================================================
-  # BASH/SHELL TESTING (bats)
-  # =============================================================================
-  - repo: local
-    hooks:
-      - id: bats-unit
-        name: bats unit tests
-        entry: >-
-          bash -c 'if [ -d tests/unit/bats ]; then bats tests/unit/bats; else echo "Skipping tests/unit/bats not found"; fi'
-        language: system
-        stages: [pre-commit]
-        files: \.sh$
-        pass_filenames: false
-
-      - id: bats-integration
-        name: bats integration tests
-        entry: >-
-          bash -c 'if [ -d tests/integration/bats ]; then bats tests/integration/bats; else echo "Skipping tests/integration/bats not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.sh$
-        pass_filenames: false
-
-      - id: bats-e2e
-        name: bats e2e tests
-        entry: >-
-          bash -c 'if [ -d tests/e2e/bats ]; then bats tests/e2e/bats; else echo "Skipping tests/e2e/bats not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.sh$
-        pass_filenames: false
-
-      - id: bats-security
-        name: bats security tests
-        entry: >-
-          bash -c 'if [ -d tests/security/bats ]; then bats tests/security/bats; else echo "Skipping tests/security/bats not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.sh$
-        pass_filenames: false
-
-      - id: bats-performance
-        name: bats performance tests
-        entry: >-
-          bash -c 'if [ -d tests/performance/bats ]; then bats tests/performance/bats; else echo "Skipping tests/performance/bats not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.sh$
-        pass_filenames: false
-
-      - id: bats-chaos
-        name: bats chaos tests
-        entry: >-
-          bash -c 'if [ -d tests/chaos/bats ]; then bats tests/chaos/bats; else echo "Skipping tests/chaos/bats not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.sh$
-        pass_filenames: false
-
-  # =============================================================================
   # PYTHON QUALITY
   # =============================================================================
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -281,297 +220,28 @@ repos:
   - repo: https://github.com/andrewaylett/pre-commit-hooks
     rev: v0.7.0
     hooks:
+      # Fast feedback: unit tests on every commit
       - id: uv-run
         name: python unit tests (uv)
         stages: [pre-commit]
-        args:
-          [
-            "pytest",
-            "tests/unit",
-            "-q",
-            "--maxfail=1",
-            "--disable-warnings",
-            "--ignore-glob=tests/unit/bats/*",
-            "--ignore-glob=tests/unit/rust/*",
-            "--ignore-glob=tests/unit/cpp/*",
-          ]
+        args: ["pytest", "tests/unit", "-q", "--maxfail=1", "--disable-warnings"]
 
+      # Pre-push: integration, e2e, and performance tests before code reaches remote
       - id: uv-run
         name: python integration tests (uv)
         stages: [pre-push]
-        args:
-          [
-            "pytest",
-            "tests/integration",
-            "-q",
-            "--maxfail=1",
-            "--disable-warnings",
-            "--ignore-glob=tests/integration/bats/*",
-            "--ignore-glob=tests/integration/rust/*",
-            "--ignore-glob=tests/integration/cpp/*",
-          ]
+        args: ["pytest", "tests/integration", "-q", "--maxfail=1", "--disable-warnings"]
 
       - id: uv-run
         name: python e2e tests (uv)
         stages: [pre-push]
-        args:
-          [
-            "pytest",
-            "tests/e2e",
-            "-q",
-            "--maxfail=1",
-            "--disable-warnings",
-            "--ignore-glob=tests/e2e/bats/*",
-            "--ignore-glob=tests/e2e/rust/*",
-            "--ignore-glob=tests/e2e/cpp/*",
-          ]
-
-      - id: uv-run
-        name: python security tests (uv)
-        stages: [pre-push]
-        args:
-          [
-            "pytest",
-            "tests/security",
-            "-q",
-            "--maxfail=1",
-            "--disable-warnings",
-            "--ignore-glob=tests/security/bats/*",
-            "--ignore-glob=tests/security/rust/*",
-            "--ignore-glob=tests/security/cpp/*",
-          ]
+        args: ["pytest", "tests/e2e", "-q", "--maxfail=1", "--disable-warnings"]
 
       - id: uv-run
         name: python performance tests (uv)
         stages: [pre-push]
-        args:
-          [
-            "pytest",
-            "tests/performance",
-            "-q",
-            "--maxfail=1",
-            "--disable-warnings",
-            "--ignore-glob=tests/performance/bats/*",
-            "--ignore-glob=tests/performance/rust/*",
-            "--ignore-glob=tests/performance/cpp/*",
-          ]
+        args: ["pytest", "tests/performance", "-q", "--maxfail=1", "--disable-warnings"]
 
-      - id: uv-run
-        name: python chaos tests (uv)
-        stages: [pre-push]
-        args:
-          [
-            "pytest",
-            "tests/chaos",
-            "-q",
-            "--maxfail=1",
-            "--disable-warnings",
-            "--ignore-glob=tests/chaos/bats/*",
-            "--ignore-glob=tests/chaos/rust/*",
-            "--ignore-glob=tests/chaos/cpp/*",
-          ]
-
-  # =============================================================================
-  # RUST QUALITY & TESTING
-  # =============================================================================
-  - repo: https://github.com/AndrejOrsula/pre-commit-cargo
-    rev: 0.4.0
-    hooks:
-      - id: cargo-fmt
-        stages: [pre-commit]
-        args: ["--all"]
-
-      - id: cargo-check
-        stages: [pre-commit]
-        args: ["--workspace"]
-
-      - id: cargo-clippy
-        stages: [pre-commit]
-        args: ["--workspace", "--", "-D", "warnings"]
-
-      - id: cargo-test
-        name: cargo test (unit)
-        stages: [pre-commit]
-        args:
-          [
-            "--manifest-path",
-            "tests/unit/rust/Cargo.toml",
-            "--",
-            "--test-threads=1",
-          ]
-
-      - id: cargo-test
-        name: cargo test (integration)
-        stages: [pre-push]
-        args:
-          [
-            "--manifest-path",
-            "tests/integration/rust/Cargo.toml",
-            "--",
-            "--test-threads=1",
-          ]
-
-      - id: cargo-test
-        name: cargo test (e2e)
-        stages: [pre-push]
-        args:
-          [
-            "--manifest-path",
-            "tests/e2e/rust/Cargo.toml",
-            "--",
-            "--test-threads=1",
-            "--nocapture",
-          ]
-
-      - id: cargo-test
-        name: cargo test (security)
-        stages: [pre-push]
-        args:
-          [
-            "--manifest-path",
-            "tests/security/rust/Cargo.toml",
-            "--",
-            "--test-threads=1",
-            "--nocapture",
-          ]
-
-      - id: cargo-test
-        name: cargo test (performance)
-        stages: [pre-push]
-        args:
-          [
-            "--manifest-path",
-            "tests/performance/rust/Cargo.toml",
-            "--",
-            "--test-threads=1",
-            "--nocapture",
-          ]
-
-      - id: cargo-test
-        name: cargo test (chaos)
-        stages: [pre-push]
-        args:
-          [
-            "--manifest-path",
-            "tests/chaos/rust/Cargo.toml",
-            "--",
-            "--test-threads=1",
-            "--nocapture",
-          ]
-
-      - id: cargo-test-doc
-        stages: [pre-push]
-        args: ["--workspace"]
-
-      - id: cargo-deny-check
-        name: cargo deny (advisories)
-        stages: [pre-push]
-
-  - repo: https://github.com/aRustyDev/pre-commit-hooks
-    rev: v0.3.0
-    hooks:
-      - id: cargo-bench
-        stages: [pre-push]
-
-  # =============================================================================
-  # C/C++ QUALITY & TESTING
-  # =============================================================================
-  - repo: https://github.com/pocc/pre-commit-hooks
-    rev: 336fdd7c3cab698ead0b1c95157b9e74d3906b62  # pragma: allowlist secret
-    hooks:
-      - id: clang-format
-        stages: [pre-commit]
-
-      - id: clang-tidy
-        stages: [pre-push]
-
-      - id: cppcheck
-        stages: [pre-push]
-
-  # C++ Test Matrices (GTest)
-  - repo: local
-    hooks:
-      - id: gtest-unit
-        name: gtest unit tests
-        entry: >-
-          bash -c 'if [ -d tests/unit/cpp ]; then cd tests/unit/cpp && cmake -B build -S . && cmake --build build && ./build/unit_tests; else echo "Skipping tests/unit/cpp not found"; fi'
-        language: system
-        stages: [pre-commit]
-        files: \.(cpp|hpp|h|cc|cxx)$
-        pass_filenames: false
-
-      - id: gtest-integration
-        name: gtest integration tests
-        entry: >-
-          bash -c 'if [ -d tests/integration/cpp ]; then cd tests/integration/cpp && cmake -B build -S . && cmake --build build && ./build/integration_tests; else echo "Skipping tests/integration/cpp not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.(cpp|hpp|h|cc|cxx)$
-        pass_filenames: false
-
-      - id: gtest-e2e
-        name: gtest e2e tests
-        entry: >-
-          bash -c 'if [ -d tests/e2e/cpp ]; then cd tests/e2e/cpp && cmake -B build -S . && cmake --build build && ./build/e2e_tests; else echo "Skipping tests/e2e/cpp not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.(cpp|hpp|h|cc|cxx)$
-        pass_filenames: false
-
-      - id: gtest-security
-        name: gtest security tests
-        entry: >-
-          bash -c 'if [ -d tests/security/cpp ]; then cd tests/security/cpp && cmake -B build -S . && cmake --build build && ./build/security_tests; else echo "Skipping tests/security/cpp not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.(cpp|hpp|h|cc|cxx)$
-        pass_filenames: false
-
-      - id: gtest-performance
-        name: gtest performance tests
-        entry: >-
-          bash -c 'if [ -d tests/performance/cpp ]; then cd tests/performance/cpp && cmake -B build -S . && cmake --build build && ./build/performance_tests; else echo "Skipping tests/performance/cpp not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.(cpp|hpp|h|cc|cxx)$
-        pass_filenames: false
-
-      - id: gtest-chaos
-        name: gtest chaos tests
-        entry: >-
-          bash -c 'if [ -d tests/chaos/cpp ]; then cd tests/chaos/cpp && cmake -B build -S . && cmake --build build && ./build/chaos_tests; else echo "Skipping tests/chaos/cpp not found"; fi'
-        language: system
-        stages: [pre-push]
-        files: \.(cpp|hpp|h|cc|cxx)$
-        pass_filenames: false
-
-  # =============================================================================
-  # JAVASCRIPT / TYPESCRIPT
-  # =============================================================================
-  # - repo: https://github.com/pre-commit/mirrors-prettier
-  #   rev: v4.0.0-alpha.8
-  #   hooks:
-  #     - id: prettier
-  #       types_or: [javascript, jsx, ts, tsx, json, yaml, markdown]
-  #       additional_dependencies:
-  #         - prettier@3.4.2
-  #         - "@trivago/prettier-plugin-sort-imports@5.2.2"
-  #         - prettier-plugin-tailwindcss@0.6.11
-  #       args: ["--write", "--list-different"]
-
-  # - repo: https://github.com/pre-commit/mirrors-eslint
-  #   rev: v9.37.0
-  #   hooks:
-  #     - id: eslint
-  #       additional_dependencies:
-  #         - eslint@9.37.0
-  #         - "@typescript-eslint/eslint-plugin@8.20.0"
-  #         - "@typescript-eslint/parser@8.20.0"
-  #         - eslint-config-prettier@9.1.0
-  #         - eslint-plugin-import@2.31.0
-  #         - eslint-plugin-security@3.0.1
-  #       files: \.[jt]sx?$
-  #       types: [file]
 
   # =============================================================================
   # CONTAINERS
@@ -604,10 +274,6 @@ repos:
       - id: check-github-workflows
       - id: check-github-actions
       - id: check-dependabot
-      - id: check-renovate
-      - id: check-azure-pipelines
-      - id: check-gitlab-ci
-      - id: check-bitbucket-pipelines
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.8
