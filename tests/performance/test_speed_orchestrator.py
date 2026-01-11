@@ -5,6 +5,10 @@ Tests focus on:
 - Message history accumulation overhead
 - Usage tracking and snapshot operations
 - Iteration timing characteristics
+
+Live LLM Support:
+    Set RLM_LIVE_LLM=1 to run select tests with real LLM providers.
+    See perf_utils.py for configuration options.
 """
 
 from __future__ import annotations
@@ -21,6 +25,9 @@ from rlm.domain.services.rlm_orchestrator import (
 from .perf_utils import (
     BenchmarkEnvironment,
     BenchmarkLLM,
+    get_llm_for_benchmark,
+    get_llm_provider_info,
+    is_live_llm_enabled,
     perf_timer,
 )
 
@@ -259,3 +266,71 @@ def test_empty_code_blocks_no_overhead() -> None:
 
     assert result.response == "done"
     assert timing.elapsed_seconds < 0.05, f"No-code-block case too slow: {timing.elapsed_seconds:.3f}s"
+
+
+@pytest.mark.performance
+def test_orchestrator_single_iteration_timing() -> None:
+    """
+    Benchmark single-iteration orchestrator timing.
+
+    Supports live LLM mode via RLM_LIVE_LLM=1.
+    With mock: validates fast execution
+    With live: measures real-world latency
+    """
+    llm = get_llm_for_benchmark(include_final=True, final_after=1)
+    env = BenchmarkEnvironment()
+
+    orchestrator = RLMOrchestrator(llm=llm, environment=env)
+
+    provider_info = get_llm_provider_info()
+
+    with perf_timer() as timing:
+        result = orchestrator.completion(
+            prompt="Return FINAL(42)",
+            max_iterations=3,
+            max_depth=1,
+        )
+
+    assert result.response is not None
+
+    if is_live_llm_enabled():
+        # Live LLM: just verify it completes in reasonable time
+        print(f"\n[Live LLM: {provider_info['provider']}/{provider_info['model']}] "
+              f"Single iteration: {timing.elapsed_seconds:.2f}s")
+        assert timing.elapsed_seconds < 60, f"Live LLM too slow: {timing.elapsed_seconds:.2f}s"
+    else:
+        # Mock: should be very fast
+        assert timing.elapsed_seconds < 0.1, f"Mock orchestrator too slow: {timing.elapsed_seconds:.3f}s"
+
+
+@pytest.mark.performance
+def test_orchestrator_multi_iteration_benchmark() -> None:
+    """
+    Benchmark multi-iteration orchestrator performance.
+
+    Supports live LLM mode via RLM_LIVE_LLM=1.
+    """
+    llm = get_llm_for_benchmark(include_final=True, final_after=3)
+    env = BenchmarkEnvironment()
+
+    orchestrator = RLMOrchestrator(llm=llm, environment=env)
+
+    provider_info = get_llm_provider_info()
+
+    with perf_timer() as timing:
+        result = orchestrator.completion(
+            prompt="Think step by step, then return FINAL(done)",
+            max_iterations=5,
+        )
+
+    assert result.response is not None
+
+    if is_live_llm_enabled():
+        print(f"\n[Live LLM: {provider_info['provider']}/{provider_info['model']}] "
+              f"Multi-iteration ({3} iters): {timing.elapsed_seconds:.2f}s, "
+              f"avg: {timing.elapsed_seconds/3:.2f}s/iter")
+        # Live: allow more time but still bounded
+        assert timing.elapsed_seconds < 120, f"Live LLM multi-iter too slow: {timing.elapsed_seconds:.2f}s"
+    else:
+        # Mock: should complete quickly
+        assert timing.elapsed_seconds < 0.1, f"Mock multi-iter too slow: {timing.elapsed_seconds:.3f}s"

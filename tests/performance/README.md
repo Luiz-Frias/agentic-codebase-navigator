@@ -32,20 +32,10 @@ Tests that validate system behavior under load:
 - **Error Recovery**: Graceful degradation under failure conditions
 - **Timeout Behavior**: Cancellation and cleanup correctness
 
-### 4. Live LLM Benchmarks (`test_live_llm_performance.py`)
-
-Optional tests that hit real provider APIs (OpenAI, Anthropic):
-
-- **Single Completion Latency**: Baseline LLM call timing
-- **Usage Tracking Accuracy**: Verify token counting
-- **Orchestrator Timing**: Full stack with real LLM
-- **Async Performance**: Async completion benchmarks
-- **Provider Comparison**: Side-by-side latency comparison
-
 ## Running Performance Tests
 
 ```bash
-# Run all performance tests (excludes live LLM by default)
+# Run all performance tests (uses mock LLMs by default)
 pytest -m performance tests/performance/
 
 # Run with timing output
@@ -58,31 +48,37 @@ pytest -m performance tests/performance/test_memory_*.py
 pytest -m performance tests/performance/test_speed_orchestrator.py -v
 ```
 
-### Running Live LLM Tests
+### Live LLM Mode
 
-Live LLM tests are **opt-in** to avoid API costs. Enable with environment variables:
+Performance tests can optionally use real LLM providers instead of mocks.
+Enable with `RLM_LIVE_LLM=1`:
 
 ```bash
-# Enable live LLM tests
-export RLM_RUN_LIVE_LLM_TESTS=1
+# Enable live LLM mode
+export RLM_LIVE_LLM=1
 
-# Set API keys for providers you want to test
-export OPENAI_API_KEY=sk-...
-export ANTHROPIC_API_KEY=sk-ant-...
+# Set API key for your provider
+export OPENAI_API_KEY=sk-...          # For OpenAI (default)
+# OR
+export ANTHROPIC_API_KEY=sk-ant-...   # For Anthropic
 
-# Optional: specify models (defaults to cost-efficient models)
-export OPENAI_MODEL=gpt-4o-mini
-export ANTHROPIC_MODEL=claude-3-5-haiku-20241022
+# Optional: select provider and model
+export RLM_LIVE_LLM_PROVIDER=openai   # or "anthropic"
+export OPENAI_MODEL=gpt-4o-mini       # default
+export ANTHROPIC_MODEL=claude-3-5-haiku-20241022  # default
 
-# Run live LLM performance tests
-pytest -m "performance and live_llm" tests/performance/ -v -s
+# Run tests with live LLM
+pytest -m performance tests/performance/ -v -s
 
-# Run only OpenAI tests
-pytest -m "performance and live_llm" tests/performance/ -v -s -k openai
-
-# Run only Anthropic tests
-pytest -m "performance and live_llm" tests/performance/ -v -s -k anthropic
+# Run specific orchestrator benchmarks with live LLM
+pytest -m performance tests/performance/test_speed_orchestrator.py -v -s -k "single_iteration or multi_iteration"
 ```
+
+Tests that support live LLM mode will:
+- Use real API calls when `RLM_LIVE_LLM=1`
+- Use mock LLMs otherwise (fast, deterministic)
+- Adjust timing thresholds appropriately
+- Print provider/model info in output
 
 ## Identified Hotspots (from codebase analysis)
 

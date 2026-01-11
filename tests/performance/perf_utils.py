@@ -3,11 +3,23 @@ Performance testing utilities for RLM profiling.
 
 Provides fixtures, helpers, and data generators for benchmarking
 speed, memory, and reliability characteristics.
+
+Live LLM Support:
+    Set RLM_LIVE_LLM=1 to use real LLM providers instead of mocks.
+    Requires appropriate API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY).
+
+    Environment variables:
+        RLM_LIVE_LLM=1          Enable live LLM calls
+        RLM_LIVE_LLM_PROVIDER   Provider to use: "openai" (default) or "anthropic"
+        OPENAI_MODEL            OpenAI model (default: gpt-4o-mini)
+        ANTHROPIC_MODEL         Anthropic model (default: claude-3-5-haiku-20241022)
 """
 
 from __future__ import annotations
 
 import gc
+import importlib.util
+import os
 import sys
 import time
 import tracemalloc
@@ -357,3 +369,108 @@ def measure_object_size(obj: Any) -> int:
         return size
 
     return _size(obj)
+
+
+# =============================================================================
+# Live LLM Support
+# =============================================================================
+
+
+def is_live_llm_enabled() -> bool:
+    """Check if live LLM mode is enabled via RLM_LIVE_LLM=1."""
+    raw = (os.environ.get("RLM_LIVE_LLM") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def get_live_llm_provider() -> str:
+    """Get the configured live LLM provider (openai or anthropic)."""
+    return (os.environ.get("RLM_LIVE_LLM_PROVIDER") or "openai").strip().lower()
+
+
+def _create_openai_adapter() -> LLMPort:
+    """Create an OpenAI adapter for live testing."""
+    if importlib.util.find_spec("openai") is None:
+        raise RuntimeError("openai package not installed")
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY not set")
+
+    from rlm.adapters.llm.openai import OpenAIAdapter
+
+    model = os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
+    return OpenAIAdapter(
+        model=model,
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        base_url=os.environ.get("OPENAI_BASE_URL"),
+        default_request_kwargs={"temperature": 0, "max_tokens": 256},
+    )
+
+
+def _create_anthropic_adapter() -> LLMPort:
+    """Create an Anthropic adapter for live testing."""
+    if importlib.util.find_spec("anthropic") is None:
+        raise RuntimeError("anthropic package not installed")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    from rlm.adapters.llm.anthropic import AnthropicAdapter
+
+    model = os.environ.get("ANTHROPIC_MODEL") or "claude-3-5-haiku-20241022"
+    return AnthropicAdapter(
+        model=model,
+        api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        default_request_kwargs={"max_tokens": 256},
+    )
+
+
+def get_llm_for_benchmark(
+    *,
+    include_final: bool = False,
+    final_after: int = 5,
+    delay_seconds: float = 0.0,
+) -> LLMPort:
+    """
+    Get an LLM adapter for benchmarking.
+
+    If RLM_LIVE_LLM=1, returns a real provider adapter.
+    Otherwise, returns a BenchmarkLLM mock.
+
+    Args:
+        include_final: For mock LLM, whether to include FINAL() after N iterations
+        final_after: For mock LLM, which iteration to include FINAL()
+        delay_seconds: For mock LLM, simulated delay per call
+
+    Returns:
+        LLMPort: Either a live adapter or BenchmarkLLM mock
+    """
+    if is_live_llm_enabled():
+        provider = get_live_llm_provider()
+        if provider == "anthropic":
+            return _create_anthropic_adapter()
+        else:
+            return _create_openai_adapter()
+
+    return BenchmarkLLM(
+        include_final=include_final,
+        final_after=final_after,
+        delay_seconds=delay_seconds,
+    )
+
+
+def get_llm_provider_info() -> dict[str, Any]:
+    """
+    Get information about the current LLM configuration.
+
+    Returns dict with:
+        - live: bool - whether using live LLM
+        - provider: str - provider name or "mock"
+        - model: str - model name
+    """
+    if is_live_llm_enabled():
+        provider = get_live_llm_provider()
+        if provider == "anthropic":
+            model = os.environ.get("ANTHROPIC_MODEL") or "claude-3-5-haiku-20241022"
+        else:
+            model = os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
+        return {"live": True, "provider": provider, "model": model}
+
+    return {"live": False, "provider": "mock", "model": "benchmark-llm"}
