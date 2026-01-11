@@ -61,6 +61,7 @@ markers = [
     "chaos: chaos or resilience tests",
     "performance: performance or load tests",
     "docker: requires a working local Docker daemon",
+    "live_llm: opt-in tests that call real provider APIs (requires RLM_RUN_LIVE_LLM_TESTS=1)",
 ]
 
 [tool.ruff]
