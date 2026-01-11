@@ -132,10 +132,7 @@ from rlm import create_rlm
 from rlm.adapters.llm import MockLLMAdapter
 
 # Root model generates code that calls a sub-model
-root_script = """```repl
-response = llm_query("What is the capital of France?", model="sub")
-```
-FINAL_VAR('response')"""
+root_script = """```repl\nresponse = llm_query("What is the capital of France?", model="sub")```\nFINAL_VAR('response')"""
 
 rlm = create_rlm(
     MockLLMAdapter(model="root", script=[root_script]),
@@ -275,29 +272,48 @@ uv sync --group dev --group test
 
 ```bash
 # Unit tests (fast, hermetic)
-uv run pytest -m unit
+uv run --group test pytest -m unit
 
-# Integration tests (may use Docker)
-uv run pytest -m integration
+# Integration tests (multi-component boundaries)
+uv run --group test pytest -m integration
+
+# End-to-end tests (public API flows). Docker-marked tests auto-skip if Docker isn't available.
+uv run --group test pytest -m e2e
+
+# Packaging smoke tests (build/install/import/CLI)
+uv run --group test pytest -m packaging
+
+# Performance/regression tests (opt-in)
+uv run --group test pytest -m performance
 
 # All tests
-uv run pytest
+uv run --group test pytest
 
 # With coverage
-uv run pytest --cov=rlm --cov-report=term-missing
+uv run --group test pytest --cov=rlm --cov-report=term-missing
+```
+
+#### Live provider smoke tests (opt-in)
+
+These tests are skipped by default to avoid accidental spend. Enable with `RLM_RUN_LIVE_LLM_TESTS=1`
+and the relevant API key:
+
+```bash
+RLM_RUN_LIVE_LLM_TESTS=1 OPENAI_API_KEY=... uv run --group test pytest -m "integration and live_llm"
+RLM_RUN_LIVE_LLM_TESTS=1 ANTHROPIC_API_KEY=... uv run --group test pytest -m "integration and live_llm"
 ```
 
 ### Code Quality
 
 ```bash
 # Format
-uv run ruff format src tests
+uv run --group dev ruff format src tests
 
 # Lint
-uv run ruff check src tests --fix
+uv run --group dev ruff check src tests --fix
 
 # Type check
-uv run ty check src/rlm
+uv run --group dev ty check src/rlm
 ```
 
 ## API Reference
