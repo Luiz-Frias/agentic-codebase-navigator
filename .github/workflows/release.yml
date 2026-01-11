@@ -4,11 +4,15 @@
 #   - Push to release/v* branches (for release candidates)
 #   - Push of v*.*.* tags (for final releases)
 #
-# Publishing options:
-#   1. Trusted Publishing (recommended): Configure at pypi.org/manage/project/.../settings/publishing/
-#   2. API Token: Set PYPI_API_TOKEN secret in repository settings
+# Publishing: Uses PyPI Trusted Publishing (OIDC) - no API tokens needed.
+# Configure at: https://pypi.org/manage/account/publishing/
 #
-# For TestPyPI, set TEST_PYPI_API_TOKEN secret and use the testpypi job.
+# Required setup:
+#   1. Create "pypi" environment in GitHub repo settings
+#   2. Add pending publisher on PyPI with:
+#      - Repository: Luiz-Frias/agentic-codebase-navigator
+#      - Workflow: release.yml
+#      - Environment: pypi
 
 name: Release
 
@@ -114,10 +118,8 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Publish to TestPyPI
-        run: uv publish --index-url https://test.pypi.org/simple/ dist/*
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      - name: Publish to TestPyPI (Trusted Publishing)
+        run: uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always dist/*
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Publish to PyPI (final releases only)
@@ -142,10 +144,8 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Publish to PyPI
-        run: uv publish dist/*
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+      - name: Publish to PyPI (Trusted Publishing)
+        run: uv publish --trusted-publishing always dist/*
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Create GitHub Release (after PyPI publish succeeds)
