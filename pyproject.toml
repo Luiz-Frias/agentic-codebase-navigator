@@ -88,6 +88,7 @@ markers = [
     "packaging: packaging smoke tests (build/install/import)",
     "chaos: chaos or resilience tests",
     "performance: performance or load tests",
+    "benchmark: benchmark tests (timing/throughput/memory profiling)",
     "docker: requires a working local Docker daemon",
     "live_llm: opt-in tests that call real provider APIs (requires RLM_RUN_LIVE_LLM_TESTS=1)",
 ]

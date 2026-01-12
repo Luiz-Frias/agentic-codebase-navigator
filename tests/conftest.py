@@ -46,6 +46,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "packaging: packaging smoke tests (build/install/import)")
     config.addinivalue_line("markers", "chaos: chaos or resilience tests")
     config.addinivalue_line("markers", "performance: performance or load tests")
+    config.addinivalue_line("markers", "benchmark: benchmark tests (timing/throughput/memory)")
     config.addinivalue_line("markers", "docker: requires a working local Docker daemon")
     config.addinivalue_line(
         "markers",
@@ -66,6 +67,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         "packaging",
         "chaos",
         "performance",
+        "benchmark",
     }
     tests_root = Path(__file__).resolve().parent
     errors: list[str] = []
