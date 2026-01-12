@@ -48,3 +48,6 @@ references/
 .coverage
 coverage.xml
 htmlcov/
+
+# Benchmarks
+.benchmarks/

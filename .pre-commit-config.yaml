@@ -242,10 +242,14 @@ repos:
         stages: [pre-push]
         args: ["pytest", "tests/e2e", "-q", "--maxfail=1", "--disable-warnings"]
 
-      - id: uv-run
-        name: python performance tests (uv)
+  - repo: local
+    hooks:
+      - id: pytest-performance-benchmarks
+        name: python performance benchmarks (uv)
         stages: [pre-push]
-        args: ["pytest", "tests/performance", "-q", "--maxfail=1", "--disable-warnings"]
+        entry: bash -c 'mkdir -p .benchmarks && uv run --group test pytest tests/performance -q --maxfail=1 --disable-warnings --benchmark-json=.benchmarks/pre-push.json'
+        language: system
+        pass_filenames: false
 
 
   # =============================================================================
