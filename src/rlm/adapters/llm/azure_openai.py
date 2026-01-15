@@ -8,10 +8,14 @@ from typing import Any
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
     UsageTracker,
+    extract_finish_reason_openai,
     extract_openai_style_token_usage,
     extract_text_from_chat_response,
+    extract_tool_calls_openai,
     prompt_to_messages,
     safe_provider_error_message,
+    tool_choice_to_openai_format,
+    tool_definition_to_openai_format,
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
@@ -58,6 +62,11 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
         # For routing: treat the Azure deployment name as the "model".
         return self.deployment
 
+    @property
+    def supports_tools(self) -> bool:
+        """Azure OpenAI adapter supports native function calling (same as OpenAI)."""
+        return True
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         openai = _require_openai()
         client = self._get_client(openai)
@@ -65,16 +74,34 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
         deployment = request.model or self.deployment
         messages = prompt_to_messages(request.prompt)
 
+        # Build API kwargs with tools if provided
+        api_kwargs: dict[str, Any] = {**self.default_request_kwargs}
+        if request.tools:
+            api_kwargs["tools"] = [tool_definition_to_openai_format(t) for t in request.tools]
+        if request.tool_choice is not None:
+            api_kwargs["tool_choice"] = tool_choice_to_openai_format(request.tool_choice)
+
         start = time.perf_counter()
         try:
-            resp = client.chat.completions.create(
-                model=deployment, messages=messages, **self.default_request_kwargs
-            )
+            resp = client.chat.completions.create(model=deployment, messages=messages, **api_kwargs)
         except Exception as e:  # noqa: BLE001 - provider boundary
             raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
         end = time.perf_counter()
 
-        text = extract_text_from_chat_response(resp)
+        # Extract tool calls (may be None if no tools called)
+        tool_calls = extract_tool_calls_openai(resp)
+        finish_reason = extract_finish_reason_openai(resp)
+
+        # Extract text response (may be empty if tool_calls present)
+        try:
+            text = extract_text_from_chat_response(resp)
+        except Exception:  # noqa: BLE001
+            # Response may have no text content when tool_calls are present
+            if tool_calls:
+                text = ""
+            else:
+                raise LLMError("Azure OpenAI response invalid") from None
+
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
         last = self._usage_tracker.record(
             deployment, input_tokens=in_tokens, output_tokens=out_tokens
@@ -88,6 +115,8 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
             response=text,
             usage_summary=last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
@@ -97,16 +126,36 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
         deployment = request.model or self.deployment
         messages = prompt_to_messages(request.prompt)
 
+        # Build API kwargs with tools if provided
+        api_kwargs: dict[str, Any] = {**self.default_request_kwargs}
+        if request.tools:
+            api_kwargs["tools"] = [tool_definition_to_openai_format(t) for t in request.tools]
+        if request.tool_choice is not None:
+            api_kwargs["tool_choice"] = tool_choice_to_openai_format(request.tool_choice)
+
         start = time.perf_counter()
         try:
             resp = await client.chat.completions.create(
-                model=deployment, messages=messages, **self.default_request_kwargs
+                model=deployment, messages=messages, **api_kwargs
             )
         except Exception as e:  # noqa: BLE001 - provider boundary
             raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
         end = time.perf_counter()
 
-        text = extract_text_from_chat_response(resp)
+        # Extract tool calls (may be None if no tools called)
+        tool_calls = extract_tool_calls_openai(resp)
+        finish_reason = extract_finish_reason_openai(resp)
+
+        # Extract text response (may be empty if tool_calls present)
+        try:
+            text = extract_text_from_chat_response(resp)
+        except Exception:  # noqa: BLE001
+            # Response may have no text content when tool_calls are present
+            if tool_calls:
+                text = ""
+            else:
+                raise LLMError("Azure OpenAI response invalid") from None
+
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
         last = self._usage_tracker.record(
             deployment, input_tokens=in_tokens, output_tokens=out_tokens
@@ -120,6 +169,8 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
             response=text,
             usage_summary=last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     def get_usage_summary(self) -> UsageSummary:

@@ -9,8 +9,11 @@ from typing import Any
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
     UsageTracker,
+    extract_finish_reason_anthropic,
+    extract_tool_calls_anthropic,
     prompt_to_messages,
     safe_provider_error_message,
+    tool_definition_to_anthropic_format,
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
@@ -123,6 +126,11 @@ class AnthropicAdapter(BaseLLMAdapter):
     def model_name(self) -> str:
         return self.model
 
+    @property
+    def supports_tools(self) -> bool:
+        """Anthropic adapter supports native tool use."""
+        return True
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         anthropic = _require_anthropic()
         client = self._get_client(anthropic)
@@ -132,6 +140,10 @@ class AnthropicAdapter(BaseLLMAdapter):
 
         kwargs = dict(self.default_request_kwargs)
         max_tokens = int(kwargs.pop("max_tokens", 1024))
+
+        # Add tools if provided
+        if request.tools:
+            kwargs["tools"] = [tool_definition_to_anthropic_format(t) for t in request.tools]
 
         start = time.perf_counter()
         try:
@@ -151,7 +163,20 @@ class AnthropicAdapter(BaseLLMAdapter):
             raise LLMError(safe_provider_error_message("Anthropic", e)) from None
         end = time.perf_counter()
 
-        text = _extract_text(resp)
+        # Extract tool calls (may be None if no tools called)
+        tool_calls = extract_tool_calls_anthropic(resp)
+        finish_reason = extract_finish_reason_anthropic(resp)
+
+        # Extract text response (may be empty if tool_calls present)
+        try:
+            text = _extract_text(resp)
+        except ValueError:
+            # Response may have no text content when tool_calls are present
+            if tool_calls:
+                text = ""
+            else:
+                raise
+
         in_tokens, out_tokens = _extract_usage_tokens(resp)
         last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
         # Use the per-call usage returned by `record()` (race-free under concurrency).
@@ -163,6 +188,8 @@ class AnthropicAdapter(BaseLLMAdapter):
             response=text,
             usage_summary=last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
@@ -181,6 +208,10 @@ class AnthropicAdapter(BaseLLMAdapter):
         kwargs = dict(self.default_request_kwargs)
         max_tokens = int(kwargs.pop("max_tokens", 1024))
 
+        # Add tools if provided
+        if request.tools:
+            kwargs["tools"] = [tool_definition_to_anthropic_format(t) for t in request.tools]
+
         start = time.perf_counter()
         try:
             if system is not None:
@@ -199,7 +230,20 @@ class AnthropicAdapter(BaseLLMAdapter):
             raise LLMError(safe_provider_error_message("Anthropic", e)) from None
         end = time.perf_counter()
 
-        text = _extract_text(resp)
+        # Extract tool calls (may be None if no tools called)
+        tool_calls = extract_tool_calls_anthropic(resp)
+        finish_reason = extract_finish_reason_anthropic(resp)
+
+        # Extract text response (may be empty if tool_calls present)
+        try:
+            text = _extract_text(resp)
+        except ValueError:
+            # Response may have no text content when tool_calls are present
+            if tool_calls:
+                text = ""
+            else:
+                raise
+
         in_tokens, out_tokens = _extract_usage_tokens(resp)
         last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
         # Use the per-call usage returned by `record()` (race-free under concurrency).
@@ -211,6 +255,8 @@ class AnthropicAdapter(BaseLLMAdapter):
             response=text,
             usage_summary=last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     def get_usage_summary(self) -> UsageSummary:

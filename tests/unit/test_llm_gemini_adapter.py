@@ -159,3 +159,238 @@ async def test_gemini_adapter_acomplete_runs_sync_path_in_thread(
 
     cc = await GeminiAdapter(model="m").acomplete(LLMRequest(prompt="hi"))
     assert cc.response == "ok"
+
+
+# =============================================================================
+# Phase 2: Tool Calling Tests
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_gemini_adapter_supports_tools_property() -> None:
+    """GeminiAdapter should report supports_tools=True."""
+    adapter = GeminiAdapter(model="gemini-pro")
+    assert adapter.supports_tools is True
+
+
+@pytest.mark.unit
+def test_gemini_adapter_complete_with_tools_passes_to_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GeminiAdapter should pass tools to the API in Gemini format."""
+    from rlm.domain.agent_ports import ToolDefinition
+
+    captured_kwargs: list[dict] = []
+
+    class _Models:
+        def generate_content(self, **kwargs):
+            captured_kwargs.append(kwargs)
+            return {
+                "text": "Hello!",
+                "usage_metadata": {"prompt_token_count": 10, "candidates_token_count": 5},
+            }
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self.models = _Models()
+
+    dummy_genai = SimpleNamespace(Client=Client)
+    monkeypatch.setattr(gemini_mod, "_require_google_genai", lambda: dummy_genai)
+
+    tools: list[ToolDefinition] = [
+        {
+            "name": "get_weather",
+            "description": "Get weather for a city",
+            "parameters": {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"],
+            },
+        }
+    ]
+
+    adapter = GeminiAdapter(model="gemini-pro")
+    cc = adapter.complete(LLMRequest(prompt="Weather in NYC?", tools=tools))
+
+    assert cc.response == "Hello!"
+
+    # Verify tools were passed to API in Gemini format (wrapped in function_declarations)
+    assert len(captured_kwargs) == 1
+    api_call = captured_kwargs[0]
+    assert "tools" in api_call
+    assert len(api_call["tools"]) == 1
+    assert "function_declarations" in api_call["tools"][0]
+    func_decls = api_call["tools"][0]["function_declarations"]
+    assert len(func_decls) == 1
+    assert func_decls[0] == {
+        "name": "get_weather",
+        "description": "Get weather for a city",
+        "parameters": {
+            "type": "object",
+            "properties": {"city": {"type": "string"}},
+            "required": ["city"],
+        },
+    }
+
+
+@pytest.mark.unit
+def test_gemini_adapter_complete_extracts_function_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GeminiAdapter should extract functionCall parts from response."""
+
+    class _Models:
+        def generate_content(self, **_kwargs):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "function_call": {
+                                        "name": "get_weather",
+                                        "args": {"city": "NYC"},
+                                    }
+                                }
+                            ]
+                        },
+                        "finish_reason": "STOP",
+                    }
+                ],
+                "usage_metadata": {"prompt_token_count": 10, "candidates_token_count": 5},
+            }
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self.models = _Models()
+
+    dummy_genai = SimpleNamespace(Client=Client)
+    monkeypatch.setattr(gemini_mod, "_require_google_genai", lambda: dummy_genai)
+
+    adapter = GeminiAdapter(model="gemini-pro")
+    cc = adapter.complete(LLMRequest(prompt="Weather?"))
+
+    assert cc.finish_reason == "stop"  # "STOP" normalized to "stop"
+    assert cc.tool_calls is not None
+    assert len(cc.tool_calls) == 1
+    # Gemini doesn't provide IDs, so we generate them
+    assert cc.tool_calls[0]["id"].startswith("gemini_call_")
+    assert cc.tool_calls[0]["name"] == "get_weather"
+    assert cc.tool_calls[0]["arguments"] == {"city": "NYC"}
+    assert cc.response == ""  # Empty when tool_calls present
+
+
+@pytest.mark.unit
+def test_gemini_adapter_complete_multiple_function_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GeminiAdapter should handle multiple function calls in response."""
+
+    class _Models:
+        def generate_content(self, **_kwargs):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"function_call": {"name": "get_weather", "args": {"city": "NYC"}}},
+                                {"function_call": {"name": "get_time", "args": {"tz": "EST"}}},
+                            ]
+                        },
+                        "finish_reason": "STOP",
+                    }
+                ],
+                "usage_metadata": {},
+            }
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self.models = _Models()
+
+    dummy_genai = SimpleNamespace(Client=Client)
+    monkeypatch.setattr(gemini_mod, "_require_google_genai", lambda: dummy_genai)
+
+    adapter = GeminiAdapter(model="gemini-pro")
+    cc = adapter.complete(LLMRequest(prompt="Weather and time?"))
+
+    assert cc.tool_calls is not None
+    assert len(cc.tool_calls) == 2
+    assert cc.tool_calls[0]["name"] == "get_weather"
+    assert cc.tool_calls[1]["name"] == "get_time"
+
+
+@pytest.mark.unit
+def test_gemini_adapter_complete_mixed_text_and_function_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GeminiAdapter should handle mixed text and function call parts."""
+
+    class _Models:
+        def generate_content(self, **_kwargs):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"text": "Let me check that for you."},
+                                {"function_call": {"name": "search", "args": {"q": "python"}}},
+                            ]
+                        },
+                        "finish_reason": "STOP",
+                    }
+                ],
+                "usage_metadata": {},
+            }
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self.models = _Models()
+
+    dummy_genai = SimpleNamespace(Client=Client)
+    monkeypatch.setattr(gemini_mod, "_require_google_genai", lambda: dummy_genai)
+
+    adapter = GeminiAdapter(model="gemini-pro")
+    cc = adapter.complete(LLMRequest(prompt="Search python"))
+
+    assert cc.tool_calls is not None
+    assert len(cc.tool_calls) == 1
+    assert cc.tool_calls[0]["name"] == "search"
+    # Text should still be extracted
+    assert cc.response == "Let me check that for you."
+
+
+@pytest.mark.unit
+async def test_gemini_adapter_acomplete_with_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GeminiAdapter async path should handle tools (via sync-to-thread)."""
+    from rlm.domain.agent_ports import ToolDefinition
+
+    captured_kwargs: list[dict] = []
+
+    class _Models:
+        def generate_content(self, **kwargs):
+            captured_kwargs.append(kwargs)
+            return {"text": "Async response!"}
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self.models = _Models()
+
+    dummy_genai = SimpleNamespace(Client=Client)
+    monkeypatch.setattr(gemini_mod, "_require_google_genai", lambda: dummy_genai)
+
+    tools: list[ToolDefinition] = [
+        {
+            "name": "search",
+            "description": "Search the web",
+            "parameters": {"type": "object", "properties": {}},
+        }
+    ]
+
+    adapter = GeminiAdapter(model="gemini-pro")
+    cc = await adapter.acomplete(LLMRequest(prompt="Search", tools=tools))
+
+    assert cc.response == "Async response!"
+    assert len(captured_kwargs) == 1
+    assert "tools" in captured_kwargs[0]

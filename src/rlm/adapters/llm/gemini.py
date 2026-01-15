@@ -9,8 +9,11 @@ from typing import Any
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
     UsageTracker,
+    extract_finish_reason_gemini,
+    extract_tool_calls_gemini,
     prompt_to_text,
     safe_provider_error_message,
+    tool_definition_to_gemini_format,
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
@@ -109,6 +112,11 @@ class GeminiAdapter(BaseLLMAdapter):
     def model_name(self) -> str:
         return self.model
 
+    @property
+    def supports_tools(self) -> bool:
+        """Gemini adapter supports native function calling."""
+        return True
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         genai = _require_google_genai()
         client = self._get_client(genai)
@@ -116,16 +124,34 @@ class GeminiAdapter(BaseLLMAdapter):
         model = request.model or self.model
         contents = prompt_to_text(request.prompt)
 
+        # Build kwargs with tools if provided
+        api_kwargs: dict[str, Any] = dict(self.default_request_kwargs)
+        if request.tools:
+            # Gemini expects tools wrapped in a Tool object with function_declarations
+            function_declarations = [tool_definition_to_gemini_format(t) for t in request.tools]
+            api_kwargs["tools"] = [{"function_declarations": function_declarations}]
+
         start = time.perf_counter()
         try:
-            resp = client.models.generate_content(
-                model=model, contents=contents, **self.default_request_kwargs
-            )
+            resp = client.models.generate_content(model=model, contents=contents, **api_kwargs)
         except Exception as e:  # noqa: BLE001 - provider boundary
             raise LLMError(safe_provider_error_message("Gemini", e)) from None
         end = time.perf_counter()
 
-        text = _extract_text(resp)
+        # Extract tool calls (may be None if no tools called)
+        tool_calls = extract_tool_calls_gemini(resp)
+        finish_reason = extract_finish_reason_gemini(resp)
+
+        # Extract text response (may be empty if tool_calls present)
+        try:
+            text = _extract_text(resp)
+        except ValueError:
+            # Response may have no text content when tool_calls are present
+            if tool_calls:
+                text = ""
+            else:
+                raise
+
         in_tokens, out_tokens = _extract_usage_tokens(resp)
         last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
         # Use the per-call usage returned by `record()` (race-free under concurrency).
@@ -137,6 +163,8 @@ class GeminiAdapter(BaseLLMAdapter):
             response=text,
             usage_summary=last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
