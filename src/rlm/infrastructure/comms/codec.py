@@ -8,12 +8,14 @@ from typing import Any
 from rlm.domain.policies.timeouts import DEFAULT_BROKER_CLIENT_TIMEOUT_S
 
 DEFAULT_MAX_MESSAGE_BYTES = 10_000_000  # 10MB safety cap
+_FRAME_LEN_STRUCT = struct.Struct(">I")
+_JSON_ENCODER = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
 
 
 def encode_frame(message: dict[str, Any], /) -> bytes:
     """Encode a JSON object into a length-prefixed frame."""
-    payload = json.dumps(message, ensure_ascii=False).encode("utf-8")
-    return struct.pack(">I", len(payload)) + payload
+    payload = _JSON_ENCODER.encode(message).encode("utf-8")
+    return _FRAME_LEN_STRUCT.pack(len(payload)) + payload
 
 
 def _recv_exact(sock: socket.socket, n: int, /) -> bytes:
@@ -48,7 +50,7 @@ def recv_frame(
             return None
         raw_len.extend(chunk)
 
-    length = struct.unpack(">I", raw_len)[0]
+    length = _FRAME_LEN_STRUCT.unpack(raw_len)[0]
     if length > max_message_bytes:
         raise ValueError(f"Frame too large: {length} bytes (max {max_message_bytes})")
 

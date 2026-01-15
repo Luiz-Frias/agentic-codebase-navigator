@@ -60,6 +60,14 @@ class _FakeAsyncClient:
 
 
 @pytest.mark.unit
+def test_anthropic_adapter_reports_tool_prompt_format() -> None:
+    from rlm.adapters.llm.anthropic import AnthropicAdapter
+
+    adapter = AnthropicAdapter(model="claude-test")
+    assert adapter.tool_prompt_format == "anthropic"
+
+
+@pytest.mark.unit
 def test_anthropic_adapter_complete_maps_prompt_and_extracts_text_and_usage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -173,6 +181,35 @@ def test_anthropic_adapter_helpers_and_validations() -> None:
         {"role": "user", "content": "u"},
         {"role": "assistant", "content": "a"},
     ]
+
+    tool_msgs, tool_system = _messages_and_system(
+        [
+            {"role": "system", "content": "sys"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": '{"city": "Boston"}'},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": '{"temp": 72}'},
+        ]
+    )
+    assert tool_system == "sys"
+    assert tool_msgs[0]["role"] == "assistant"
+    tool_use = tool_msgs[0]["content"][0]
+    assert tool_use["type"] == "tool_use"
+    assert tool_use["id"] == "call_1"
+    assert tool_use["name"] == "get_weather"
+    assert tool_use["input"] == {"city": "Boston"}
+    assert tool_msgs[1]["role"] == "user"
+    tool_result = tool_msgs[1]["content"][0]
+    assert tool_result["type"] == "tool_result"
+    assert tool_result["tool_use_id"] == "call_1"
 
     assert _extract_text({"content": [{"text": "hi"}]}) == "hi"
 

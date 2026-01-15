@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rlm.api.registries import (
     DefaultEnvironmentRegistry,
@@ -12,9 +12,12 @@ from rlm.api.registries import (
     LoggerRegistry,
 )
 from rlm.api.rlm import RLM
-from rlm.application.config import EnvironmentName, RLMConfig
+from rlm.application.config import AgentModeName, EnvironmentName, RLMConfig
 from rlm.application.use_cases.run_completion import EnvironmentFactory
 from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
+
+if TYPE_CHECKING:
+    from rlm.domain.agent_ports import ToolPort
 
 
 def create_rlm(
@@ -30,8 +33,31 @@ def create_rlm(
     environment_factory: EnvironmentFactory | None = None,
     logger: LoggerPort | None = None,
     system_prompt: str | None = None,
+    # Agent capability extensions
+    tools: list[ToolPort | Callable[..., Any]] | None = None,
+    agent_mode: AgentModeName = "code",
 ) -> RLM:
-    """Convenience factory for the public `RLM` facade."""
+    """
+    Convenience factory for the public `RLM` facade.
+
+    Args:
+        llm: Primary LLM adapter.
+        other_llms: Additional LLM adapters for multi-backend routing.
+        environment: Execution environment name.
+        environment_kwargs: Environment-specific configuration.
+        max_depth: Maximum recursion depth for nested completions.
+        max_iterations: Maximum iterations in code execution loop.
+        verbose: Enable verbose logging.
+        broker_factory: Custom broker factory for LLM routing.
+        environment_factory: Custom environment factory.
+        logger: Logger port for iteration logging.
+        system_prompt: Custom system prompt override.
+        tools: List of tools (ToolPort or callable) for function calling.
+        agent_mode: Either "code" (default) or "tools" for function calling.
+
+    Returns:
+        Configured RLM facade instance.
+    """
     return RLM(
         llm,
         other_llms=other_llms,
@@ -44,6 +70,8 @@ def create_rlm(
         environment_factory=environment_factory,
         logger=logger,
         system_prompt=system_prompt,
+        tools=tools,
+        agent_mode=agent_mode,
     )
 
 
@@ -54,13 +82,27 @@ def create_rlm_from_config(
     llm_registry: LLMRegistry | None = None,
     environment_registry: EnvironmentRegistry | None = None,
     logger_registry: LoggerRegistry | None = None,
+    # Runtime tool injection (tools cannot be serialized to config)
+    tools: list[ToolPort | Callable[..., Any]] | None = None,
 ) -> RLM:
     """
     Construct an `RLM` from config.
 
-    Phase 2 allows optionally providing an `llm_registry` to build an `LLMPort`
-    from `config.llm`. If neither `llm` nor `llm_registry` is provided, we fail
-    fast with a helpful message.
+    Args:
+        config: RLM configuration object.
+        llm: Optional pre-built LLM adapter (overrides config.llm).
+        llm_registry: Registry for building LLM adapters from config.
+        environment_registry: Registry for building environment factories.
+        logger_registry: Registry for building loggers.
+        tools: List of tools for function calling (runtime injection, since
+            tools are Python callables and cannot be serialized to config).
+
+    Returns:
+        Configured RLM facade instance.
+
+    Note:
+        The `agent_mode` is read from config. If agent_mode="tools", you must
+        provide tools via the `tools` parameter.
     """
     if llm is None:
         if llm_registry is None:
@@ -92,4 +134,6 @@ def create_rlm_from_config(
         verbose=config.verbose,
         environment_factory=environment_factory,
         logger=logger,
+        tools=tools,
+        agent_mode=config.agent_mode,
     )

@@ -84,6 +84,120 @@ assert rlm.completion("hello").response == "pong"
 
 See `docs/logging.md` for JSONL logging configuration and schema.
 
+## Tool Calling Mode (Function Calling)
+
+RLM supports two agent modes:
+- `"code"` (default): LLM generates Python code in \`\`\`repl blocks for execution
+- `"tools"`: LLM uses function calling to invoke registered tools
+
+### Basic Tool Calling
+
+Define tools as Python callables with type hints and docstrings:
+
+```python
+from rlm.api import create_rlm
+from rlm.adapters.llm.openai import OpenAIAdapter
+
+def add(a: float, b: float) -> float:
+    """Add two numbers.
+
+    Args:
+        a: First number
+        b: Second number
+
+    Returns:
+        Sum of a and b
+    """
+    return a + b
+
+def get_weather(city: str, unit: str = "celsius") -> dict:
+    """Get weather for a city.
+
+    Args:
+        city: City name
+        unit: Temperature unit (celsius or fahrenheit)
+
+    Returns:
+        Weather data dictionary
+    """
+    # Your weather API logic here
+    return {"city": city, "temperature": 22, "unit": unit}
+
+rlm = create_rlm(
+    OpenAIAdapter(model="gpt-4"),
+    tools=[add, get_weather],
+    agent_mode="tools",
+)
+result = rlm.completion("What is 5 + 3?")
+print(result.response)  # "The sum of 5 and 3 is 8."
+```
+
+### Config-Based Tool Calling
+
+Use `create_rlm_from_config()` with tools injected at runtime:
+
+```python
+from rlm.api import create_rlm_from_config
+from rlm.application.config import RLMConfig, LLMConfig, EnvironmentConfig
+
+config = RLMConfig(
+    llm=LLMConfig(backend="openai", model_name="gpt-4"),
+    env=EnvironmentConfig(environment="local"),
+    agent_mode="tools",  # Enable tool calling mode
+)
+
+# Tools are Python callables - inject at runtime (not serializable to config)
+rlm = create_rlm_from_config(config, tools=[add, get_weather])
+result = rlm.completion("What's the weather in Tokyo?")
+```
+
+### Async Tool Calling
+
+Both sync and async paths support tool calling:
+
+```python
+# Sync
+result = rlm.completion("Calculate 7 times 8")
+
+# Async
+result = await rlm.acompletion("Calculate 7 times 8")
+```
+
+### Tool Execution Errors
+
+Errors from tool execution are captured and passed to the LLM for graceful handling:
+
+```python
+def divide(a: float, b: float) -> float:
+    """Divide two numbers."""
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+
+rlm = create_rlm(llm, tools=[divide], agent_mode="tools")
+# LLM will receive the error message and can respond appropriately
+result = rlm.completion("Divide 10 by 0")
+```
+
+### Multi-Turn Tool Calling
+
+The orchestrator handles multi-turn conversations where the LLM may call tools multiple times:
+
+```text
+User: "What is (4 * 5) + 10?"
+  → LLM calls multiply(4, 5) → returns 20
+  → LLM calls add(20, 10) → returns 30
+  → LLM returns "4 times 5 is 20, plus 10 equals 30."
+```
+
+### Provider Support
+
+Tool calling is supported across multiple LLM providers:
+- **OpenAI** / **Azure OpenAI**: Native function calling
+- **Anthropic**: Tool use via content blocks
+- **Gemini**: FunctionDeclaration format
+- **LiteLLM** / **Portkey**: Passthrough to underlying provider
+
 ## Migration notes
 
 The upstream snapshot remains available under `references/rlm/**` for reference only.

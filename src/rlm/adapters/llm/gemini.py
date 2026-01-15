@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass, field
 from threading import Lock
@@ -9,11 +10,16 @@ from typing import Any
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
     UsageTracker,
-    prompt_to_text,
+    extract_finish_reason_gemini,
+    extract_tool_calls_gemini,
+    prompt_to_messages,
     safe_provider_error_message,
+    tool_choice_to_gemini_function_calling_config,
+    tool_definition_to_gemini_format,
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
+from rlm.domain.types import Prompt
 
 
 def _require_google_genai() -> Any:
@@ -93,6 +99,84 @@ def _extract_usage_tokens(response: Any, /) -> tuple[int, int]:
     return (in_tokens, out_tokens)
 
 
+def _normalize_openai_tool_call(tc: dict[str, Any], /) -> tuple[str, dict[str, Any], str]:
+    tc_id = str(tc.get("id", "") or "")
+    if "function" in tc:
+        function = tc.get("function", {}) or {}
+        name = str(function.get("name", "") or "")
+        raw_args = function.get("arguments", {})
+    else:
+        name = str(tc.get("name", "") or "")
+        raw_args = tc.get("arguments", {})
+    args = raw_args
+    if isinstance(raw_args, str):
+        try:
+            args = json.loads(raw_args)
+        except Exception:
+            args = {}
+    if not isinstance(args, dict):
+        args = {"value": args}
+    return name, args, tc_id
+
+
+def _parse_tool_response_content(content: Any, /) -> Any:
+    if isinstance(content, str):
+        try:
+            return json.loads(content)
+        except Exception:
+            return {"content": content}
+    return content
+
+
+def _prompt_to_gemini_contents(prompt: Prompt, /) -> list[dict[str, Any]] | str:
+    if isinstance(prompt, str):
+        return prompt
+
+    messages = prompt_to_messages(prompt)
+    contents: list[dict[str, Any]] = []
+    call_id_to_name: dict[str, str] = {}
+
+    for message in messages:
+        role = str(message.get("role", "user"))
+
+        if role == "tool":
+            tool_call_id = str(message.get("tool_call_id", "") or "")
+            tool_name = call_id_to_name.get(tool_call_id, tool_call_id)
+            response_payload = _parse_tool_response_content(message.get("content"))
+            contents.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {"function_response": {"name": tool_name, "response": response_payload}}
+                    ],
+                }
+            )
+            continue
+
+        tool_calls = message.get("tool_calls")
+        if role == "assistant" and tool_calls:
+            parts: list[dict[str, Any]] = []
+            content = message.get("content")
+            if content:
+                parts.append({"text": str(content)})
+            for tc in tool_calls:
+                name, args, tc_id = _normalize_openai_tool_call(tc)
+                if tc_id:
+                    call_id_to_name[tc_id] = name
+                parts.append({"function_call": {"name": name, "args": args}})
+            contents.append({"role": "model", "parts": parts})
+            continue
+
+        content = message.get("content", "")
+        if role == "system":
+            content = f"System: {content}"
+
+        mapped_role = "model" if role == "assistant" else "user"
+        contents.append({"role": mapped_role, "parts": [{"text": str(content)}]})
+
+    return contents
+
+
 @dataclass
 class GeminiAdapter(BaseLLMAdapter):
     """Adapter skeleton: Google GenAI SDK -> domain `LLMPort`."""
@@ -109,23 +193,93 @@ class GeminiAdapter(BaseLLMAdapter):
     def model_name(self) -> str:
         return self.model
 
+    @property
+    def tool_prompt_format(self) -> str:
+        return "gemini"
+
+    @property
+    def supports_tools(self) -> bool:
+        """Gemini adapter supports native function calling."""
+        return True
+
+    def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:
+        genai = _require_google_genai()
+        client = self._get_client(genai)
+
+        model = request.model or self.model
+        contents = _prompt_to_gemini_contents(request.prompt)
+
+        api_kwargs: dict[str, Any] = dict(self.default_request_kwargs)
+        if request.tools:
+            function_declarations = [tool_definition_to_gemini_format(t) for t in request.tools]
+            api_kwargs["tools"] = [{"function_declarations": function_declarations}]
+
+        try:
+            resp = client.models.count_tokens(model=model, contents=contents, **api_kwargs)
+        except Exception:
+            try:
+                resp = client.models.count_tokens(model=model, contents=contents)
+            except Exception:
+                return None
+
+        total_tokens = None
+        try:
+            total_tokens = resp.total_tokens
+        except Exception:
+            if isinstance(resp, dict):
+                total_tokens = resp.get("total_tokens") or resp.get("totalTokens")
+        if total_tokens is None:
+            return None
+        try:
+            return int(total_tokens)
+        except Exception:
+            return None
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         genai = _require_google_genai()
         client = self._get_client(genai)
 
         model = request.model or self.model
-        contents = prompt_to_text(request.prompt)
+        contents = _prompt_to_gemini_contents(request.prompt)
+
+        # Build kwargs with tools if provided
+        api_kwargs: dict[str, Any] = dict(self.default_request_kwargs)
+        if request.tools:
+            # Gemini expects tools wrapped in a Tool object with function_declarations
+            function_declarations = [tool_definition_to_gemini_format(t) for t in request.tools]
+            api_kwargs["tools"] = [{"function_declarations": function_declarations}]
+        if request.tool_choice is not None:
+            function_calling_config = tool_choice_to_gemini_function_calling_config(
+                request.tool_choice
+            )
+            if function_calling_config is not None:
+                tool_config = api_kwargs.get("tool_config")
+                if not isinstance(tool_config, dict):
+                    tool_config = {}
+                tool_config["function_calling_config"] = function_calling_config
+                api_kwargs["tool_config"] = tool_config
 
         start = time.perf_counter()
         try:
-            resp = client.models.generate_content(
-                model=model, contents=contents, **self.default_request_kwargs
-            )
+            resp = client.models.generate_content(model=model, contents=contents, **api_kwargs)
         except Exception as e:  # noqa: BLE001 - provider boundary
             raise LLMError(safe_provider_error_message("Gemini", e)) from None
         end = time.perf_counter()
 
-        text = _extract_text(resp)
+        # Extract tool calls (may be None if no tools called)
+        tool_calls = extract_tool_calls_gemini(resp)
+        finish_reason = extract_finish_reason_gemini(resp)
+
+        # Extract text response (may be empty if tool_calls present)
+        try:
+            text = _extract_text(resp)
+        except ValueError:
+            # Response may have no text content when tool_calls are present
+            if tool_calls:
+                text = ""
+            else:
+                raise
+
         in_tokens, out_tokens = _extract_usage_tokens(resp)
         last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
         # Use the per-call usage returned by `record()` (race-free under concurrency).
@@ -137,6 +291,8 @@ class GeminiAdapter(BaseLLMAdapter):
             response=text,
             usage_summary=last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
