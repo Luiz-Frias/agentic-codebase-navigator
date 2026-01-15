@@ -76,3 +76,115 @@ def test_mock_llm_adapter_script_can_raise_exceptions() -> None:
     llm = MockLLMAdapter(model="dummy", script=[ValueError("boom")])
     with pytest.raises(ValueError, match="boom"):
         llm.complete(LLMRequest(prompt="p"))
+
+
+# =============================================================================
+# Phase 2: Tool Calling Tests
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_mock_llm_adapter_supports_tools_property() -> None:
+    """MockLLMAdapter should report supports_tools=True."""
+    llm = MockLLMAdapter(model="mock-model")
+    assert llm.supports_tools is True
+
+
+@pytest.mark.unit
+def test_mock_llm_adapter_scripted_tool_calls() -> None:
+    """MockLLMAdapter should return tool_calls from scripted dict responses."""
+    from rlm.domain.agent_ports import ToolCallRequest
+
+    tool_calls: list[ToolCallRequest] = [
+        {"id": "call_123", "name": "get_weather", "arguments": {"city": "NYC"}},
+    ]
+    llm = MockLLMAdapter(
+        model="mock-model",
+        script=[
+            {"tool_calls": tool_calls},
+            "The weather is sunny",  # Final answer
+        ],
+    )
+
+    # First call should return tool calls
+    cc1 = llm.complete(LLMRequest(prompt="What's the weather?"))
+    assert cc1.tool_calls is not None
+    assert len(cc1.tool_calls) == 1
+    assert cc1.tool_calls[0]["name"] == "get_weather"
+    assert cc1.tool_calls[0]["arguments"] == {"city": "NYC"}
+    assert cc1.finish_reason == "tool_calls"
+    assert cc1.response == ""  # Empty when tool_calls present
+
+    # Second call should return text
+    cc2 = llm.complete(LLMRequest(prompt="[tool result: sunny]"))
+    assert cc2.tool_calls is None
+    assert cc2.response == "The weather is sunny"
+    assert cc2.finish_reason == "stop"
+
+
+@pytest.mark.unit
+def test_mock_llm_adapter_scripted_tool_calls_with_text() -> None:
+    """MockLLMAdapter should support both tool_calls and response text together."""
+    from rlm.domain.agent_ports import ToolCallRequest
+
+    tool_calls: list[ToolCallRequest] = [
+        {"id": "call_abc", "name": "search", "arguments": {"query": "python"}},
+    ]
+    llm = MockLLMAdapter(
+        model="mock-model",
+        script=[
+            {"tool_calls": tool_calls, "response": "Let me search for that."},
+        ],
+    )
+
+    cc = llm.complete(LLMRequest(prompt="Find Python docs"))
+    assert cc.tool_calls is not None
+    assert len(cc.tool_calls) == 1
+    assert cc.response == "Let me search for that."
+    assert cc.finish_reason == "tool_calls"
+
+
+@pytest.mark.unit
+def test_mock_llm_adapter_scripted_custom_finish_reason() -> None:
+    """MockLLMAdapter should support custom finish_reason in scripted responses."""
+    llm = MockLLMAdapter(
+        model="mock-model",
+        script=[
+            {"response": "Truncated response", "finish_reason": "length"},
+        ],
+    )
+
+    cc = llm.complete(LLMRequest(prompt="Write an essay"))
+    assert cc.tool_calls is None
+    assert cc.response == "Truncated response"
+    assert cc.finish_reason == "length"
+
+
+@pytest.mark.unit
+def test_mock_llm_adapter_multiple_tool_calls() -> None:
+    """MockLLMAdapter should support multiple tool calls in a single response."""
+    from rlm.domain.agent_ports import ToolCallRequest
+
+    tool_calls: list[ToolCallRequest] = [
+        {"id": "call_1", "name": "get_weather", "arguments": {"city": "NYC"}},
+        {"id": "call_2", "name": "get_time", "arguments": {"timezone": "EST"}},
+    ]
+    llm = MockLLMAdapter(
+        model="mock-model",
+        script=[{"tool_calls": tool_calls}],
+    )
+
+    cc = llm.complete(LLMRequest(prompt="Weather and time?"))
+    assert cc.tool_calls is not None
+    assert len(cc.tool_calls) == 2
+    assert cc.tool_calls[0]["name"] == "get_weather"
+    assert cc.tool_calls[1]["name"] == "get_time"
+
+
+@pytest.mark.unit
+def test_mock_llm_adapter_echo_mode_includes_finish_reason() -> None:
+    """MockLLMAdapter in echo mode should set finish_reason to 'stop'."""
+    llm = MockLLMAdapter(model="mock-model")
+    cc = llm.complete(LLMRequest(prompt="hello"))
+    assert cc.finish_reason == "stop"
+    assert cc.tool_calls is None

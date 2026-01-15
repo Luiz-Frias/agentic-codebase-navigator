@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from threading import Lock
+from typing import TYPE_CHECKING, Any
 
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.domain.errors import LLMError
@@ -13,6 +14,9 @@ from rlm.domain.models import (
     UsageSummary,
 )
 from rlm.domain.types import Prompt
+
+if TYPE_CHECKING:
+    from rlm.domain.agent_ports import ToolCallRequest
 
 
 def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
@@ -75,11 +79,24 @@ class MockLLMAdapter(BaseLLMAdapter):
     - If `script` is provided, each call pops one item:
       - `str` => returned as completion response
       - `Exception` => raised
+      - `dict` with "tool_calls" key => returned as tool call response
     - Otherwise, returns an "echo-like" response derived from the prompt.
+
+    Tool Call Response Format:
+    A dict with optional keys:
+    - "tool_calls": list[ToolCallRequest] - tool calls to return
+    - "response": str - optional text response alongside tools (default: "")
+    - "finish_reason": str - optional finish reason (default: "tool_calls" if tool_calls present)
+
+    Example script with tool calls:
+        script = [
+            {"tool_calls": [{"id": "call_1", "name": "get_weather", "arguments": {"city": "NYC"}}]},
+            "The weather is sunny",  # Final answer after tool execution
+        ]
     """
 
     model: str = "mock-model"
-    script: list[str | Exception] | None = None
+    script: list[str | Exception | dict[str, Any]] | None = None
     max_prompt_preview_chars: int = 50
     _lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
@@ -99,10 +116,34 @@ class MockLLMAdapter(BaseLLMAdapter):
     def model_name(self) -> str:
         return self.model
 
+    @property
+    def supports_tools(self) -> bool:
+        """MockLLMAdapter supports tool calling via scripted responses."""
+        return True
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         start = time.perf_counter()
-        response_text = self._next_response_text(request.prompt)
+        script_item = self._next_script_item(request.prompt)
         end = time.perf_counter()
+
+        # Parse script item into response components
+        response_text: str
+        tool_calls: list[ToolCallRequest] | None = None
+        finish_reason: str | None = None
+
+        if isinstance(script_item, dict):
+            # Tool call response
+            tool_calls = script_item.get("tool_calls")
+            response_text = str(script_item.get("response", ""))
+            finish_reason = script_item.get("finish_reason")
+            if finish_reason is None and tool_calls:
+                finish_reason = "tool_calls"
+            elif finish_reason is None:
+                finish_reason = "stop"
+        else:
+            # Plain text response
+            response_text = script_item
+            finish_reason = "stop"
 
         in_tokens = _estimate_input_tokens(request.prompt)
         out_tokens = _estimate_output_tokens(response_text)
@@ -132,6 +173,8 @@ class MockLLMAdapter(BaseLLMAdapter):
             response=response_text,
             usage_summary=self._last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
@@ -170,7 +213,18 @@ class MockLLMAdapter(BaseLLMAdapter):
     # Internals
     # ---------------------------------------------------------------------
 
-    def _next_response_text(self, prompt: Prompt, /) -> str:
+    def _next_script_item(self, prompt: Prompt, /) -> str | dict[str, Any]:
+        """
+        Get the next scripted response item.
+
+        Returns:
+            - str: plain text response
+            - dict: tool call response with "tool_calls" key
+
+        Raises:
+            Exception: if the script item is an Exception
+            LLMError: if the script is exhausted
+        """
         with self._lock:
             script = self.script
             if script:
