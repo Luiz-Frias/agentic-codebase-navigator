@@ -166,68 +166,30 @@ commit-msg:
     # Get staged diff
     DIFF=$(git diff --cached --stat && echo "" && git diff --cached)
 
-    # Build the prompt with project conventions
+    # System prompt to constrain output format strictly
+    SYSTEM_PROMPT="You are a git commit message generator. Output ONLY the raw commit message text with no preamble, explanation, analysis, or markdown formatting. Start immediately with the type(scope): line. Never use code blocks or backticks."
+
+    # User prompt with format rules
     PROMPT=$(cat <<'PROMPT_EOF'
-    Generate a git commit message following these EXACT conventions:
+    Generate a conventional commit message for this diff.
 
-    FORMAT:
-    <type>(<scope>): <subject>
+    FORMAT: type(scope): subject
 
-    <body>
-
-    STRUCTURE:
-    1. SUBJECT LINE: <type>(<scope>): <subject>
-       - Max 50 chars, imperative mood ("add" not "added"), no period
-    2. BLANK LINE after subject
-    3. BODY: 3-6 bullet points explaining WHAT changed and WHY
-       - Start each bullet with "- "
-       - Focus on the purpose and impact, not implementation details
-       - Wrap at 72 characters
-
-    TYPES (pick one):
-    - feat: New feature (MINOR bump)
-    - fix: Bug fix (PATCH bump)
-    - docs: Documentation only
-    - style: Code style/formatting
-    - refactor: Code restructure (no fix/feat)
-    - perf: Performance improvement
-    - test: Add/update tests
-    - build: Build system, Cargo.toml, dependencies
-    - ci: CI/CD configuration
-    - chore: Maintenance, tooling, configs
-    - revert: Reverts a previous commit
-    - security: Security fixes/hardening
-
-    SCOPES (pick one, or omit if changes span multiple):
-    - core, shared, domain (Core layer)
-    - ports (Ports layer)
-    - app, config, api (Application layer)
-    - adapters (Adapters layer)
-    - infra, facade (Infrastructure layer)
-    - testkit, cli (Testing & Binaries)
-    - deps, tooling, ci, docker, docs, tests, scripts (Cross-cutting)
+    - bullet points
 
     RULES:
-    1. Analyze the diff to determine the most appropriate type and scope
-    2. Write a concise subject line summarizing the change
-    3. Write body bullets that explain what was done and why it matters
-    4. Output ONLY the formatted commit message (subject + body), nothing else
-
-    EXAMPLE OUTPUT:
-    feat(app): implement codebase indexing use case
-
-    - Added index_codebase function to orchestrate scanning, splitting, and embedding
-    - Introduced in-memory adapters for embedding and vector DB for testing
-    - Implemented progress tracking and cancellation support during indexing
-    - Created integration tests ensuring deterministic behavior
+    - Subject: max 50 chars, imperative mood ("add" not "added"), no period
+    - Body: 3-6 bullets with "- ", explain what and why (72 char wrap)
+    - Types: feat|fix|docs|style|refactor|perf|test|build|ci|chore
+    - Scopes: core|domain|ports|app|api|adapters|infra|cli|deps|tooling|docs|tests
 
     DIFF:
     PROMPT_EOF
     )
 
-    # Call Claude CLI
+    # Call Claude CLI with system prompt to constrain output
     echo "🤖 Generating commit message..."
-    MSG=$(echo "$DIFF" | claude --print "$PROMPT")
+    MSG=$(echo "$DIFF" | claude --print --system-prompt "$SYSTEM_PROMPT" "$PROMPT")
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
