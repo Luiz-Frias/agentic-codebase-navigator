@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, overload
 
+from rlm.domain.agent_ports import ContextCompressor, NestedCallPolicy, StoppingPolicy
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion, RunMetadata
 from rlm.domain.models.llm_request import ToolChoice
@@ -108,6 +109,11 @@ class RunCompletionDeps:
     Agent Capabilities (Phase 1 - Core):
     - `agent_mode`: "code" (default) or "tools" for function calling.
     - `tool_registry`: Required when agent_mode="tools".
+
+    Extension Protocols (Phase 2.7):
+    - `stopping_policy`: Custom stopping criteria for iteration loops.
+    - `context_compressor`: Compress nested call returns.
+    - `nested_call_policy`: Control nested orchestrator spawning.
     """
 
     llm: LLMPort
@@ -119,6 +125,11 @@ class RunCompletionDeps:
     # Agent capability extensions (Phase 1 - Core)
     agent_mode: AgentMode = "code"
     tool_registry: ToolRegistryPort | None = None
+
+    # Extension protocols (Phase 2.7-2.8)
+    stopping_policy: StoppingPolicy | None = None
+    context_compressor: ContextCompressor | None = None
+    nested_call_policy: NestedCallPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +205,9 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 system_prompt=deps.system_prompt,
                 agent_mode=deps.agent_mode,
                 tool_registry=deps.tool_registry,
+                stopping_policy=deps.stopping_policy,
+                context_compressor=deps.context_compressor,
+                nested_call_policy=deps.nested_call_policy,
             )
             try:
                 cc = orch.completion(
@@ -283,6 +297,9 @@ async def arun_completion(
                 system_prompt=deps.system_prompt,
                 agent_mode=deps.agent_mode,
                 tool_registry=deps.tool_registry,
+                stopping_policy=deps.stopping_policy,
+                context_compressor=deps.context_compressor,
+                nested_call_policy=deps.nested_call_policy,
             )
             try:
                 cc = await orch.acompletion(

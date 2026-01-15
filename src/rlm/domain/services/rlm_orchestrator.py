@@ -8,9 +8,17 @@ from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from rlm.domain.agent_ports import ToolCallRequest, ToolCallResult, ToolMessage
+from rlm.domain.agent_ports import (
+    AgentModeName,
+    ContextCompressor,
+    NestedCallPolicy,
+    StoppingPolicy,
+    ToolCallRequest,
+    ToolCallResult,
+    ToolMessage,
+)
 from rlm.domain.errors import ToolNotFoundError
 from rlm.domain.models.completion import ChatCompletion
 from rlm.domain.models.iteration import CodeBlock, Iteration
@@ -34,8 +42,8 @@ from rlm.domain.types import Prompt
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolDefinition, ToolRegistryPort
 
-# Type alias for agent mode
-AgentMode = Literal["code", "tools"]
+# Backward compatibility alias
+AgentMode = AgentModeName
 
 
 def _add_usage_totals(
@@ -119,6 +127,14 @@ class RLMOrchestrator:
         - "tools": LLM uses function calling to invoke registered tools. This
           mode complements code execution for structured tool interactions.
 
+    Extension Protocols (Phase 2.7):
+        - stopping_policy: Controls when iteration loops terminate. Inject custom
+          implementations for EIG-gated stopping, entropy-based termination, etc.
+        - context_compressor: Compresses nested call returns before bubbling up.
+          Use for context budget management in deep orchestrator trees.
+        - nested_call_policy: Determines when nested llm_query() calls should
+          spawn sub-orchestrators vs. simple LLM calls.
+
     Note:
         Tool calling mode ("tools") requires a tool_registry. If agent_mode is
         "tools" but no registry is provided, a ValueError is raised at runtime.
@@ -139,6 +155,78 @@ class RLMOrchestrator:
     tool_summary_trigger_ratio: float = 0.92
     tool_summary_keep_last_messages: int = 6
     tool_summary_min_messages: int = 8
+
+    # Extension protocols (Phase 2.7-2.8)
+    stopping_policy: StoppingPolicy | None = None
+    context_compressor: ContextCompressor | None = None
+    nested_call_policy: NestedCallPolicy | None = None
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Extension Protocol Helpers (Phase 2.7-2.8)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_policy_context(
+        self,
+        *,
+        iteration: int,
+        max_iterations: int,
+        depth: int = 0,
+        history: list[dict[str, Any]] | None = None,
+        last_result: ChatCompletion | None = None,
+    ) -> dict[str, Any]:
+        """
+        Build context dict for policy callbacks.
+
+        This context is passed to StoppingPolicy methods and can be extended
+        by external apps to track custom state (beliefs, EIG, etc.).
+        """
+        return {
+            "iteration": iteration,
+            "max_iterations": max_iterations,
+            "agent_mode": self.agent_mode,
+            "depth": depth,
+            "history": history or [],
+            "last_result": last_result,
+        }
+
+    def _should_stop(self, context: dict[str, Any]) -> bool:
+        """
+        Check if the iteration loop should stop early.
+
+        Uses the injected StoppingPolicy if available, otherwise returns False.
+        """
+        if self.stopping_policy is None:
+            return False
+        return self.stopping_policy.should_stop(context)
+
+    def _on_iteration_complete(self, context: dict[str, Any], result: ChatCompletion) -> None:
+        """
+        Notify policy that an iteration completed.
+
+        Allows external apps to track state, update beliefs, etc.
+        """
+        if self.stopping_policy is not None:
+            self.stopping_policy.on_iteration_complete(context, result)
+
+    def _compress_result(self, result: str, max_tokens: int | None = None) -> str:
+        """
+        Compress a nested call result before returning to parent.
+
+        Uses the injected ContextCompressor if available, otherwise passthrough.
+        """
+        if self.context_compressor is None:
+            return result
+        return self.context_compressor.compress(result, max_tokens)
+
+    def _should_orchestrate_nested(self, prompt: str, depth: int) -> bool:
+        """
+        Check if a nested call should spawn a sub-orchestrator.
+
+        Uses the injected NestedCallPolicy if available, otherwise returns False.
+        """
+        if self.nested_call_policy is None:
+            return False
+        return self.nested_call_policy.should_orchestrate(prompt, depth)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Tool Calling Helpers (Phase 2.4)
@@ -480,6 +568,7 @@ class RLMOrchestrator:
         tool_definitions: list[ToolDefinition],
         usage_totals: dict[str, ModelUsageSummary],
         tool_choice: ToolChoice | None,
+        depth: int = 0,
     ) -> ChatCompletion:
         """
         Execute the multi-turn tool calling loop (sync).
@@ -487,11 +576,14 @@ class RLMOrchestrator:
         The loop continues until:
         - The LLM returns a response without tool_calls (final answer)
         - max_tool_iterations is reached
+        - StoppingPolicy.should_stop() returns True (custom early termination)
 
         Args:
             prompt: The initial user prompt.
             tool_definitions: Tools available for the LLM to call.
             usage_totals: Running usage totals to accumulate into.
+            tool_choice: Tool choice constraint for the LLM.
+            depth: Current recursion depth (for nested orchestration).
 
         Returns:
             ChatCompletion with the final response.
@@ -501,7 +593,33 @@ class RLMOrchestrator:
         conversation = self._build_tool_conversation(prompt)
         request_tool_choice: ToolChoice = tool_choice if tool_choice is not None else "auto"
 
-        for _ in range(self.max_tool_iterations):
+        # Build policy context for external state tracking
+        policy_context = self._build_policy_context(
+            iteration=0,
+            max_iterations=self.max_tool_iterations,
+            depth=depth,
+            history=conversation,
+            last_result=None,
+        )
+
+        for i in range(self.max_tool_iterations):
+            # Update iteration in context
+            policy_context["iteration"] = i
+            policy_context["history"] = conversation
+
+            # Check custom stopping policy
+            if self._should_stop(policy_context):
+                # Custom early stop - return current state
+                final_completion = ChatCompletion(
+                    root_model=self.llm.model_name,
+                    prompt=prompt,
+                    response="[Stopped by custom policy]",
+                    usage_summary=_clone_usage_totals(usage_totals),
+                    execution_time=time.perf_counter() - time_start,
+                    finish_reason="policy_stop",
+                )
+                return final_completion
+
             conversation = self._maybe_summarize_tool_conversation(
                 conversation,
                 tool_definitions=tool_definitions,
@@ -517,6 +635,10 @@ class RLMOrchestrator:
             # Call LLM
             completion = self.llm.complete(request)
             _add_usage_totals(usage_totals, completion.usage_summary)
+
+            # Notify policy of iteration completion
+            policy_context["last_result"] = completion
+            self._on_iteration_complete(policy_context, completion)
 
             # If no tool calls, we have a final answer
             if not completion.tool_calls:
@@ -573,18 +695,46 @@ class RLMOrchestrator:
         tool_definitions: list[ToolDefinition],
         usage_totals: dict[str, ModelUsageSummary],
         tool_choice: ToolChoice | None,
+        depth: int = 0,
     ) -> ChatCompletion:
         """
         Execute the multi-turn tool calling loop (async).
 
         Same logic as _tool_calling_loop but uses async LLM calls and tool execution.
+        Includes StoppingPolicy integration for custom early termination.
         """
         time_start = time.perf_counter()
 
         conversation = self._build_tool_conversation(prompt)
         request_tool_choice: ToolChoice = tool_choice if tool_choice is not None else "auto"
 
-        for _ in range(self.max_tool_iterations):
+        # Build policy context for external state tracking
+        policy_context = self._build_policy_context(
+            iteration=0,
+            max_iterations=self.max_tool_iterations,
+            depth=depth,
+            history=conversation,
+            last_result=None,
+        )
+
+        for i in range(self.max_tool_iterations):
+            # Update iteration in context
+            policy_context["iteration"] = i
+            policy_context["history"] = conversation
+
+            # Check custom stopping policy
+            if self._should_stop(policy_context):
+                # Custom early stop - return current state
+                final_completion = ChatCompletion(
+                    root_model=self.llm.model_name,
+                    prompt=prompt,
+                    response="[Stopped by custom policy]",
+                    usage_summary=_clone_usage_totals(usage_totals),
+                    execution_time=time.perf_counter() - time_start,
+                    finish_reason="policy_stop",
+                )
+                return final_completion
+
             conversation = await self._maybe_asummarize_tool_conversation(
                 conversation,
                 tool_definitions=tool_definitions,
@@ -600,6 +750,10 @@ class RLMOrchestrator:
             # Call LLM
             completion = await self.llm.acomplete(request)
             _add_usage_totals(usage_totals, completion.usage_summary)
+
+            # Notify policy of iteration completion
+            policy_context["last_result"] = completion
+            self._on_iteration_complete(policy_context, completion)
 
             # If no tool calls, we have a final answer
             if not completion.tool_calls:

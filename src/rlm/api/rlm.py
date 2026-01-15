@@ -19,7 +19,13 @@ from rlm.domain.services.rlm_orchestrator import AgentMode
 from rlm.domain.types import Prompt
 
 if TYPE_CHECKING:
-    from rlm.domain.agent_ports import ToolPort, ToolRegistryPort
+    from rlm.domain.agent_ports import (
+        ContextCompressor,
+        NestedCallPolicy,
+        StoppingPolicy,
+        ToolPort,
+        ToolRegistryPort,
+    )
 
 
 class RLM:
@@ -37,6 +43,14 @@ class RLM:
             dataclass, etc.). Currently reserved for future use.
         agent_mode: Either "code" (default, code execution) or "tools" (function
             calling). Tool mode requires tools to be provided.
+
+    Extension Protocols (Phase 2.7-2.8):
+        stopping_policy: Custom policy for controlling iteration loop termination.
+            Allows EIG-gated stopping, entropy-based termination, etc.
+        context_compressor: Compresses nested call results before returning to parent.
+            Allows summarization, truncation, or extraction strategies.
+        nested_call_policy: Controls whether nested llm_query() calls spawn
+            sub-orchestrators vs simple LLM calls.
 
     Note:
         Tool calling mode (agent_mode="tools") is infrastructure-ready but not
@@ -61,6 +75,10 @@ class RLM:
         tools: list[ToolPort | Callable[..., Any]] | None = None,
         output_type: type | None = None,
         agent_mode: AgentMode = "code",
+        # Extension protocols (Phase 2.7-2.8)
+        stopping_policy: StoppingPolicy | None = None,
+        context_compressor: ContextCompressor | None = None,
+        nested_call_policy: NestedCallPolicy | None = None,
     ) -> None:
         self._llm = llm
         self._other_llms = list(other_llms or [])
@@ -74,6 +92,11 @@ class RLM:
         self._output_type = output_type
         self._agent_mode: AgentMode = agent_mode
         self._tool_registry: ToolRegistryPort | None = None
+
+        # Extension protocols storage
+        self._stopping_policy = stopping_policy
+        self._context_compressor = context_compressor
+        self._nested_call_policy = nested_call_policy
 
         # Build tool registry if tools provided
         if tools:
@@ -124,6 +147,9 @@ class RLM:
                 logger=self._logger,
                 agent_mode=self._agent_mode,
                 tool_registry=self._tool_registry,
+                stopping_policy=self._stopping_policy,
+                context_compressor=self._context_compressor,
+                nested_call_policy=self._nested_call_policy,
             )
         else:
             deps = RunCompletionDeps(
@@ -134,6 +160,9 @@ class RLM:
                 system_prompt=self._system_prompt,
                 agent_mode=self._agent_mode,
                 tool_registry=self._tool_registry,
+                stopping_policy=self._stopping_policy,
+                context_compressor=self._context_compressor,
+                nested_call_policy=self._nested_call_policy,
             )
         req = RunCompletionRequest(
             prompt=prompt,
@@ -168,6 +197,9 @@ class RLM:
                 logger=self._logger,
                 agent_mode=self._agent_mode,
                 tool_registry=self._tool_registry,
+                stopping_policy=self._stopping_policy,
+                context_compressor=self._context_compressor,
+                nested_call_policy=self._nested_call_policy,
             )
         else:
             deps = RunCompletionDeps(
@@ -178,6 +210,9 @@ class RLM:
                 system_prompt=self._system_prompt,
                 agent_mode=self._agent_mode,
                 tool_registry=self._tool_registry,
+                stopping_policy=self._stopping_policy,
+                context_compressor=self._context_compressor,
+                nested_call_policy=self._nested_call_policy,
             )
         req = RunCompletionRequest(
             prompt=prompt,

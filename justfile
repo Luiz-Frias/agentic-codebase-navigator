@@ -65,10 +65,15 @@ pc-update:
 # =============================================================================
 
 # Cross-platform clipboard helpers (macOS/Linux/Windows)
-_clipboard_copy MSG:
+_clipboard_copy:
     #!/usr/bin/env bash
     set -euo pipefail
-    MSG="{{MSG}}"
+    MSG="$(cat)"
+    if [[ -z "${MSG}" ]]; then
+        echo "❌ Clipboard copy requires input on stdin."
+        echo "   Example: printf %s \"message\" | just _clipboard_copy"
+        exit 1
+    fi
     PLATFORM="${PLATFORM:-$(uname -s)}"
     case "$PLATFORM" in
         Darwin*)
@@ -230,7 +235,7 @@ commit-msg:
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "📋 Copied to clipboard (if available)"
-    just _clipboard_copy "$MSG"
+    printf "%s" "$MSG" | just _clipboard_copy
 
 # Generate AI commit message and commit directly
 commit-ai: commit-msg
@@ -259,7 +264,7 @@ commit-ai: commit-msg
 help:
     @echo ""
     @echo "semantic-code-agents-rs - Development Tasks"
-    @echo "============================================"In @justfile around lines 163 - 164, The current recipe uses macOS-only clipboard commands (pbcopy/pbpaste); update the justfile to be cross-platform by adding platform-aware clipboard actions (e.g., implement _clipboard_copy and _clipboard_paste helper recipes) that detect OS via uname or PLATFORM and choose pbcopy/pbpaste on macOS, xclip/xsel on Linux, and clip/win32yank on Windows, falling back to printing the message and documenting the requirement; replace the direct echo "$MSG" | pbcopy usage with a call to the new _clipboard_copy helper (and use _clipboard_paste where needed) so clipboard operations work across OSes or clearly document that macOS is required.
+    @echo "============================================"
     @echo ""
     @echo "Pre-commit Hooks:"
     @echo "  just pc        # Run hooks on staged files"

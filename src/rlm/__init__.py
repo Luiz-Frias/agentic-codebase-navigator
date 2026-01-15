@@ -9,26 +9,52 @@ modular monolith.
 from __future__ import annotations
 
 from rlm._meta import __version__
+
+# Default policy implementations (Phase 2.7) - ready-to-use defaults
+from rlm.adapters.policies import (
+    DefaultStoppingPolicy,
+    NoOpContextCompressor,
+    SimpleNestedCallPolicy,
+)
 from rlm.api import create_rlm, create_rlm_from_config
 from rlm.api.rlm import RLM
 from rlm.application.config import (
-    AgentModeName,
     EnvironmentConfig,
     LLMConfig,
     LoggerConfig,
     RLMConfig,
 )
+
+# Extension protocols (Phase 2.7) - for external apps to implement
+from rlm.domain.agent_ports import (
+    AgentModeName,
+    ContextCompressor,
+    NestedCallPolicy,
+    NestedConfig,
+    StoppingPolicy,
+)
 from rlm.domain.models import ChatCompletion
 
 __all__ = [
-    "AgentModeName",
+    # Core API
+    "RLM",
+    "create_rlm",
+    "create_rlm_from_config",
     "ChatCompletion",
+    "__version__",
+    # Configuration
+    "AgentModeName",
     "EnvironmentConfig",
     "LLMConfig",
     "LoggerConfig",
-    "RLM",
     "RLMConfig",
-    "__version__",
-    "create_rlm",
-    "create_rlm_from_config",
+    # Extension Protocols (for external apps to implement)
+    "StoppingPolicy",
+    "ContextCompressor",
+    "NestedCallPolicy",
+    "NestedConfig",
+    # Default Policy Implementations (ready-to-use)
+    "DefaultStoppingPolicy",
+    "NoOpContextCompressor",
+    "SimpleNestedCallPolicy",
 ]

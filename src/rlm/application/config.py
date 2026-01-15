@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from rlm.domain.agent_ports import AgentModeName
+
 EnvironmentName = Literal["local", "modal", "docker", "prime"]
 LoggerName = Literal["none", "jsonl", "console"]
-AgentModeName = Literal["code", "tools"]
 
 
 @dataclass(frozen=True, slots=True)
