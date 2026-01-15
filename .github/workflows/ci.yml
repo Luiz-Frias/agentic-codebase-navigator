@@ -65,4 +65,3 @@ jobs:
         run: uv sync --group test
       - name: Packaging smoke tests
         run: uv run --group test pytest -m packaging
-

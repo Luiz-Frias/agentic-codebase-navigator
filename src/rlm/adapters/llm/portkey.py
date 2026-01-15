@@ -8,10 +8,15 @@ from typing import Any
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
     UsageTracker,
+    count_openai_prompt_tokens,
+    extract_finish_reason_openai,
     extract_openai_style_token_usage,
     extract_text_from_chat_response,
+    extract_tool_calls_openai,
     prompt_to_messages,
     safe_provider_error_message,
+    tool_choice_to_openai_format,
+    tool_definition_to_openai_format,
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
@@ -52,6 +57,15 @@ class PortkeyAdapter(BaseLLMAdapter):
     def model_name(self) -> str:
         return self.model
 
+    @property
+    def supports_tools(self) -> bool:
+        """Portkey supports tool passthrough (proxies to underlying providers)."""
+        return True
+
+    def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:
+        model = request.model or self.model
+        return count_openai_prompt_tokens(request.prompt, request.tools, model)
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         portkey = _require_portkey()
         client = self._get_client(portkey)
@@ -59,16 +73,33 @@ class PortkeyAdapter(BaseLLMAdapter):
         model = request.model or self.model
         messages = prompt_to_messages(request.prompt)
 
+        # Build API kwargs with tools if provided (Portkey uses OpenAI format)
+        api_kwargs: dict[str, Any] = {**self.default_request_kwargs}
+        if request.tools:
+            api_kwargs["tools"] = [tool_definition_to_openai_format(t) for t in request.tools]
+        if request.tool_choice is not None:
+            api_kwargs["tool_choice"] = tool_choice_to_openai_format(request.tool_choice)
+
         start = time.perf_counter()
         try:
-            resp = client.chat.completions.create(
-                model=model, messages=messages, **self.default_request_kwargs
-            )
+            resp = client.chat.completions.create(model=model, messages=messages, **api_kwargs)
         except Exception as e:  # noqa: BLE001 - provider boundary
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
         end = time.perf_counter()
 
-        text = extract_text_from_chat_response(resp)
+        # Extract tool calls (may be None if no tools called)
+        tool_calls = extract_tool_calls_openai(resp)
+        finish_reason = extract_finish_reason_openai(resp)
+
+        # Extract text response (may be empty if tool_calls present)
+        try:
+            text = extract_text_from_chat_response(resp)
+        except Exception:  # noqa: BLE001
+            if tool_calls:
+                text = ""
+            else:
+                raise LLMError("Portkey response invalid") from None
+
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
         last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
         # Use the per-call usage returned by `record()` (race-free under concurrency).
@@ -80,6 +111,8 @@ class PortkeyAdapter(BaseLLMAdapter):
             response=text,
             usage_summary=last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
@@ -89,16 +122,35 @@ class PortkeyAdapter(BaseLLMAdapter):
         model = request.model or self.model
         messages = prompt_to_messages(request.prompt)
 
+        # Build API kwargs with tools if provided (Portkey uses OpenAI format)
+        api_kwargs: dict[str, Any] = {**self.default_request_kwargs}
+        if request.tools:
+            api_kwargs["tools"] = [tool_definition_to_openai_format(t) for t in request.tools]
+        if request.tool_choice is not None:
+            api_kwargs["tool_choice"] = tool_choice_to_openai_format(request.tool_choice)
+
         start = time.perf_counter()
         try:
             resp = await client.chat.completions.create(
-                model=model, messages=messages, **self.default_request_kwargs
+                model=model, messages=messages, **api_kwargs
             )
         except Exception as e:  # noqa: BLE001 - provider boundary
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
         end = time.perf_counter()
 
-        text = extract_text_from_chat_response(resp)
+        # Extract tool calls (may be None if no tools called)
+        tool_calls = extract_tool_calls_openai(resp)
+        finish_reason = extract_finish_reason_openai(resp)
+
+        # Extract text response (may be empty if tool_calls present)
+        try:
+            text = extract_text_from_chat_response(resp)
+        except Exception:  # noqa: BLE001
+            if tool_calls:
+                text = ""
+            else:
+                raise LLMError("Portkey response invalid") from None
+
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
         last = self._usage_tracker.record(model, input_tokens=in_tokens, output_tokens=out_tokens)
         # Use the per-call usage returned by `record()` (race-free under concurrency).
@@ -110,6 +162,8 @@ class PortkeyAdapter(BaseLLMAdapter):
             response=text,
             usage_summary=last_usage,
             execution_time=end - start,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
         )
 
     def get_usage_summary(self) -> UsageSummary:
@@ -172,5 +226,8 @@ def build_portkey_adapter(
     if base_url is not None and (not isinstance(base_url, str) or not base_url.strip()):
         raise ValueError("PortkeyAdapter.base_url must be a non-empty string when provided")
     return PortkeyAdapter(
-        model=model, api_key=api_key, base_url=base_url, default_request_kwargs=dict(kwargs)
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        default_request_kwargs=dict(kwargs),
     )

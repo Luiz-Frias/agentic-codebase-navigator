@@ -12,7 +12,8 @@ wheels/
 # IDEs
 .vscode/
 .idea/
-.cursor/
+.cursor/*.*
+.claude/
 
 
 # OS
@@ -37,10 +38,17 @@ $RECYCLE.BIN/
 .env.test.local
 .env.production.local
 
+# Logs
+logs/
+
+# Local References
+references/
+
 # Coverage
 .coverage
 coverage.xml
 htmlcov/
 
-# Configuration
-config.toml
+# Benchmarks
+.benchmarks/
+.uv-cache/

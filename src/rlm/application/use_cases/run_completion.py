@@ -4,15 +4,20 @@ import asyncio
 import inspect
 import uuid
 from dataclasses import dataclass
-from typing import Protocol, overload
+from typing import TYPE_CHECKING, Protocol, overload
 
+from rlm.domain.agent_ports import ContextCompressor, NestedCallPolicy, StoppingPolicy
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion, RunMetadata
+from rlm.domain.models.llm_request import ToolChoice
 from rlm.domain.models.usage import merge_usage_summaries
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
-from rlm.domain.services.rlm_orchestrator import RLMOrchestrator
+from rlm.domain.services.rlm_orchestrator import AgentMode, RLMOrchestrator
 from rlm.domain.types import Prompt
+
+if TYPE_CHECKING:
+    from rlm.domain.agent_ports import ToolRegistryPort
 
 
 class EnvironmentFactory(Protocol):
@@ -100,6 +105,15 @@ class RunCompletionDeps:
     Notes:
     - `broker` is started/stopped per run.
     - `environment_factory` is invoked per run.
+
+    Agent Capabilities (Phase 1 - Core):
+    - `agent_mode`: "code" (default) or "tools" for function calling.
+    - `tool_registry`: Required when agent_mode="tools".
+
+    Extension Protocols (Phase 2.7):
+    - `stopping_policy`: Custom stopping criteria for iteration loops.
+    - `context_compressor`: Compress nested call returns.
+    - `nested_call_policy`: Control nested orchestrator spawning.
     """
 
     llm: LLMPort
@@ -108,6 +122,15 @@ class RunCompletionDeps:
     logger: LoggerPort | None = None
     system_prompt: str = RLM_SYSTEM_PROMPT
 
+    # Agent capability extensions (Phase 1 - Core)
+    agent_mode: AgentMode = "code"
+    tool_registry: ToolRegistryPort | None = None
+
+    # Extension protocols (Phase 2.7-2.8)
+    stopping_policy: StoppingPolicy | None = None
+    context_compressor: ContextCompressor | None = None
+    nested_call_policy: NestedCallPolicy | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class RunCompletionRequest:
@@ -115,6 +138,7 @@ class RunCompletionRequest:
     root_prompt: str | None = None
     max_depth: int = 1
     max_iterations: int = 30
+    tool_choice: ToolChoice | None = None
 
 
 def _infer_environment_type(env: EnvironmentPort, /) -> str:
@@ -179,6 +203,11 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 environment=env,
                 logger=deps.logger,
                 system_prompt=deps.system_prompt,
+                agent_mode=deps.agent_mode,
+                tool_registry=deps.tool_registry,
+                stopping_policy=deps.stopping_policy,
+                context_compressor=deps.context_compressor,
+                nested_call_policy=deps.nested_call_policy,
             )
             try:
                 cc = orch.completion(
@@ -188,6 +217,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                     depth=0,
                     max_iterations=request.max_iterations,
                     correlation_id=correlation_id,
+                    tool_choice=request.tool_choice,
                 )
                 # Merge orchestrator usage (root calls) with broker usage (env subcalls).
                 merged_usage = merge_usage_summaries(
@@ -199,6 +229,8 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                     response=cc.response,
                     usage_summary=merged_usage,
                     execution_time=cc.execution_time,
+                    tool_calls=cc.tool_calls,
+                    finish_reason=cc.finish_reason,
                 )
             except RLMError:
                 raise
@@ -263,6 +295,11 @@ async def arun_completion(
                 environment=env,
                 logger=deps.logger,
                 system_prompt=deps.system_prompt,
+                agent_mode=deps.agent_mode,
+                tool_registry=deps.tool_registry,
+                stopping_policy=deps.stopping_policy,
+                context_compressor=deps.context_compressor,
+                nested_call_policy=deps.nested_call_policy,
             )
             try:
                 cc = await orch.acompletion(
@@ -272,6 +309,7 @@ async def arun_completion(
                     depth=0,
                     max_iterations=request.max_iterations,
                     correlation_id=correlation_id,
+                    tool_choice=request.tool_choice,
                 )
                 broker_usage = await asyncio.to_thread(deps.broker.get_usage_summary)
                 merged_usage = merge_usage_summaries([cc.usage_summary, broker_usage])
@@ -281,6 +319,8 @@ async def arun_completion(
                     response=cc.response,
                     usage_summary=merged_usage,
                     execution_time=cc.execution_time,
+                    tool_calls=cc.tool_calls,
+                    finish_reason=cc.finish_reason,
                 )
             except RLMError:
                 raise

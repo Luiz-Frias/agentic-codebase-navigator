@@ -185,14 +185,18 @@ def test_default_logger_registry_validations() -> None:
 
 
 @pytest.mark.unit
-def test_ensure_docker_available_raises_helpful_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_docker_available_raises_helpful_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(reg, "which", lambda _name: None)
     with pytest.raises(RuntimeError, match="docker.*not found on PATH"):
         ensure_docker_available(timeout_s=0.001)
 
     monkeypatch.setattr(reg, "which", lambda _name: "/usr/bin/docker")
     monkeypatch.setattr(
-        reg.subprocess, "run", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom"))
+        reg.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     with pytest.raises(RuntimeError, match="Docker daemon is not reachable"):
         ensure_docker_available(timeout_s=0.001)

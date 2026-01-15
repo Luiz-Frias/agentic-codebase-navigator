@@ -169,7 +169,10 @@ async def test_azure_openai_adapter_acomplete_maps_prompt_and_extracts_text_and_
 def test_azure_openai_adapter_validations_client_cache_and_error_mapping(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from rlm.adapters.llm.azure_openai import AzureOpenAIAdapter, build_azure_openai_adapter
+    from rlm.adapters.llm.azure_openai import (
+        AzureOpenAIAdapter,
+        build_azure_openai_adapter,
+    )
 
     with pytest.raises(ValueError, match="non-empty 'deployment'"):
         build_azure_openai_adapter(deployment="")

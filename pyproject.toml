@@ -1,6 +1,6 @@
 [project]
 name = "agentic-codebase-navigator"
-version = "1.0.1"
+version = "1.1.0"
 description = "Agentic codebase navigator built on Recursive Language Model (RLM) patterns."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -22,6 +22,7 @@ classifiers = [
 
 dependencies = [
     "openai>=2.14.0",
+    "loguru>=0.7.0",  # Infrastructure logging (cleanup failures, observability)
 ]
 
 [project.urls]
@@ -32,12 +33,12 @@ Documentation = "https://github.com/Luiz-Frias/agentic-codebase-navigator#readme
 
 [project.optional-dependencies]
 # LLM/provider adapters (installed only when needed)
-llm-openai = ["openai>=2.14.0"]
+llm-openai = ["openai>=2.14.0", "tiktoken>=0.7.0"]
 llm-anthropic = ["anthropic>=0.75.0"]
 llm-gemini = ["google-genai>=1.56.0"]
 llm-portkey = ["portkey-ai>=2.1.0"]
 llm-litellm = ["litellm>=1.0.0"]
-llm-azure-openai = ["openai>=2.14.0"]
+llm-azure-openai = ["openai>=2.14.0", "tiktoken>=0.10.0"]
 
 # Environment adapters (installed only when needed)
 env-modal = ["modal>=0.73.0"]
@@ -62,11 +63,18 @@ include = ["rlm", "rlm.*"]
 dev = [
     "ruff>=0.14.10",
     "ty>=0.0.7",
+    "mypy>=1.14.1",
+    "pyright>=1.1.406",
+    "bandit>=1.8.6",
+    "pre-commit>=4.5.1",
+    "detect-secrets>=1.5.0",
+    "semgrep>=1.148.0",
 ]
 test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
+    "pytest-benchmark>=4.0.0",
 ]
 
 [tool.pytest.ini_options]
@@ -82,6 +90,7 @@ markers = [
     "packaging: packaging smoke tests (build/install/import)",
     "chaos: chaos or resilience tests",
     "performance: performance or load tests",
+    "benchmark: benchmark tests (timing/throughput/memory profiling)",
     "docker: requires a working local Docker daemon",
     "live_llm: opt-in tests that call real provider APIs (requires RLM_RUN_LIVE_LLM_TESTS=1)",
 ]
@@ -100,7 +109,8 @@ select = [
     "UP",  # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long (handled by formatter)
+    "E501",   # line too long (handled by formatter)
+    "UP038",  # isinstance tuple -> union (deprecated rule, version mismatch between local/pre-commit)
 ]
 
 [tool.ruff.format]
@@ -114,3 +124,43 @@ source = ["rlm"]
 fail_under = 90
 show_missing = true
 skip_covered = false
+
+[tool.bandit]
+# Skip assert_used (B101) - assertions are standard pytest practice
+# All other security warnings must be explicitly documented with inline # nosec comments
+skips = ["B101"]
+# Exclude tests/ from security scanning - focus on src/rlm/** production code
+exclude_dirs = [".venv", ".tox", ".pytest_cache", "__pycache__", "build", "dist", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "src"
+
+files = ["src/rlm"]
+exclude = ["^references/", "^src/rlm/_legacy/", "^build/", "^tests/"]
+
+check_untyped_defs = true
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_configs = true
+warn_redundant_casts = true
+
+show_error_codes = true
+show_error_context = true
+pretty = true
+
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "rlm.domain.*"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "loguru"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "modal"
+ignore_missing_imports = true

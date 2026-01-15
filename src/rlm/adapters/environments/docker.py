@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
-import subprocess
+import subprocess  # nosec B404 - required for Docker CLI integration
 import tempfile
 import textwrap
 import threading
@@ -22,7 +22,11 @@ from rlm.domain.policies.timeouts import (
 )
 from rlm.domain.ports import BrokerPort
 from rlm.domain.types import ContextPayload
-from rlm.infrastructure.comms.protocol import request_completion, request_completions_batched
+from rlm.infrastructure.comms.protocol import (
+    request_completion,
+    request_completions_batched,
+)
+from rlm.infrastructure.logging import warn_cleanup_failure
 
 
 def _use_host_network() -> bool:
@@ -184,21 +188,25 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
             return {"error": "No broker configured"}
         try:
             wire_results = request_completions_batched(
-                addr, prompts, model=model, correlation_id=correlation_id, timeout_s=self.timeout_s
+                addr,
+                prompts,
+                model=model,
+                correlation_id=correlation_id,
+                timeout_s=self.timeout_s,
             )
         except Exception as exc:  # noqa: BLE001 - proxy boundary
             return {"error": str(exc)}
 
-        results: list[str] = []
+        wire_responses: list[str] = []
         for r in wire_results:
             if r.error is not None:
-                results.append(f"Error: {r.error}")
+                wire_responses.append(f"Error: {r.error}")
                 continue
             assert r.chat_completion is not None
             with self.lock:
                 self.pending_calls.append(r.chat_completion)
-            results.append(r.chat_completion.response)
-        return {"responses": results}
+            wire_responses.append(r.chat_completion.response)
+        return {"responses": wire_responses}
 
 
 def _build_exec_script(
@@ -462,7 +470,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         cmd.extend([container_id, "python", "-c", script])
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 - safe list-form command, no shell injection risk
                 cmd,
                 capture_output=True,
                 text=True,
@@ -475,13 +483,15 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                 self._pending_calls.clear()
             try:
                 self.cleanup()
-            except Exception:  # noqa: BLE001 - best-effort cleanup
-                pass
+            except Exception as cleanup_exc:  # noqa: BLE001  # nosec B110
+                warn_cleanup_failure("DockerEnvironment.execute_timeout", cleanup_exc)
 
+            raw_stderr = exc.stderr or b""
+            raw_stdout = exc.stdout or b""
             stderr = (
-                exc.stderr or ""
+                raw_stderr.decode() if isinstance(raw_stderr, bytes) else raw_stderr
             ) + f"\nTimeoutExpired: docker exec exceeded {self._subprocess_timeout_s}s"
-            stdout = exc.stdout or ""
+            stdout = raw_stdout.decode() if isinstance(raw_stdout, bytes) else raw_stdout
             return ReplResult(
                 stdout=stdout,
                 stderr=stderr,
@@ -525,7 +535,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
 
         try:
             if container_id:
-                subprocess.run(
+                subprocess.run(  # nosec B603 B607 - safe list-form, Docker CLI is standard practice
                     [
                         "docker",
                         "stop",
@@ -540,53 +550,55 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                         DEFAULT_DOCKER_CLEANUP_SUBPROCESS_TIMEOUT_S,
                     ),
                 )
-        except Exception:  # noqa: BLE001 - cleanup must not raise at boundary
-            pass
+        except Exception as exc:  # noqa: BLE001  # nosec B110
+            warn_cleanup_failure("DockerEnvironment.cleanup_container_stop", exc)
         finally:
             try:
                 self._container_id = None
-            except Exception:
-                pass
+            except Exception as exc:  # nosec B110
+                warn_cleanup_failure("DockerEnvironment.cleanup_container_id_clear", exc)
 
         try:
             if proxy_server is not None:
                 proxy_server.shutdown()
                 proxy_server.server_close()
-        except Exception:  # noqa: BLE001 - cleanup must not raise at boundary
-            pass
+        except Exception as exc:  # noqa: BLE001  # nosec B110
+            warn_cleanup_failure("DockerEnvironment.cleanup_proxy_server", exc)
         finally:
             try:
                 self._proxy_server = None
-            except Exception:
-                pass
+            except Exception as exc:  # nosec B110
+                warn_cleanup_failure("DockerEnvironment.cleanup_proxy_server_clear", exc)
 
         try:
             if proxy_thread is not None and proxy_thread.is_alive():
                 proxy_thread.join(
                     timeout=getattr(
-                        self, "_thread_join_timeout_s", DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S
+                        self,
+                        "_thread_join_timeout_s",
+                        DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S,
                     )
                 )
-        except Exception:  # noqa: BLE001 - cleanup must not raise at boundary
-            pass
+        except Exception as exc:  # noqa: BLE001  # nosec B110
+            warn_cleanup_failure("DockerEnvironment.cleanup_proxy_thread", exc)
         finally:
             try:
                 self._proxy_thread = None
-            except Exception:
-                pass
+            except Exception as exc:  # nosec B110
+                warn_cleanup_failure("DockerEnvironment.cleanup_proxy_thread_clear", exc)
 
         try:
             if calls_lock is not None and pending_calls is not None:
                 with calls_lock:
                     pending_calls.clear()
-        except Exception:  # noqa: BLE001 - cleanup must not raise at boundary
-            pass
+        except Exception as exc:  # noqa: BLE001  # nosec B110
+            warn_cleanup_failure("DockerEnvironment.cleanup_pending_calls", exc)
 
         try:
             if tmp is not None and hasattr(tmp, "cleanup"):
                 tmp.cleanup()
-        except Exception:  # noqa: BLE001 - cleanup must not raise at boundary
-            pass
+        except Exception as exc:  # noqa: BLE001  # nosec B110
+            warn_cleanup_failure("DockerEnvironment.cleanup_tmp", exc)
 
     # ------------------------------------------------------------------
     # Internals
@@ -606,11 +618,13 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         )
         # When using host network mode, bind to all interfaces so the container
         # (which shares the host's network namespace) can reach localhost:PORT.
-        bind_addr = "0.0.0.0" if self._use_host_network else "127.0.0.1"
-        self._proxy_server = HTTPServer((bind_addr, 0), handler)
+        bind_addr = "0.0.0.0" if self._use_host_network else "127.0.0.1"  # nosec B104
+        self._proxy_server = HTTPServer((bind_addr, 0), handler)  # nosec B104 - intentional for Docker host network
         self._proxy_port = self._proxy_server.server_address[1]
         self._proxy_thread = threading.Thread(
-            target=self._proxy_server.serve_forever, name="rlm-docker-llm-proxy", daemon=True
+            target=self._proxy_server.serve_forever,
+            name="rlm-docker-llm-proxy",
+            daemon=True,
         )
         self._proxy_thread.start()
 
@@ -633,7 +647,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
 
         cmd.extend([self.image, "tail", "-f", "/dev/null"])
 
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 - safe list-form command, Docker CLI is standard
             cmd,
             capture_output=True,
             text=True,

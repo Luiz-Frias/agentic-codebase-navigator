@@ -81,7 +81,11 @@ def test_rlm_facade_registers_other_models_and_passes_system_prompt_conditionall
 
 @pytest.mark.unit
 def test_rlm_facade_rejects_duplicate_other_model_names() -> None:
-    rlm = RLM(_LLM("root"), other_llms=[_LLM("root")], broker_factory=lambda _llm: _SpyBroker())  # type: ignore[arg-type]
+    rlm = RLM(
+        _LLM("root"),
+        other_llms=[_LLM("root")],
+        broker_factory=lambda _llm: _SpyBroker(),
+    )  # type: ignore[arg-type]
     with pytest.raises(ValidationError, match="Duplicate model registered"):
         rlm.completion("hi")
 

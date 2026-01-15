@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import subprocess
+import subprocess  # nosec B404 - required for Docker daemon health check
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from shutil import which
@@ -77,31 +77,31 @@ class DefaultLLMRegistry(LLMRegistry):
             case "anthropic":
                 from rlm.adapters.llm.anthropic import build_anthropic_adapter
 
-                model = config.model_name
-                if model is None:
+                anthropic_model = config.model_name
+                if anthropic_model is None:
                     raise ValueError("LLM backend 'anthropic' requires LLMConfig.model_name")
-                return build_anthropic_adapter(model=model, **config.backend_kwargs)
+                return build_anthropic_adapter(model=anthropic_model, **config.backend_kwargs)
             case "gemini":
                 from rlm.adapters.llm.gemini import build_gemini_adapter
 
-                model = config.model_name
-                if model is None:
+                gemini_model = config.model_name
+                if gemini_model is None:
                     raise ValueError("LLM backend 'gemini' requires LLMConfig.model_name")
-                return build_gemini_adapter(model=model, **config.backend_kwargs)
+                return build_gemini_adapter(model=gemini_model, **config.backend_kwargs)
             case "portkey":
                 from rlm.adapters.llm.portkey import build_portkey_adapter
 
-                model = config.model_name
-                if model is None:
+                portkey_model = config.model_name
+                if portkey_model is None:
                     raise ValueError("LLM backend 'portkey' requires LLMConfig.model_name")
-                return build_portkey_adapter(model=model, **config.backend_kwargs)
+                return build_portkey_adapter(model=portkey_model, **config.backend_kwargs)
             case "litellm":
                 from rlm.adapters.llm.litellm import build_litellm_adapter
 
-                model = config.model_name
-                if model is None:
+                litellm_model = config.model_name
+                if litellm_model is None:
                     raise ValueError("LLM backend 'litellm' requires LLMConfig.model_name")
-                return build_litellm_adapter(model=model, **config.backend_kwargs)
+                return build_litellm_adapter(model=litellm_model, **config.backend_kwargs)
             case "azure_openai":
                 from rlm.adapters.llm.azure_openai import build_azure_openai_adapter
 
@@ -148,16 +148,18 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
                         broker=broker,
                         broker_address=broker_address,
                         correlation_id=correlation_id,
-                        **env_kwargs,
+                        **env_kwargs,  # type: ignore[arg-type]  # validated by _validate_environment_kwargs
                     )
                 case "docker":
-                    from rlm.adapters.environments.docker import DockerEnvironmentAdapter
+                    from rlm.adapters.environments.docker import (
+                        DockerEnvironmentAdapter,
+                    )
 
                     return DockerEnvironmentAdapter(
                         broker=broker,
                         broker_address=broker_address,
                         correlation_id=correlation_id,
-                        **env_kwargs,
+                        **env_kwargs,  # type: ignore[arg-type]  # validated by _validate_environment_kwargs
                     )
                 case "modal":
                     from rlm.adapters.environments.modal import ModalEnvironmentAdapter
@@ -171,7 +173,7 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
                     raise ValueError(f"Unknown environment: {env_name!r}")
 
         class _Factory:
-            def build(self, *args: object) -> object:  # noqa: ANN401 - migration-compatible facade
+            def build(self, *args: object) -> EnvironmentPort:
                 """
                 Build an environment for a run.
 
@@ -197,7 +199,7 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
                             "EnvironmentFactory.build() expects (broker_address) or (broker, broker_address[, correlation_id])"
                         )
 
-        return _Factory()
+        return _Factory()  # type: ignore[return-value]  # _Factory implements EnvironmentFactory protocol
 
 
 def _validate_environment_kwargs(
@@ -321,32 +323,32 @@ def _validate_environment_kwargs(
                     f"Unknown docker environment kwargs: {sorted(unknown)}. Allowed: {sorted(allowed)}"
                 )
 
-            out: dict[str, object] = {}
+            docker_out: dict[str, object] = {}
             if "image" in kwargs:
-                out["image"] = _expect_str("image")
+                docker_out["image"] = _expect_str("image")
             if "subprocess_timeout_s" in kwargs:
-                out["subprocess_timeout_s"] = _expect_float(
+                docker_out["subprocess_timeout_s"] = _expect_float(
                     "subprocess_timeout_s", allow_none=False
                 )
             if "proxy_http_timeout_s" in kwargs:
-                out["proxy_http_timeout_s"] = _expect_float(
+                docker_out["proxy_http_timeout_s"] = _expect_float(
                     "proxy_http_timeout_s", allow_none=False
                 )
             if "stop_grace_s" in kwargs:
-                out["stop_grace_s"] = _expect_int("stop_grace_s")
+                docker_out["stop_grace_s"] = _expect_int("stop_grace_s")
             if "cleanup_subprocess_timeout_s" in kwargs:
-                out["cleanup_subprocess_timeout_s"] = _expect_float(
+                docker_out["cleanup_subprocess_timeout_s"] = _expect_float(
                     "cleanup_subprocess_timeout_s", allow_none=False
                 )
             if "thread_join_timeout_s" in kwargs:
-                out["thread_join_timeout_s"] = _expect_float(
+                docker_out["thread_join_timeout_s"] = _expect_float(
                     "thread_join_timeout_s", allow_none=False
                 )
             if (ctx := _expect_context_payload()) is not None:
-                out["context_payload"] = ctx
+                docker_out["context_payload"] = ctx
             if (sc := _expect_setup_code()) is not None:
-                out["setup_code"] = sc
-            return out
+                docker_out["setup_code"] = sc
+            return docker_out
         case "modal" | "prime":
             if kwargs:
                 raise ValueError(
@@ -423,7 +425,7 @@ def ensure_docker_available(*, timeout_s: float = DEFAULT_DOCKER_DAEMON_PROBE_TI
             "Install Docker Desktop (macOS) or the Docker Engine (Linux) and retry."
         )
     try:
-        subprocess.run(
+        subprocess.run(  # nosec B603 B607 - safe list-form command, Docker CLI health check
             ["docker", "info"],
             check=True,
             stdout=subprocess.DEVNULL,
@@ -435,3 +437,24 @@ def ensure_docker_available(*, timeout_s: float = DEFAULT_DOCKER_DAEMON_PROBE_TI
             "Docker environment selected but the Docker daemon is not reachable. "
             "Make sure Docker is running (e.g., Docker Desktop) and retry."
         ) from e
+
+
+# -----------------------------------------------------------------------------
+# Tool Registry (Phase 1 - Agent Capabilities)
+# -----------------------------------------------------------------------------
+# Re-export for convenience. The InMemoryToolRegistry is the default
+# implementation of ToolRegistryPort.
+
+from rlm.adapters.tools import InMemoryToolRegistry  # noqa: E402
+
+__all__ = [
+    "DefaultEnvironmentRegistry",
+    "DefaultLLMRegistry",
+    "DefaultLoggerRegistry",
+    "DictLLMRegistry",
+    "EnvironmentRegistry",
+    "InMemoryToolRegistry",
+    "LLMRegistry",
+    "LoggerRegistry",
+    "ensure_docker_available",
+]

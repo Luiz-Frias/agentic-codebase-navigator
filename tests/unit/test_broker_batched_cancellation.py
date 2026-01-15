@@ -8,7 +8,12 @@ import pytest
 
 from rlm.adapters.broker.tcp import TcpBrokerAdapter
 from rlm.domain.errors import LLMError
-from rlm.domain.models import BatchedLLMRequest, ChatCompletion, LLMRequest, UsageSummary
+from rlm.domain.models import (
+    BatchedLLMRequest,
+    ChatCompletion,
+    LLMRequest,
+    UsageSummary,
+)
 from rlm.domain.policies.timeouts import BrokerTimeouts, CancellationPolicy
 from rlm.domain.ports import LLMPort
 

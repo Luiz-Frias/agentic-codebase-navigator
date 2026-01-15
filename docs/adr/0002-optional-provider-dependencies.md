@@ -19,4 +19,3 @@ The system needs to remain usable in CI and local development without requiring 
 
 - Default installs remain relatively small and deterministic tests remain possible using `MockLLMAdapter`.
 - Selecting a provider without its dependency yields a clear error at the adapter boundary.
-

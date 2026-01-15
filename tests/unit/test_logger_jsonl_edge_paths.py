@@ -9,7 +9,9 @@ from rlm.domain.models import Iteration, RunMetadata
 
 
 @pytest.mark.unit
-def test_jsonl_logger_log_iteration_before_metadata_starts_new_run(tmp_path: Path) -> None:
+def test_jsonl_logger_log_iteration_before_metadata_starts_new_run(
+    tmp_path: Path,
+) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -23,7 +25,9 @@ def test_jsonl_logger_log_iteration_before_metadata_starts_new_run(tmp_path: Pat
 
 
 @pytest.mark.unit
-def test_jsonl_logger_log_metadata_is_idempotent_when_rotate_per_run_false(tmp_path: Path) -> None:
+def test_jsonl_logger_log_metadata_is_idempotent_when_rotate_per_run_false(
+    tmp_path: Path,
+) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 

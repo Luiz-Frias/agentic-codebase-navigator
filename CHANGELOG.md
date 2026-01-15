@@ -2,6 +2,53 @@
 
 This project follows a lightweight changelog format. The public API lives under the `rlm` import package.
 
+## 1.1.0
+
+Major feature release introducing tool calling agent capabilities and extensibility protocols.
+
+### Features
+
+- **Tool Calling Agent Mode**: Full agentic tool loop with native support across all LLM providers
+  - Native tool calling for OpenAI, Anthropic, Gemini, Azure OpenAI, LiteLLM, and Portkey adapters
+  - Tool registry with `@tool` decorator for defining callable functions
+  - Automatic Pydantic model → JSON Schema conversion for structured outputs
+  - Conversation management with message history and multi-turn tool execution
+  - `tool_choice` parameter support (`auto`, `required`, `none`, or specific tool)
+  - Prompt token counting via `count_tokens()` on all adapters
+
+- **Extension Protocols**: Duck-typed protocols for customizing orchestrator behavior
+  - `StoppingPolicy`: Control when the tool loop terminates
+  - `ContextCompressor`: Compress conversation context between iterations
+  - `NestedCallPolicy`: Configure handling of nested `llm_query()` calls
+  - Default implementations: `DefaultStoppingPolicy`, `NoOpContextCompressor`, `SimpleNestedCallPolicy`
+  - Full documentation in `docs/extending.md`
+
+- **Performance Benchmarks**: Comprehensive profiling infrastructure
+  - Frame encoding/decoding benchmarks (`tests/benchmarks/`)
+  - Connection pool performance tests
+  - Live LLM benchmarks gated by `RLM_LIVE_LLM=1`
+  - GitHub issue templates for performance regressions
+
+### Improvements
+
+- **Optimized Codec**: Faster frame encoding/decoding in wire protocol
+- **FINAL() Marker Search**: Optimized parsing for completion detection
+- **Type Hints**: Enhanced type annotations across adapter layer
+- **Docker Environment**: Host network mode for CI environments
+
+### Fixes
+
+- Correct async tool execution with proper `Optional`/`Union` schema handling
+- Trusted OIDC publishing for PyPI releases
+- Wheel installation tests now include dependencies
+
+### Infrastructure
+
+- Cross-platform clipboard support in justfile
+- Improved commit message generation workflow
+- Secrets baseline for detect-secrets v1.5.0
+- Streamlined pre-commit configuration
+
 ## 1.0.0
 
 First stable release of the hexagonal architecture refactor.

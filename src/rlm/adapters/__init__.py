@@ -6,4 +6,32 @@ Concrete implementations of ports for external systems (LLM providers, envs, log
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from rlm.adapters.base import (
+    BaseBrokerAdapter,
+    BaseEnvironmentAdapter,
+    BaseLLMAdapter,
+    BaseLoggerAdapter,
+    BaseStructuredOutputAdapter,
+    BaseToolAdapter,
+    BaseToolRegistryAdapter,
+)
+from rlm.adapters.tools import (
+    InMemoryToolRegistry,
+    NativeToolAdapter,
+    PydanticOutputAdapter,
+)
+
+__all__ = [
+    # Base classes
+    "BaseBrokerAdapter",
+    "BaseEnvironmentAdapter",
+    "BaseLLMAdapter",
+    "BaseLoggerAdapter",
+    "BaseStructuredOutputAdapter",
+    "BaseToolAdapter",
+    "BaseToolRegistryAdapter",
+    # Tool adapters
+    "InMemoryToolRegistry",
+    "NativeToolAdapter",
+    "PydanticOutputAdapter",
+]

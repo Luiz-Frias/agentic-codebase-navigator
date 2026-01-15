@@ -220,6 +220,113 @@ async def main():
 asyncio.run(main())
 ```
 
+## Tool Calling (Agent Mode)
+
+RLM supports native tool calling across all LLM providers, enabling true agentic workflows where the model can invoke functions and use their results.
+
+### Basic Tool Usage
+
+```python
+from rlm import create_rlm
+from rlm.adapters.llm import OpenAIAdapter
+from rlm.adapters.tools import tool, ToolRegistry
+
+# Define tools using the @tool decorator
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    return f"The weather in {city} is sunny, 72°F"
+
+@tool
+def calculate(expression: str) -> float:
+    """Evaluate a mathematical expression."""
+    return eval(expression)
+
+# Create a tool registry
+registry = ToolRegistry()
+registry.register(get_weather)
+registry.register(calculate)
+
+# Create RLM with tools
+rlm = create_rlm(
+    OpenAIAdapter(model="gpt-4o"),
+    environment="local",
+    tools=registry,
+)
+
+# The model can now call tools automatically
+result = rlm.completion("What's the weather in Tokyo and what's 15 * 7?")
+```
+
+### Tool Choice Control
+
+Control how the model uses tools:
+
+```python
+# Let model decide when to use tools (default)
+result = rlm.completion("...", tool_choice="auto")
+
+# Force tool usage
+result = rlm.completion("...", tool_choice="required")
+
+# Disable tools for this call
+result = rlm.completion("...", tool_choice="none")
+
+# Force a specific tool
+result = rlm.completion("...", tool_choice="get_weather")
+```
+
+### Structured Outputs with Pydantic
+
+Use Pydantic models for type-safe structured outputs:
+
+```python
+from pydantic import BaseModel
+from rlm.adapters.tools import pydantic_to_schema
+
+class WeatherReport(BaseModel):
+    city: str
+    temperature: float
+    conditions: str
+    humidity: int
+
+# Pydantic models are automatically converted to JSON Schema
+schema = pydantic_to_schema(WeatherReport)
+```
+
+## Extension Protocols
+
+Customize RLM's orchestrator behavior using duck-typed protocols:
+
+```python
+from rlm import create_rlm
+from rlm.domain import StoppingPolicy, ContextCompressor, NestedCallPolicy
+
+# Custom stopping policy - stop after specific conditions
+class TokenBudgetPolicy(StoppingPolicy):
+    def __init__(self, max_tokens: int):
+        self.max_tokens = max_tokens
+        self.used = 0
+
+    def should_stop(self, iteration: int, response: str, usage: dict) -> bool:
+        self.used += usage.get("total_tokens", 0)
+        return self.used >= self.max_tokens
+
+# Use custom policy
+rlm = create_rlm(
+    llm,
+    environment="local",
+    stopping_policy=TokenBudgetPolicy(max_tokens=10000),
+)
+```
+
+Available protocols:
+- **`StoppingPolicy`**: Control when the tool/iteration loop terminates
+- **`ContextCompressor`**: Compress conversation context between iterations
+- **`NestedCallPolicy`**: Configure handling of nested `llm_query()` calls
+
+See [docs/extending.md](docs/extending.md) for detailed documentation.
+
 ## LLM Provider Configuration
 
 | Provider | Extra | Environment Variables |
@@ -240,7 +347,13 @@ src/rlm/
 ├── domain/          # Pure business logic, ports (protocols), models
 ├── application/     # Use cases, configuration
 ├── infrastructure/  # Wire protocol, execution policies
-├── adapters/        # LLM providers, environments, broker, loggers
+├── adapters/
+│   ├── llm/         # LLM providers (OpenAI, Anthropic, Gemini, etc.)
+│   ├── environments/# Execution environments (local, docker)
+│   ├── tools/       # Tool calling infrastructure
+│   ├── policies/    # Extension protocol implementations
+│   ├── broker/      # TCP broker for nested LLM calls
+│   └── loggers/     # Logging adapters (JSONL, console)
 └── api/             # Public facade, factories, registries
 ```
 
@@ -249,6 +362,7 @@ src/rlm/
 - Adapters implement domain ports (protocols)
 - Dependencies flow inward (adapters -> application -> domain)
 - All LLM provider SDKs are lazy-imported (optional extras)
+- Extension protocols enable customization without modifying core code
 
 ## Development
 
@@ -334,6 +448,13 @@ uv run --group dev ty check src/rlm
 - **LLM**: `MockLLMAdapter`, `OpenAIAdapter`, `AnthropicAdapter`, `GeminiAdapter`, `AzureOpenAIAdapter`, `LiteLLMAdapter`, `PortkeyAdapter`
 - **Environment**: `LocalEnvironmentAdapter`, `DockerEnvironmentAdapter`
 - **Logger**: `JsonlLoggerAdapter`, `ConsoleLoggerAdapter`, `NoopLoggerAdapter`
+- **Tools**: `ToolRegistry`, `tool` decorator, `NativeToolAdapter`
+
+### Extension Protocols
+
+- **`StoppingPolicy`** - Control iteration termination
+- **`ContextCompressor`** - Compress context between iterations
+- **`NestedCallPolicy`** - Configure nested `llm_query()` handling
 
 ## Acknowledgments
 

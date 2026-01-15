@@ -7,7 +7,10 @@ import pytest
 from rlm.domain.errors import BrokerError
 from rlm.domain.models import ChatCompletion, ModelUsageSummary, UsageSummary
 from rlm.infrastructure.comms.messages import WireResponse, WireResult
-from rlm.infrastructure.comms.protocol import request_completion, request_completions_batched
+from rlm.infrastructure.comms.protocol import (
+    request_completion,
+    request_completions_batched,
+)
 
 
 def _fake_cc_dict(prompt: object = "p", response: str = "ok") -> dict:
@@ -23,7 +26,9 @@ def _fake_cc_dict(prompt: object = "p", response: str = "ok") -> dict:
 
 
 @pytest.mark.unit
-def test_request_completion_returns_chat_completion(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_request_completion_returns_chat_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def _stub_request_response(*args, **kwargs):
         return {
             "correlation_id": "cid",
@@ -40,7 +45,9 @@ def test_request_completion_returns_chat_completion(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
-def test_request_completion_raises_on_request_level_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_request_completion_raises_on_request_level_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def _stub_request_response(*args, **kwargs):
         return {"correlation_id": "cid", "error": "bad request", "results": None}
 
@@ -61,9 +68,15 @@ def test_request_completions_batched_preserves_order_and_returns_per_item_result
             "correlation_id": "cid",
             "error": None,
             "results": [
-                {"error": None, "chat_completion": _fake_cc_dict(prompt="p1", response="r1")},
+                {
+                    "error": None,
+                    "chat_completion": _fake_cc_dict(prompt="p1", response="r1"),
+                },
                 {"error": "oops", "chat_completion": None},
-                {"error": None, "chat_completion": _fake_cc_dict(prompt="p3", response="r3")},
+                {
+                    "error": None,
+                    "chat_completion": _fake_cc_dict(prompt="p3", response="r3"),
+                },
             ],
         }
 
