@@ -6,6 +6,14 @@ Pure business logic and ports (no adapters, no infrastructure, no third-party de
 
 from __future__ import annotations
 
+from rlm.domain.agent_ports import (
+    StructuredOutputPort,
+    ToolCallRequest,
+    ToolCallResult,
+    ToolDefinition,
+    ToolPort,
+    ToolRegistryPort,
+)
 from rlm.domain.errors import (
     BrokerError,
     ExecutionError,
@@ -16,13 +24,22 @@ from rlm.domain.errors import (
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 
 __all__ = [
+    # Errors
     "BrokerError",
-    "BrokerPort",
     "ExecutionError",
-    "EnvironmentPort",
     "LLMError",
-    "LLMPort",
-    "LoggerPort",
     "RLMError",
     "ValidationError",
+    # Core Ports
+    "BrokerPort",
+    "EnvironmentPort",
+    "LLMPort",
+    "LoggerPort",
+    # Agent Ports
+    "StructuredOutputPort",
+    "ToolCallRequest",
+    "ToolCallResult",
+    "ToolDefinition",
+    "ToolPort",
+    "ToolRegistryPort",
 ]

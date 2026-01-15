@@ -112,7 +112,7 @@ def extract_text_from_chat_response(response: Any, /) -> str:
             return str(content)
 
     try:
-        text = first.text
+        text = first.text  # type: ignore[union-attr]
     except Exception:
         text = first.get("text") if isinstance(first, dict) else None
     if text is not None:

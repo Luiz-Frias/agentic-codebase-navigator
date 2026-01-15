@@ -51,3 +51,4 @@ htmlcov/
 
 # Benchmarks
 .benchmarks/
+.uv-cache/

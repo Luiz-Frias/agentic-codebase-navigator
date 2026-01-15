@@ -437,3 +437,24 @@ def ensure_docker_available(*, timeout_s: float = DEFAULT_DOCKER_DAEMON_PROBE_TI
             "Docker environment selected but the Docker daemon is not reachable. "
             "Make sure Docker is running (e.g., Docker Desktop) and retry."
         ) from e
+
+
+# -----------------------------------------------------------------------------
+# Tool Registry (Phase 1 - Agent Capabilities)
+# -----------------------------------------------------------------------------
+# Re-export for convenience. The InMemoryToolRegistry is the default
+# implementation of ToolRegistryPort.
+
+from rlm.adapters.tools import InMemoryToolRegistry  # noqa: E402
+
+__all__ = [
+    "DefaultEnvironmentRegistry",
+    "DefaultLLMRegistry",
+    "DefaultLoggerRegistry",
+    "DictLLMRegistry",
+    "EnvironmentRegistry",
+    "InMemoryToolRegistry",
+    "LLMRegistry",
+    "LoggerRegistry",
+    "ensure_docker_available",
+]

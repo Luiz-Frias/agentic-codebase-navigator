@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
 from rlm.domain.models.completion import ChatCompletion
 from rlm.domain.models.iteration import CodeBlock, Iteration
@@ -22,6 +23,12 @@ from rlm.domain.services.prompts import (
     build_user_prompt,
 )
 from rlm.domain.types import Prompt
+
+if TYPE_CHECKING:
+    from rlm.domain.agent_ports import ToolRegistryPort
+
+# Type alias for agent mode
+AgentMode = Literal["code", "tools"]
 
 
 def _add_usage_totals(
@@ -71,12 +78,26 @@ class RLMOrchestrator:
 
     This implements the legacy iteration loop semantics using only domain ports.
     Environment/broker lifecycle is handled outside (composition root).
+
+    Agent Modes:
+        - "code" (default): LLM generates Python code in ```repl blocks, which is
+          executed in the environment. This is RLM's native paradigm.
+        - "tools": LLM uses function calling to invoke registered tools. This
+          mode complements code execution for structured tool interactions.
+
+    Note:
+        Tool calling mode ("tools") requires a tool_registry. If agent_mode is
+        "tools" but no registry is provided, a ValueError is raised at runtime.
     """
 
     llm: LLMPort
     environment: EnvironmentPort
     logger: LoggerPort | None = None
     system_prompt: str = RLM_SYSTEM_PROMPT
+
+    # Agent capability extensions (Phase 1 - Core)
+    agent_mode: AgentMode = "code"
+    tool_registry: ToolRegistryPort | None = None
 
     def completion(
         self,
@@ -89,6 +110,20 @@ class RLMOrchestrator:
         correlation_id: str | None = None,
     ) -> ChatCompletion:
         time_start = time.perf_counter()
+
+        # Validate agent mode configuration
+        if self.agent_mode == "tools":
+            if self.tool_registry is None:
+                raise ValueError("agent_mode='tools' requires a tool_registry to be provided")
+            # Tool calling mode is infrastructure-ready but not yet implemented.
+            # Phase 2 will add: tool definitions in LLM requests, tool_call parsing,
+            # tool execution, and result injection into conversation.
+            raise NotImplementedError(
+                "Tool calling mode is not yet implemented. "
+                "Use agent_mode='code' (default) for now. "
+                "See domain/agent_ports.py for the extension points."
+            )
+
         # Accumulate orchestrator (root) usage incrementally to avoid repeatedly
         # re-merging a growing list (can be quadratic in pathological cases).
         root_usage_totals: dict[str, ModelUsageSummary] = {}
@@ -226,6 +261,17 @@ class RLMOrchestrator:
           while loading context / executing code.
         """
         time_start = time.perf_counter()
+
+        # Validate agent mode configuration
+        if self.agent_mode == "tools":
+            if self.tool_registry is None:
+                raise ValueError("agent_mode='tools' requires a tool_registry to be provided")
+            raise NotImplementedError(
+                "Tool calling mode is not yet implemented. "
+                "Use agent_mode='code' (default) for now. "
+                "See domain/agent_ports.py for the extension points."
+            )
+
         root_usage_totals: dict[str, ModelUsageSummary] = {}
         cumulative_usage_totals: dict[str, ModelUsageSummary] | None = (
             {} if self.logger is not None else None

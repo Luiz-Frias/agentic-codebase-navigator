@@ -4,15 +4,18 @@ import asyncio
 import inspect
 import uuid
 from dataclasses import dataclass
-from typing import Protocol, overload
+from typing import TYPE_CHECKING, Protocol, overload
 
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion, RunMetadata
 from rlm.domain.models.usage import merge_usage_summaries
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
-from rlm.domain.services.rlm_orchestrator import RLMOrchestrator
+from rlm.domain.services.rlm_orchestrator import AgentMode, RLMOrchestrator
 from rlm.domain.types import Prompt
+
+if TYPE_CHECKING:
+    from rlm.domain.agent_ports import ToolRegistryPort
 
 
 class EnvironmentFactory(Protocol):
@@ -100,6 +103,10 @@ class RunCompletionDeps:
     Notes:
     - `broker` is started/stopped per run.
     - `environment_factory` is invoked per run.
+
+    Agent Capabilities (Phase 1 - Core):
+    - `agent_mode`: "code" (default) or "tools" for function calling.
+    - `tool_registry`: Required when agent_mode="tools".
     """
 
     llm: LLMPort
@@ -107,6 +114,10 @@ class RunCompletionDeps:
     environment_factory: EnvironmentFactory
     logger: LoggerPort | None = None
     system_prompt: str = RLM_SYSTEM_PROMPT
+
+    # Agent capability extensions (Phase 1 - Core)
+    agent_mode: AgentMode = "code"
+    tool_registry: ToolRegistryPort | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,6 +190,8 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 environment=env,
                 logger=deps.logger,
                 system_prompt=deps.system_prompt,
+                agent_mode=deps.agent_mode,
+                tool_registry=deps.tool_registry,
             )
             try:
                 cc = orch.completion(
@@ -263,6 +276,8 @@ async def arun_completion(
                 environment=env,
                 logger=deps.logger,
                 system_prompt=deps.system_prompt,
+                agent_mode=deps.agent_mode,
+                tool_registry=deps.tool_registry,
             )
             try:
                 cc = await orch.acompletion(

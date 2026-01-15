@@ -66,7 +66,9 @@ dev = [
     "mypy>=1.14.1",
     "pyright>=1.1.406",
     "bandit>=1.8.6",
-    "pytest-benchmark>=4.0.0",
+    "pre-commit>=4.5.1",
+    "detect-secrets>=1.5.0",
+    "semgrep>=1.148.0",
 ]
 test = [
     "pytest>=8.0.0",

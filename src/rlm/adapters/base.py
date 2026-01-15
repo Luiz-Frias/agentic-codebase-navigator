@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
+from rlm.domain.agent_ports import ToolDefinition, ToolPort
 from rlm.domain.models import (
     BatchedLLMRequest,
     ChatCompletion,
@@ -80,3 +82,51 @@ class BaseLoggerAdapter(ABC):
 
     @abstractmethod
     def log_iteration(self, iteration: Iteration, /) -> None: ...
+
+
+# -----------------------------------------------------------------------------
+# Agent capability adapters (Phase 1 - Core)
+# -----------------------------------------------------------------------------
+
+
+class BaseToolAdapter(ABC):
+    """Optional ABC base for adapters implementing `ToolPort`."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def definition(self) -> ToolDefinition: ...
+
+    @abstractmethod
+    def execute(self, **kwargs: Any) -> Any: ...
+
+    @abstractmethod
+    async def aexecute(self, **kwargs: Any) -> Any: ...
+
+
+class BaseToolRegistryAdapter(ABC):
+    """Optional ABC base for adapters implementing `ToolRegistryPort`."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def register(self, tool: ToolPort, /) -> None: ...
+
+    @abstractmethod
+    def get(self, name: str, /) -> ToolPort | None: ...
+
+    @abstractmethod
+    def list_definitions(self) -> list[ToolDefinition]: ...
+
+
+class BaseStructuredOutputAdapter[T](ABC):
+    """Optional ABC base for adapters implementing `StructuredOutputPort`."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def validate(self, response: str, output_type: type[T], /) -> T: ...
+
+    @abstractmethod
+    def get_schema(self, output_type: type[T], /) -> dict[str, Any]: ...
