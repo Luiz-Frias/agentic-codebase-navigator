@@ -52,6 +52,26 @@ class ToolCallResult(TypedDict):
     error: str | None  # Error message if execution failed
 
 
+class ToolMessage(TypedDict):
+    """
+    Message format for tool results in conversation history.
+
+    This follows the OpenAI chat completion message format for tool results,
+    which is used to inject tool execution results back into the conversation.
+
+    Example:
+        {
+            "role": "tool",
+            "tool_call_id": "call_abc123",
+            "content": '{"temperature": 72, "unit": "fahrenheit"}'
+        }
+    """
+
+    role: str  # Always "tool"
+    tool_call_id: str  # Correlation ID from the ToolCallRequest
+    content: str  # JSON-serialized result or error message
+
+
 class ToolPort(Protocol):
     """
     Port for a single tool/function.
