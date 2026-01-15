@@ -121,6 +121,9 @@ class MockLLMAdapter(BaseLLMAdapter):
         """MockLLMAdapter supports tool calling via scripted responses."""
         return True
 
+    def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:
+        return _estimate_input_tokens(request.prompt)
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         start = time.perf_counter()
         script_item = self._next_script_item(request.prompt)

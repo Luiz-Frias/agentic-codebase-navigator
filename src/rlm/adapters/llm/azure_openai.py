@@ -8,6 +8,7 @@ from typing import Any
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
     UsageTracker,
+    count_openai_prompt_tokens,
     extract_finish_reason_openai,
     extract_openai_style_token_usage,
     extract_text_from_chat_response,
@@ -66,6 +67,10 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
     def supports_tools(self) -> bool:
         """Azure OpenAI adapter supports native function calling (same as OpenAI)."""
         return True
+
+    def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:
+        deployment = request.model or self.deployment
+        return count_openai_prompt_tokens(request.prompt, request.tools, deployment)
 
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         openai = _require_openai()

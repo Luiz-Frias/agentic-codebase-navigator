@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -587,6 +590,46 @@ def test_orchestrator_tool_mode_serializes_dataclass_tool_results() -> None:
 
 
 @pytest.mark.unit
+def test_orchestrator_tool_mode_serializes_common_types() -> None:
+    def produce_payload() -> dict[str, Any]:
+        return {
+            "when": datetime(2024, 1, 2, 3, 4, 5),
+            "day": date(2024, 1, 2),
+            "amount": Decimal("12.34"),
+            "blob": b"hello",
+        }
+
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(produce_payload)
+
+    llm = _ToolQueueLLM(
+        script=[
+            {"tool_calls": [_make_tool_call("call_1", "produce_payload", {})]},
+            "Done.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    orch.completion("Run tool")
+
+    tool_messages = _extract_tool_messages(llm._calls[1].prompt)
+    assert len(tool_messages) == 1
+    payload = json.loads(tool_messages[0]["content"])
+
+    assert payload["when"] == "2024-01-02T03:04:05"
+    assert payload["day"] == "2024-01-02"
+    assert payload["amount"] == "12.34"
+    assert payload["blob"] == {"__bytes__": base64.b64encode(b"hello").decode("ascii")}
+
+
+@pytest.mark.unit
 def test_orchestrator_tool_mode_serialization_error_is_reported() -> None:
     class _Unserializable:
         def __init__(self) -> None:
@@ -653,6 +696,41 @@ def test_orchestrator_tool_mode_summarizes_long_conversations() -> None:
 
     assert len(llm._calls) == 3
     assert _prompt_contains(llm._calls[1].prompt, "Summary of prior conversation")
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_uses_adapter_token_count() -> None:
+    class _CountingLLM(_ToolQueueLLM):
+        def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:  # type: ignore[override]
+            return 1
+
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _CountingLLM(
+        script=[
+            {"tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 1, "b": 2})]},
+            "Final.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+        context_window_tokens=100,
+        tool_summary_trigger_ratio=0.5,
+        tool_summary_keep_last_messages=0,
+        tool_summary_min_messages=2,
+    )
+
+    long_prompt = "x" * 2000
+    cc = orch.completion(long_prompt)
+
+    assert cc.response == "Final."
+    assert len(llm._calls) == 2
 
 
 @pytest.mark.unit

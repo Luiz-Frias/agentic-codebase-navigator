@@ -14,6 +14,7 @@ from rlm.adapters.llm.provider_base import (
     extract_tool_calls_gemini,
     prompt_to_messages,
     safe_provider_error_message,
+    tool_choice_to_gemini_function_calling_config,
     tool_definition_to_gemini_format,
 )
 from rlm.domain.errors import LLMError
@@ -201,6 +202,39 @@ class GeminiAdapter(BaseLLMAdapter):
         """Gemini adapter supports native function calling."""
         return True
 
+    def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:
+        genai = _require_google_genai()
+        client = self._get_client(genai)
+
+        model = request.model or self.model
+        contents = _prompt_to_gemini_contents(request.prompt)
+
+        api_kwargs: dict[str, Any] = dict(self.default_request_kwargs)
+        if request.tools:
+            function_declarations = [tool_definition_to_gemini_format(t) for t in request.tools]
+            api_kwargs["tools"] = [{"function_declarations": function_declarations}]
+
+        try:
+            resp = client.models.count_tokens(model=model, contents=contents, **api_kwargs)
+        except Exception:
+            try:
+                resp = client.models.count_tokens(model=model, contents=contents)
+            except Exception:
+                return None
+
+        total_tokens = None
+        try:
+            total_tokens = resp.total_tokens
+        except Exception:
+            if isinstance(resp, dict):
+                total_tokens = resp.get("total_tokens") or resp.get("totalTokens")
+        if total_tokens is None:
+            return None
+        try:
+            return int(total_tokens)
+        except Exception:
+            return None
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         genai = _require_google_genai()
         client = self._get_client(genai)
@@ -214,6 +248,16 @@ class GeminiAdapter(BaseLLMAdapter):
             # Gemini expects tools wrapped in a Tool object with function_declarations
             function_declarations = [tool_definition_to_gemini_format(t) for t in request.tools]
             api_kwargs["tools"] = [{"function_declarations": function_declarations}]
+        if request.tool_choice is not None:
+            function_calling_config = tool_choice_to_gemini_function_calling_config(
+                request.tool_choice
+            )
+            if function_calling_config is not None:
+                tool_config = api_kwargs.get("tool_config")
+                if not isinstance(tool_config, dict):
+                    tool_config = {}
+                tool_config["function_calling_config"] = function_calling_config
+                api_kwargs["tool_config"] = tool_config
 
         start = time.perf_counter()
         try:

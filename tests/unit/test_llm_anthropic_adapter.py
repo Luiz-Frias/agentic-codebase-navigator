@@ -127,7 +127,7 @@ def test_anthropic_adapter_complete_with_tools_passes_to_api(
     ]
 
     adapter = AnthropicAdapter(model="claude-3")
-    cc = adapter.complete(LLMRequest(prompt="Weather in NYC?", tools=tools))
+    cc = adapter.complete(LLMRequest(prompt="Weather in NYC?", tools=tools, tool_choice="required"))
 
     assert cc.response == "Hello!"
     assert cc.finish_reason == "stop"
@@ -136,6 +136,7 @@ def test_anthropic_adapter_complete_with_tools_passes_to_api(
     assert len(captured_kwargs) == 1
     api_call = captured_kwargs[0]
     assert "tools" in api_call
+    assert api_call["tool_choice"] == {"type": "any"}
     assert len(api_call["tools"]) == 1
     assert api_call["tools"][0] == {
         "name": "get_weather",
@@ -261,11 +262,12 @@ async def test_anthropic_adapter_acomplete_with_tools(
     ]
 
     adapter = AnthropicAdapter(model="claude-3")
-    cc = await adapter.acomplete(LLMRequest(prompt="Search", tools=tools))
+    cc = await adapter.acomplete(LLMRequest(prompt="Search", tools=tools, tool_choice="required"))
 
     assert cc.response == "Async response!"
     assert len(captured_kwargs) == 1
     assert "tools" in captured_kwargs[0]
+    assert captured_kwargs[0]["tool_choice"] == {"type": "any"}
 
 
 @pytest.mark.unit

@@ -248,7 +248,7 @@ def test_gemini_adapter_complete_with_tools_passes_to_api(
     ]
 
     adapter = GeminiAdapter(model="gemini-pro")
-    cc = adapter.complete(LLMRequest(prompt="Weather in NYC?", tools=tools))
+    cc = adapter.complete(LLMRequest(prompt="Weather in NYC?", tools=tools, tool_choice="required"))
 
     assert cc.response == "Hello!"
 
@@ -256,6 +256,7 @@ def test_gemini_adapter_complete_with_tools_passes_to_api(
     assert len(captured_kwargs) == 1
     api_call = captured_kwargs[0]
     assert "tools" in api_call
+    assert api_call["tool_config"]["function_calling_config"] == {"mode": "ANY"}
     assert len(api_call["tools"]) == 1
     assert "function_declarations" in api_call["tools"][0]
     func_decls = api_call["tools"][0]["function_declarations"]
@@ -427,8 +428,9 @@ async def test_gemini_adapter_acomplete_with_tools(
     ]
 
     adapter = GeminiAdapter(model="gemini-pro")
-    cc = await adapter.acomplete(LLMRequest(prompt="Search", tools=tools))
+    cc = await adapter.acomplete(LLMRequest(prompt="Search", tools=tools, tool_choice="required"))
 
     assert cc.response == "Async response!"
     assert len(captured_kwargs) == 1
     assert "tools" in captured_kwargs[0]
+    assert captured_kwargs[0]["tool_config"]["function_calling_config"] == {"mode": "ANY"}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from itertools import count
 from threading import Lock
@@ -84,6 +85,54 @@ def prompt_to_text(prompt: Prompt, /) -> str:
             return str(payload)
         case _:
             return str(prompt)
+
+
+def count_openai_prompt_tokens(
+    prompt: Prompt,
+    tools: list[ToolDefinition] | None,
+    model: str,
+    /,
+) -> int | None:
+    """
+    Count tokens for OpenAI-style chat prompts using tiktoken if available.
+
+    Returns None if tiktoken is not installed or counting fails.
+    """
+    try:
+        import tiktoken  # type: ignore[import-not-found]
+    except Exception:
+        return None
+
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except Exception:
+        encoding = tiktoken.get_encoding("o200k_base")
+
+    messages = prompt_to_messages(prompt)
+    tokens_per_message = 3
+    tokens_per_name = 1
+    total = 0
+
+    for message in messages:
+        total += tokens_per_message
+        for key, value in message.items():
+            if value is None:
+                continue
+            if key == "tool_calls":
+                encoded = json.dumps(value, ensure_ascii=True, default=str)
+            else:
+                encoded = str(value)
+            total += len(encoding.encode(encoded))
+            if key == "name":
+                total += tokens_per_name
+
+    total += 3
+
+    if tools:
+        openai_tools = [tool_definition_to_openai_format(t) for t in tools]
+        total += len(encoding.encode(json.dumps(openai_tools, ensure_ascii=True, default=str)))
+
+    return total
 
 
 def extract_text_from_chat_response(response: Any, /) -> str:
@@ -210,6 +259,48 @@ def tool_choice_to_openai_format(tool_choice: ToolChoice, /) -> dict[str, Any] |
         return tool_choice
     # Specific tool name
     return {"type": "function", "function": {"name": tool_choice}}
+
+
+def tool_choice_to_anthropic_format(tool_choice: ToolChoice, /) -> dict[str, Any] | None:
+    """
+    Convert a ToolChoice to Anthropic's tool_choice format.
+
+    - "auto" → {"type": "auto"}
+    - "required" → {"type": "any"}
+    - "none" → {"type": "none"}
+    - specific tool name → {"type": "tool", "name": "..."}
+    """
+    if tool_choice is None:
+        return None
+    if tool_choice == "auto":
+        return {"type": "auto"}
+    if tool_choice == "required":
+        return {"type": "any"}
+    if tool_choice == "none":
+        return {"type": "none"}
+    return {"type": "tool", "name": tool_choice}
+
+
+def tool_choice_to_gemini_function_calling_config(
+    tool_choice: ToolChoice, /
+) -> dict[str, Any] | None:
+    """
+    Convert a ToolChoice to Gemini's function_calling_config shape.
+
+    - "auto" → {"mode": "AUTO"}
+    - "required" → {"mode": "ANY"}
+    - "none" → {"mode": "NONE"}
+    - specific tool name → {"mode": "ANY", "allowed_function_names": ["..."]}
+    """
+    if tool_choice is None:
+        return None
+    if tool_choice == "auto":
+        return {"mode": "AUTO"}
+    if tool_choice == "required":
+        return {"mode": "ANY"}
+    if tool_choice == "none":
+        return {"mode": "NONE"}
+    return {"mode": "ANY", "allowed_function_names": [tool_choice]}
 
 
 def extract_tool_calls_openai(response: Any, /) -> list[ToolCallRequest] | None:
@@ -400,7 +491,7 @@ def extract_tool_calls_gemini(response: Any, /) -> list[ToolCallRequest] | None:
                 continue
 
         # Gemini doesn't provide IDs, so we generate process-unique ones
-        tc_id = f"gemini_call_{next(_GEMINI_CALL_COUNTER)}"
+        tc_id = f"gemini_call_{os.getpid()}_{next(_GEMINI_CALL_COUNTER)}"
 
         result.append({"id": tc_id, "name": name, "arguments": args})
 

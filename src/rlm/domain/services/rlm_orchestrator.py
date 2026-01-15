@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import time
 from dataclasses import asdict, dataclass, is_dataclass
+from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -83,6 +86,13 @@ def _tool_json_default(value: Any, /) -> Any:
         return value.value
     if isinstance(value, set):
         return list(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        encoded = base64.b64encode(bytes(value)).decode("ascii")
+        return {"__bytes__": encoded}
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         return model_dump()
@@ -324,7 +334,9 @@ class RLMOrchestrator:
                 return candidate
         return None
 
-    def _estimate_prompt_tokens(self, prompt: Prompt, tools: list[ToolDefinition] | None, /) -> int:
+    def _estimate_prompt_tokens_fallback(
+        self, prompt: Prompt, tools: list[ToolDefinition] | None, /
+    ) -> int:
         payload: dict[str, Any] = {"prompt": prompt}
         if tools:
             payload["tools"] = tools
@@ -333,6 +345,30 @@ class RLMOrchestrator:
         except TypeError:
             raw = str(payload)
         return max(1, len(raw) // 4)
+
+    def _estimate_prompt_tokens(self, prompt: Prompt, tools: list[ToolDefinition] | None, /) -> int:
+        counter = getattr(self.llm, "count_prompt_tokens", None)
+        if callable(counter):
+            try:
+                count = counter(LLMRequest(prompt=prompt, tools=tools))
+            except Exception:
+                count = None
+            if isinstance(count, int) and count > 0:
+                return count
+        return self._estimate_prompt_tokens_fallback(prompt, tools)
+
+    async def _aestimate_prompt_tokens(
+        self, prompt: Prompt, tools: list[ToolDefinition] | None, /
+    ) -> int:
+        counter = getattr(self.llm, "count_prompt_tokens", None)
+        if callable(counter):
+            try:
+                count = await asyncio.to_thread(counter, LLMRequest(prompt=prompt, tools=tools))
+            except Exception:
+                count = None
+            if isinstance(count, int) and count > 0:
+                return count
+        return self._estimate_prompt_tokens_fallback(prompt, tools)
 
     def _build_tool_summary_prompt(self, messages: list[dict[str, Any]], /) -> Prompt:
         summary_instructions = (
@@ -405,7 +441,7 @@ class RLMOrchestrator:
         if len(conversation) < self.tool_summary_min_messages:
             return conversation
 
-        estimated_tokens = self._estimate_prompt_tokens(conversation, tool_definitions)
+        estimated_tokens = await self._aestimate_prompt_tokens(conversation, tool_definitions)
         trigger_at = int(context_window * self.tool_summary_trigger_ratio)
         if estimated_tokens < trigger_at:
             return conversation

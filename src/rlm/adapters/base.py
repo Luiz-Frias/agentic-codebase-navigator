@@ -34,6 +34,10 @@ class BaseLLMAdapter(ABC):
         """Whether the adapter supports native tool calling."""
         return False
 
+    def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:
+        """Return prompt token count if the adapter can compute it."""
+        return None
+
     @abstractmethod
     def complete(self, request: LLMRequest, /) -> ChatCompletion: ...
 

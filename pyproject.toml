@@ -33,12 +33,12 @@ Documentation = "https://github.com/Luiz-Frias/agentic-codebase-navigator#readme
 
 [project.optional-dependencies]
 # LLM/provider adapters (installed only when needed)
-llm-openai = ["openai>=2.14.0"]
+llm-openai = ["openai>=2.14.0", "tiktoken>=0.7.0"]
 llm-anthropic = ["anthropic>=0.75.0"]
 llm-gemini = ["google-genai>=1.56.0"]
 llm-portkey = ["portkey-ai>=2.1.0"]
 llm-litellm = ["litellm>=1.0.0"]
-llm-azure-openai = ["openai>=2.14.0"]
+llm-azure-openai = ["openai>=2.14.0", "tiktoken>=0.7.0"]
 
 # Environment adapters (installed only when needed)
 env-modal = ["modal>=0.73.0"]

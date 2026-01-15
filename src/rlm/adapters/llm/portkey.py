@@ -8,6 +8,7 @@ from typing import Any
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
     UsageTracker,
+    count_openai_prompt_tokens,
     extract_finish_reason_openai,
     extract_openai_style_token_usage,
     extract_text_from_chat_response,
@@ -60,6 +61,10 @@ class PortkeyAdapter(BaseLLMAdapter):
     def supports_tools(self) -> bool:
         """Portkey supports tool passthrough (proxies to underlying providers)."""
         return True
+
+    def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:
+        model = request.model or self.model
+        return count_openai_prompt_tokens(request.prompt, request.tools, model)
 
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         portkey = _require_portkey()

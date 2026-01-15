@@ -15,6 +15,8 @@ from rlm.adapters.llm.provider_base import (
     prompt_to_messages,
     prompt_to_text,
     safe_provider_error_message,
+    tool_choice_to_anthropic_format,
+    tool_choice_to_gemini_function_calling_config,
     tool_choice_to_openai_format,
     tool_definition_to_anthropic_format,
     tool_definition_to_gemini_format,
@@ -239,6 +241,28 @@ def test_tool_choice_to_openai_format() -> None:
     # Specific tool name
     result = tool_choice_to_openai_format("get_weather")
     assert result == {"type": "function", "function": {"name": "get_weather"}}
+
+
+@pytest.mark.unit
+def test_tool_choice_to_anthropic_format() -> None:
+    assert tool_choice_to_anthropic_format(None) is None
+    assert tool_choice_to_anthropic_format("auto") == {"type": "auto"}
+    assert tool_choice_to_anthropic_format("required") == {"type": "any"}
+    assert tool_choice_to_anthropic_format("none") == {"type": "none"}
+
+    result = tool_choice_to_anthropic_format("get_weather")
+    assert result == {"type": "tool", "name": "get_weather"}
+
+
+@pytest.mark.unit
+def test_tool_choice_to_gemini_function_calling_config() -> None:
+    assert tool_choice_to_gemini_function_calling_config(None) is None
+    assert tool_choice_to_gemini_function_calling_config("auto") == {"mode": "AUTO"}
+    assert tool_choice_to_gemini_function_calling_config("required") == {"mode": "ANY"}
+    assert tool_choice_to_gemini_function_calling_config("none") == {"mode": "NONE"}
+
+    result = tool_choice_to_gemini_function_calling_config("get_weather")
+    assert result == {"mode": "ANY", "allowed_function_names": ["get_weather"]}
 
 
 @pytest.mark.unit

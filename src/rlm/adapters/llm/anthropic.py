@@ -14,6 +14,7 @@ from rlm.adapters.llm.provider_base import (
     extract_tool_calls_anthropic,
     prompt_to_messages,
     safe_provider_error_message,
+    tool_choice_to_anthropic_format,
     tool_definition_to_anthropic_format,
 )
 from rlm.domain.errors import LLMError
@@ -169,6 +170,21 @@ def _extract_usage_tokens(response: Any, /) -> tuple[int, int]:
     )
 
 
+def _extract_count_tokens(response: Any, /) -> int | None:
+    if response is None:
+        return None
+    try:
+        value = response.input_tokens
+    except Exception:
+        value = response.get("input_tokens") if isinstance(response, dict) else None
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
 @dataclass
 class AnthropicAdapter(BaseLLMAdapter):
     """Adapter skeleton: Anthropic SDK -> domain `LLMPort`."""
@@ -195,6 +211,33 @@ class AnthropicAdapter(BaseLLMAdapter):
         """Anthropic adapter supports native tool use."""
         return True
 
+    def count_prompt_tokens(self, request: LLMRequest, /) -> int | None:
+        anthropic = _require_anthropic()
+        client = self._get_client(anthropic)
+
+        model = request.model or self.model
+        messages, system = _messages_and_system(request.prompt)
+
+        kwargs = dict(self.default_request_kwargs)
+        kwargs.pop("max_tokens", None)
+        if request.tools:
+            kwargs["tools"] = [tool_definition_to_anthropic_format(t) for t in request.tools]
+
+        try:
+            if system is not None:
+                resp = client.messages.count_tokens(
+                    model=model,
+                    messages=messages,
+                    system=system,
+                    **kwargs,
+                )
+            else:
+                resp = client.messages.count_tokens(model=model, messages=messages, **kwargs)
+        except Exception:
+            return None
+
+        return _extract_count_tokens(resp)
+
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
         anthropic = _require_anthropic()
         client = self._get_client(anthropic)
@@ -208,6 +251,8 @@ class AnthropicAdapter(BaseLLMAdapter):
         # Add tools if provided
         if request.tools:
             kwargs["tools"] = [tool_definition_to_anthropic_format(t) for t in request.tools]
+        if request.tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice_to_anthropic_format(request.tool_choice)
 
         start = time.perf_counter()
         try:
@@ -275,6 +320,8 @@ class AnthropicAdapter(BaseLLMAdapter):
         # Add tools if provided
         if request.tools:
             kwargs["tools"] = [tool_definition_to_anthropic_format(t) for t in request.tools]
+        if request.tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice_to_anthropic_format(request.tool_choice)
 
         start = time.perf_counter()
         try:
