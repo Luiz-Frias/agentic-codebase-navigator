@@ -110,7 +110,6 @@ select = [
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
-    "UP038",  # isinstance tuple -> union (deprecated rule, version mismatch between local/pre-commit)
 ]
 
 [tool.ruff.format]
