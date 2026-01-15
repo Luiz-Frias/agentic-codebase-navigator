@@ -30,8 +30,16 @@ class ToolNotFoundError(RLMError):
 
 
 class ToolExecutionError(RLMError):
-    """Raised when tool execution fails."""
+    """Raised when tool execution fails and preserves original exception."""
 
-    def __init__(self, tool_name: str, message: str) -> None:
+    def __init__(
+        self,
+        tool_name: str,
+        message: str,
+        original_exception: Exception | None = None,
+    ) -> None:
         self.tool_name = tool_name
+        self.original_exception = original_exception
+        if original_exception is not None:
+            self.__cause__ = original_exception
         super().__init__(f"Tool '{tool_name}' execution failed: {message}")

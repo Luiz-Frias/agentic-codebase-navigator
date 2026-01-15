@@ -61,22 +61,91 @@ pc-update:
     @echo "✓ Hooks updated"
 
 # =============================================================================
-# SETUP
-# =============================================================================
-
-# Install development tools
-setup:
-    @echo "→ Installing development tools..."
-    cargo install cargo-watch cargo-audit cargo-deny cargo-machete cargo-tarpaulin taplo-cli
-    @echo "→ Setting up pre-commit..."
-    pre-commit install --install-hooks
-    pre-commit install --hook-type commit-msg
-    pre-commit install --hook-type pre-push
-    @echo "✓ Development environment ready"
-
-# =============================================================================
 # GIT / COMMITS
 # =============================================================================
+
+# Cross-platform clipboard helpers (macOS/Linux/Windows)
+_clipboard_copy MSG:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    MSG="{{MSG}}"
+    PLATFORM="${PLATFORM:-$(uname -s)}"
+    case "$PLATFORM" in
+        Darwin*)
+            printf "%s" "$MSG" | pbcopy
+            ;;
+        Linux*)
+            if command -v xclip >/dev/null 2>&1; then
+                printf "%s" "$MSG" | xclip -selection clipboard
+            elif command -v xsel >/dev/null 2>&1; then
+                printf "%s" "$MSG" | xsel --clipboard --input
+            else
+                echo "⚠️  Clipboard unavailable on Linux."
+                echo "   Install xclip or xsel to enable clipboard copy."
+                echo ""
+                echo "$MSG"
+            fi
+            ;;
+        MINGW*|MSYS*|CYGWIN*|Windows_NT)
+            if command -v win32yank.exe >/dev/null 2>&1; then
+                printf "%s" "$MSG" | win32yank.exe -i --crlf
+            elif command -v win32yank >/dev/null 2>&1; then
+                printf "%s" "$MSG" | win32yank -i --crlf
+            elif command -v clip.exe >/dev/null 2>&1; then
+                printf "%s" "$MSG" | clip.exe
+            elif command -v clip >/dev/null 2>&1; then
+                printf "%s" "$MSG" | clip
+            else
+                echo "⚠️  Clipboard unavailable on Windows."
+                echo "   Install win32yank or ensure clip is available."
+                echo ""
+                echo "$MSG"
+            fi
+            ;;
+        *)
+            echo "⚠️  Clipboard unsupported for platform: $PLATFORM"
+            echo "   Set PLATFORM or install a clipboard utility."
+            echo ""
+            echo "$MSG"
+            ;;
+    esac
+
+_clipboard_paste:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PLATFORM="${PLATFORM:-$(uname -s)}"
+    case "$PLATFORM" in
+        Darwin*)
+            pbpaste
+            ;;
+        Linux*)
+            if command -v xclip >/dev/null 2>&1; then
+                xclip -selection clipboard -o
+            elif command -v xsel >/dev/null 2>&1; then
+                xsel --clipboard --output
+            else
+                echo "❌ Clipboard paste unavailable on Linux." >&2
+                echo "   Install xclip or xsel to enable clipboard paste." >&2
+                exit 1
+            fi
+            ;;
+        MINGW*|MSYS*|CYGWIN*|Windows_NT)
+            if command -v win32yank.exe >/dev/null 2>&1; then
+                win32yank.exe -o --lf
+            elif command -v win32yank >/dev/null 2>&1; then
+                win32yank -o --lf
+            else
+                echo "❌ Clipboard paste unavailable on Windows." >&2
+                echo "   Install win32yank to enable clipboard paste." >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "❌ Clipboard unsupported for platform: $PLATFORM" >&2
+            echo "   Set PLATFORM or install a clipboard utility." >&2
+            exit 1
+            ;;
+    esac
 
 # Generate AI commit message following project conventions (requires staged changes)
 commit-msg:
@@ -160,19 +229,23 @@ commit-msg:
     echo "$MSG"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "📋 Copied to clipboard (macOS)"
-    echo "$MSG" | pbcopy
+    echo "📋 Copied to clipboard (if available)"
+    just _clipboard_copy "$MSG"
 
 # Generate AI commit message and commit directly
 commit-ai: commit-msg
     #!/usr/bin/env bash
     set -euo pipefail
-    MSG=$(pbpaste)
+    MSG=$(just _clipboard_paste)
     echo ""
     read -p "Commit with this message? [y/N] " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        git commit -m "$MSG"
+        # Use temp file for reliable multi-line message handling
+        TMPFILE=$(mktemp)
+        trap "rm -f $TMPFILE" EXIT
+        echo "$MSG" > "$TMPFILE"
+        git commit -F "$TMPFILE"
         echo "✓ Committed!"
     else
         echo "Aborted. Message still in clipboard."
@@ -186,7 +259,7 @@ commit-ai: commit-msg
 help:
     @echo ""
     @echo "semantic-code-agents-rs - Development Tasks"
-    @echo "============================================"
+    @echo "============================================"In @justfile around lines 163 - 164, The current recipe uses macOS-only clipboard commands (pbcopy/pbpaste); update the justfile to be cross-platform by adding platform-aware clipboard actions (e.g., implement _clipboard_copy and _clipboard_paste helper recipes) that detect OS via uname or PLATFORM and choose pbcopy/pbpaste on macOS, xclip/xsel on Linux, and clip/win32yank on Windows, falling back to printing the message and documenting the requirement; replace the direct echo "$MSG" | pbcopy usage with a call to the new _clipboard_copy helper (and use _clipboard_paste where needed) so clipboard operations work across OSes or clearly document that macOS is required.
     @echo ""
     @echo "Pre-commit Hooks:"
     @echo "  just pc        # Run hooks on staged files"

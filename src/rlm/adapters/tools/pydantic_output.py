@@ -168,9 +168,9 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
                 raise ValidationError(f"Pydantic validation failed: {e}") from e
 
         # Handle dataclasses
-        if dataclasses.is_dataclass(output_type) and not isinstance(output_type, type):
-            raise ValidationError("Expected a dataclass type, not an instance")
         if dataclasses.is_dataclass(output_type):
+            if not isinstance(output_type, type):
+                raise ValidationError("Expected a dataclass type, not an instance")
             try:
                 return cast(T, output_type(**data))  # type: ignore[redundant-cast]
             except Exception as e:

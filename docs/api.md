@@ -183,7 +183,7 @@ result = rlm.completion("Divide 10 by 0")
 
 The orchestrator handles multi-turn conversations where the LLM may call tools multiple times:
 
-```
+```text
 User: "What is (4 * 5) + 10?"
   → LLM calls multiply(4, 5) → returns 20
   → LLM calls add(20, 10) → returns 30

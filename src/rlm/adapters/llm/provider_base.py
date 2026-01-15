@@ -16,6 +16,13 @@ if TYPE_CHECKING:
 
 
 _GEMINI_CALL_COUNTER = count(1)
+_GEMINI_CALL_LOCK = Lock()
+
+
+def _next_gemini_call_id() -> str:
+    with _GEMINI_CALL_LOCK:
+        counter_value = next(_GEMINI_CALL_COUNTER)
+    return f"gemini_call_{os.getpid()}_{counter_value}"
 
 
 def safe_provider_error_message(provider: str, exc: BaseException, /) -> str:
@@ -491,7 +498,7 @@ def extract_tool_calls_gemini(response: Any, /) -> list[ToolCallRequest] | None:
                 continue
 
         # Gemini doesn't provide IDs, so we generate process-unique ones
-        tc_id = f"gemini_call_{os.getpid()}_{next(_GEMINI_CALL_COUNTER)}"
+        tc_id = _next_gemini_call_id()
 
         result.append({"id": tc_id, "name": name, "arguments": args})
 

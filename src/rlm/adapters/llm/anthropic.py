@@ -64,7 +64,8 @@ def _openai_tool_calls_to_anthropic_blocks(
         if isinstance(raw_args, str):
             try:
                 args = json.loads(raw_args)
-            except Exception:
+            except json.JSONDecodeError:
+                # Log or at minimum use a more specific exception type
                 args = {}
         blocks.append({"type": "tool_use", "id": tc_id, "name": name, "input": args})
     return blocks
