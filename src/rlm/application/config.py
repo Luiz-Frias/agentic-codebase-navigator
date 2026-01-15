@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 EnvironmentName = Literal["local", "modal", "docker", "prime"]
 LoggerName = Literal["none", "jsonl", "console"]
+AgentModeName = Literal["code", "tools"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +68,14 @@ class LoggerConfig:
 
 @dataclass(frozen=True, slots=True)
 class RLMConfig:
-    """Minimal RLM facade configuration (Phase 1)."""
+    """
+    RLM facade configuration.
+
+    Agent Modes:
+        - "code" (default): LLM generates Python code in ```repl blocks for execution.
+        - "tools": LLM uses function calling to invoke registered tools. Tools must
+          be provided at runtime via factory functions (not serializable to config).
+    """
 
     llm: LLMConfig
     other_llms: list[LLMConfig] = field(default_factory=list)
@@ -76,6 +84,7 @@ class RLMConfig:
     max_depth: int = 1
     max_iterations: int = 30
     verbose: bool = False
+    agent_mode: AgentModeName = "code"
 
     def __post_init__(self) -> None:
         if self.max_depth < 0:
@@ -87,3 +96,7 @@ class RLMConfig:
         for cfg in self.other_llms:
             if not isinstance(cfg, LLMConfig):
                 raise ValueError("RLMConfig.other_llms must contain only LLMConfig values")
+        if self.agent_mode not in ("code", "tools"):
+            raise ValueError(
+                f"RLMConfig.agent_mode must be one of ['code', 'tools'], got {self.agent_mode!r}"
+            )

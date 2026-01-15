@@ -11,10 +11,17 @@ from __future__ import annotations
 from rlm._meta import __version__
 from rlm.api import create_rlm, create_rlm_from_config
 from rlm.api.rlm import RLM
-from rlm.application.config import EnvironmentConfig, LLMConfig, LoggerConfig, RLMConfig
+from rlm.application.config import (
+    AgentModeName,
+    EnvironmentConfig,
+    LLMConfig,
+    LoggerConfig,
+    RLMConfig,
+)
 from rlm.domain.models import ChatCompletion
 
 __all__ = [
+    "AgentModeName",
     "ChatCompletion",
     "EnvironmentConfig",
     "LLMConfig",
