@@ -5,6 +5,9 @@ from typing import Any
 
 import pytest
 
+from rlm.adapters.tools.registry import InMemoryToolRegistry
+from rlm.domain.agent_ports import ToolCallRequest
+from rlm.domain.errors import ToolNotFoundError
 from rlm.domain.models import ChatCompletion
 from rlm.domain.models.llm_request import LLMRequest
 from rlm.domain.models.repl import ReplResult
@@ -328,3 +331,465 @@ def test_orchestrator_sync_propagates_environment_execution_errors() -> None:
 
     assert env.loaded_contexts == ["ctx"]
     assert env.executed_code == ['print("x")']
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TOOL CALLING MODE TESTS (Phase 2.4)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class _ToolQueueLLM:
+    """
+    LLM fake that can return tool_calls in responses.
+
+    Script items can be:
+    - str: text response (no tool calls)
+    - dict: {"tool_calls": [...], "response": "...", "finish_reason": "..."}
+    """
+
+    def __init__(
+        self,
+        *,
+        model_name: str = "tool-mock",
+        script: list[str | dict[str, Any]] | None = None,
+    ):
+        self._model_name = model_name
+        self._script: list[str | dict[str, Any]] = list(script or [])
+        self._calls: list[LLMRequest] = []
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    def _pop_next(self) -> tuple[str, list[ToolCallRequest] | None, str | None]:
+        """Pop next script item and return (response, tool_calls, finish_reason)."""
+        if not self._script:
+            raise AssertionError("_ToolQueueLLM: no scripted responses left")
+        item = self._script.pop(0)
+
+        if isinstance(item, str):
+            return item, None, "stop"
+
+        tool_calls = item.get("tool_calls")
+        response = str(item.get("response", ""))
+        finish_reason = item.get("finish_reason")
+        if finish_reason is None:
+            finish_reason = "tool_calls" if tool_calls else "stop"
+        return response, tool_calls, finish_reason
+
+    def complete(self, request: LLMRequest, /) -> ChatCompletion:
+        self._calls.append(request)
+        response_text, tool_calls, finish_reason = self._pop_next()
+        usage = UsageSummary(
+            model_usage_summaries={
+                self._model_name: ModelUsageSummary(
+                    total_calls=1, total_input_tokens=10, total_output_tokens=10
+                )
+            }
+        )
+        return ChatCompletion(
+            root_model=self._model_name,
+            prompt=request.prompt,
+            response=response_text,
+            usage_summary=usage,
+            execution_time=0.01,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
+        )
+
+    async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
+        return self.complete(request)
+
+    def get_usage_summary(self) -> UsageSummary:
+        return UsageSummary(
+            model_usage_summaries={
+                self._model_name: ModelUsageSummary(
+                    total_calls=len(self._calls),
+                    total_input_tokens=10 * len(self._calls),
+                    total_output_tokens=10 * len(self._calls),
+                )
+            }
+        )
+
+    def get_last_usage(self) -> UsageSummary:
+        return UsageSummary(
+            model_usage_summaries={
+                self._model_name: ModelUsageSummary(
+                    total_calls=1, total_input_tokens=10, total_output_tokens=10
+                )
+            }
+        )
+
+
+def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolCallRequest:
+    """Helper to create a ToolCallRequest."""
+    return ToolCallRequest(id=tool_id, name=name, arguments=arguments)
+
+
+def simple_add(a: int, b: int) -> int:
+    """Simple add function for testing."""
+    return a + b
+
+
+def simple_multiply(x: int, y: int) -> int:
+    """Simple multiply function for testing."""
+    return x * y
+
+
+def failing_tool(msg: str) -> None:
+    """Tool that always raises an error."""
+    raise ValueError(f"Tool error: {msg}")
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_requires_registry() -> None:
+    """Tool mode raises ValueError if tool_registry is not provided."""
+    env = QueueEnvironment()
+    llm = _ToolQueueLLM(script=["ignored"])
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=None,
+    )
+
+    with pytest.raises(ValueError, match="tool_registry"):
+        orch.completion("What is 2 + 2?")
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_happy_path_single_tool_call() -> None:
+    """Tool mode executes tool and returns final answer."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(
+        script=[
+            # First: LLM calls the add tool
+            {
+                "tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 2, "b": 3})],
+                "response": "",
+                "finish_reason": "tool_calls",
+            },
+            # Second: LLM returns final answer after seeing result
+            "The answer is 5.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    cc = orch.completion("What is 2 + 3?")
+
+    assert cc.response == "The answer is 5."
+    assert cc.finish_reason == "stop"
+    # Usage should account for both LLM calls
+    assert cc.usage_summary.model_usage_summaries["tool-mock"].total_calls == 2
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_multi_turn_tool_calls() -> None:
+    """Tool mode can handle multiple tool calls in sequence."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+    registry.register(simple_multiply)
+
+    llm = _ToolQueueLLM(
+        script=[
+            # First: LLM calls add
+            {
+                "tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 2, "b": 3})],
+            },
+            # Second: LLM calls multiply with result
+            {
+                "tool_calls": [_make_tool_call("call_2", "simple_multiply", {"x": 5, "y": 4})],
+            },
+            # Third: Final answer
+            "2+3=5, then 5*4=20.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    cc = orch.completion("What is (2+3)*4?")
+
+    assert cc.response == "2+3=5, then 5*4=20."
+    assert cc.usage_summary.model_usage_summaries["tool-mock"].total_calls == 3
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_multiple_parallel_tool_calls() -> None:
+    """Tool mode can handle multiple tool calls in a single response."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+    registry.register(simple_multiply)
+
+    llm = _ToolQueueLLM(
+        script=[
+            # LLM calls both tools at once
+            {
+                "tool_calls": [
+                    _make_tool_call("call_1", "simple_add", {"a": 1, "b": 2}),
+                    _make_tool_call("call_2", "simple_multiply", {"x": 3, "y": 4}),
+                ],
+            },
+            # Final answer
+            "1+2=3 and 3*4=12.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    cc = orch.completion("What is 1+2 and 3*4?")
+
+    assert cc.response == "1+2=3 and 3*4=12."
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_tool_not_found_raises() -> None:
+    """Tool mode raises ToolNotFoundError for unknown tools."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    # Registry is empty - no tools registered
+
+    llm = _ToolQueueLLM(
+        script=[
+            {
+                "tool_calls": [_make_tool_call("call_1", "nonexistent_tool", {"arg": "value"})],
+            },
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    with pytest.raises(ToolNotFoundError) as exc_info:
+        orch.completion("Call the mystery tool")
+
+    assert exc_info.value.tool_name == "nonexistent_tool"
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_tool_execution_error_captured() -> None:
+    """Tool execution errors are captured and returned to LLM, not raised."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(failing_tool)
+
+    llm = _ToolQueueLLM(
+        script=[
+            # LLM calls the failing tool
+            {
+                "tool_calls": [_make_tool_call("call_1", "failing_tool", {"msg": "oops"})],
+            },
+            # LLM sees the error and responds accordingly
+            "The tool failed with an error.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    # Should NOT raise - error is captured and passed to LLM
+    cc = orch.completion("Do the failing thing")
+
+    assert cc.response == "The tool failed with an error."
+    # Verify the LLM received the error message (check conversation history)
+    assert len(llm._calls) == 2
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_max_iterations_enforced() -> None:
+    """Tool mode respects max_tool_iterations limit."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    # LLM keeps calling tools for exactly max_tool_iterations calls
+    # After max_tool_iterations=3 iterations, orchestrator asks for final answer
+    llm = _ToolQueueLLM(
+        script=[
+            # First 3 calls: LLM returns tool_calls
+            {"tool_calls": [_make_tool_call("call_0", "simple_add", {"a": 1, "b": 1})]},
+            {"tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 1, "b": 1})]},
+            {"tool_calls": [_make_tool_call("call_2", "simple_add", {"a": 1, "b": 1})]},
+            # 4th call: orchestrator forces final answer request
+            "Forced final answer",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+        max_tool_iterations=3,  # Only allow 3 iterations
+    )
+
+    cc = orch.completion("Keep adding forever")
+
+    assert cc.response == "Forced final answer"
+    assert cc.finish_reason == "max_iterations"
+    # 3 tool iterations + 1 final answer request = 4 calls
+    assert len(llm._calls) == 4
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_immediate_final_answer() -> None:
+    """Tool mode handles LLM responding without tool calls."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(
+        script=[
+            # LLM decides to answer directly without using tools
+            "I already know the answer is 42.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    cc = orch.completion("What is the meaning of life?")
+
+    assert cc.response == "I already know the answer is 42."
+    assert cc.finish_reason == "stop"
+    assert len(llm._calls) == 1
+
+
+@pytest.mark.unit
+async def test_orchestrator_tool_mode_async_happy_path() -> None:
+    """Async tool mode works correctly."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(
+        script=[
+            {
+                "tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 10, "b": 20})],
+            },
+            "10 + 20 = 30",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    cc = await orch.acompletion("What is 10 + 20?")
+
+    assert cc.response == "10 + 20 = 30"
+    assert cc.finish_reason == "stop"
+    assert cc.usage_summary.model_usage_summaries["tool-mock"].total_calls == 2
+
+
+@pytest.mark.unit
+async def test_orchestrator_tool_mode_async_requires_registry() -> None:
+    """Async tool mode also requires registry."""
+    env = QueueEnvironment()
+    llm = _ToolQueueLLM(script=["ignored"])
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=None,
+    )
+
+    with pytest.raises(ValueError, match="tool_registry"):
+        await orch.acompletion("What is 2 + 2?")
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_handles_string_prompt() -> None:
+    """Tool mode handles plain string prompts."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(script=["Direct answer"])
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    cc = orch.completion("Simple string prompt")
+    assert cc.response == "Direct answer"
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_handles_dict_prompt() -> None:
+    """Tool mode handles dict prompts."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(script=["Direct answer"])
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    cc = orch.completion({"role": "user", "content": "Dict prompt"})
+    assert cc.response == "Direct answer"
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_handles_list_prompt() -> None:
+    """Tool mode handles list of messages prompts."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(script=["Direct answer"])
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    cc = orch.completion([{"role": "user", "content": "List prompt"}])
+    assert cc.response == "Direct answer"

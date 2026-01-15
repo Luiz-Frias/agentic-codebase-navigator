@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
+from rlm.domain.agent_ports import ToolCallRequest, ToolCallResult, ToolMessage
+from rlm.domain.errors import ToolNotFoundError
 from rlm.domain.models.completion import ChatCompletion
 from rlm.domain.models.iteration import CodeBlock, Iteration
 from rlm.domain.models.llm_request import LLMRequest
@@ -25,7 +28,7 @@ from rlm.domain.services.prompts import (
 from rlm.domain.types import Prompt
 
 if TYPE_CHECKING:
-    from rlm.domain.agent_ports import ToolRegistryPort
+    from rlm.domain.agent_ports import ToolDefinition, ToolRegistryPort
 
 # Type alias for agent mode
 AgentMode = Literal["code", "tools"]
@@ -99,6 +102,322 @@ class RLMOrchestrator:
     agent_mode: AgentMode = "code"
     tool_registry: ToolRegistryPort | None = None
 
+    # Tool calling configuration (Phase 2.4)
+    max_tool_iterations: int = 10
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Tool Calling Helpers (Phase 2.4)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_tool_definitions(self) -> list[ToolDefinition]:
+        """Extract tool definitions from the registry for LLM context."""
+        if self.tool_registry is None:
+            return []
+        return self.tool_registry.list_definitions()
+
+    def _execute_tool_call(self, tool_call: ToolCallRequest, /) -> ToolCallResult:
+        """
+        Execute a single tool call and return the result.
+
+        Args:
+            tool_call: The tool call request from the LLM.
+
+        Returns:
+            ToolCallResult with either result or error populated.
+
+        Raises:
+            ToolNotFoundError: If the tool is not in the registry.
+        """
+        assert self.tool_registry is not None  # Caller ensures this
+
+        tool = self.tool_registry.get(tool_call["name"])
+        if tool is None:
+            raise ToolNotFoundError(tool_call["name"])
+
+        try:
+            result = tool.execute(**tool_call["arguments"])
+            return ToolCallResult(
+                id=tool_call["id"],
+                name=tool_call["name"],
+                result=result,
+                error=None,
+            )
+        except Exception as e:  # noqa: BLE001 - tool execution boundary
+            return ToolCallResult(
+                id=tool_call["id"],
+                name=tool_call["name"],
+                result=None,
+                error=str(e),
+            )
+
+    async def _aexecute_tool_call(self, tool_call: ToolCallRequest, /) -> ToolCallResult:
+        """
+        Execute a single tool call asynchronously and return the result.
+
+        Args:
+            tool_call: The tool call request from the LLM.
+
+        Returns:
+            ToolCallResult with either result or error populated.
+
+        Raises:
+            ToolNotFoundError: If the tool is not in the registry.
+        """
+        assert self.tool_registry is not None  # Caller ensures this
+
+        tool = self.tool_registry.get(tool_call["name"])
+        if tool is None:
+            raise ToolNotFoundError(tool_call["name"])
+
+        try:
+            result = await tool.aexecute(**tool_call["arguments"])
+            return ToolCallResult(
+                id=tool_call["id"],
+                name=tool_call["name"],
+                result=result,
+                error=None,
+            )
+        except Exception as e:  # noqa: BLE001 - tool execution boundary
+            return ToolCallResult(
+                id=tool_call["id"],
+                name=tool_call["name"],
+                result=None,
+                error=str(e),
+            )
+
+    def _build_tool_result_message(self, result: ToolCallResult, /) -> ToolMessage:
+        """
+        Format a tool execution result as a conversation message.
+
+        The content is JSON-serialized for consistent parsing by the LLM.
+        """
+        if result["error"] is not None:
+            content = json.dumps({"error": result["error"]})
+        else:
+            content = json.dumps(result["result"])
+
+        return ToolMessage(
+            role="tool",
+            tool_call_id=result["id"],
+            content=content,
+        )
+
+    def _build_assistant_tool_call_message(
+        self, tool_calls: list[ToolCallRequest], response_text: str = ""
+    ) -> dict[str, Any]:
+        """
+        Build an assistant message containing tool calls.
+
+        This follows the OpenAI chat format for assistant messages with tool_calls.
+        """
+        return {
+            "role": "assistant",
+            "content": response_text,
+            "tool_calls": [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": json.dumps(tc["arguments"]),
+                    },
+                }
+                for tc in tool_calls
+            ],
+        }
+
+    def _tool_calling_loop(
+        self,
+        prompt: Prompt,
+        *,
+        tool_definitions: list[ToolDefinition],
+        usage_totals: dict[str, ModelUsageSummary],
+    ) -> ChatCompletion:
+        """
+        Execute the multi-turn tool calling loop (sync).
+
+        The loop continues until:
+        - The LLM returns a response without tool_calls (final answer)
+        - max_tool_iterations is reached
+
+        Args:
+            prompt: The initial user prompt.
+            tool_definitions: Tools available for the LLM to call.
+            usage_totals: Running usage totals to accumulate into.
+
+        Returns:
+            ChatCompletion with the final response.
+        """
+        time_start = time.perf_counter()
+
+        # Build initial conversation with system prompt and user message
+        conversation: list[dict[str, Any]] = [
+            {"role": "system", "content": self.system_prompt},
+        ]
+
+        # Handle prompt formats (string, dict, or list of messages)
+        if isinstance(prompt, str):
+            conversation.append({"role": "user", "content": prompt})
+        elif isinstance(prompt, dict):
+            conversation.append(prompt)  # type: ignore[arg-type]
+        elif isinstance(prompt, list):
+            conversation.extend(prompt)  # type: ignore[arg-type]
+        else:
+            conversation.append({"role": "user", "content": str(prompt)})
+
+        for _ in range(self.max_tool_iterations):
+            # Create request with tools
+            request = LLMRequest(
+                prompt=conversation,
+                tools=tool_definitions,
+                tool_choice="auto",
+            )
+
+            # Call LLM
+            completion = self.llm.complete(request)
+            _add_usage_totals(usage_totals, completion.usage_summary)
+
+            # If no tool calls, we have a final answer
+            if not completion.tool_calls:
+                time_end = time.perf_counter()
+                return ChatCompletion(
+                    root_model=completion.root_model,
+                    prompt=prompt,
+                    response=completion.response,
+                    usage_summary=_clone_usage_totals(usage_totals),
+                    execution_time=time_end - time_start,
+                    finish_reason=completion.finish_reason,
+                )
+
+            # Add assistant's tool call message to conversation
+            conversation.append(
+                self._build_assistant_tool_call_message(completion.tool_calls, completion.response)
+            )
+
+            # Execute each tool call and add results to conversation
+            for tool_call in completion.tool_calls:
+                result = self._execute_tool_call(tool_call)
+                tool_message = self._build_tool_result_message(result)
+                conversation.append(tool_message)  # type: ignore[arg-type]
+
+        # Max iterations reached - request final answer
+        conversation.append(
+            {
+                "role": "user",
+                "content": "Please provide your final answer based on the tool results.",
+            }
+        )
+        final_request = LLMRequest(
+            prompt=conversation,
+            tools=tool_definitions,
+            tool_choice="none",  # Force text response
+        )
+        final_completion = self.llm.complete(final_request)
+        _add_usage_totals(usage_totals, final_completion.usage_summary)
+
+        time_end = time.perf_counter()
+        return ChatCompletion(
+            root_model=final_completion.root_model,
+            prompt=prompt,
+            response=final_completion.response,
+            usage_summary=_clone_usage_totals(usage_totals),
+            execution_time=time_end - time_start,
+            finish_reason="max_iterations",
+        )
+
+    async def _atool_calling_loop(
+        self,
+        prompt: Prompt,
+        *,
+        tool_definitions: list[ToolDefinition],
+        usage_totals: dict[str, ModelUsageSummary],
+    ) -> ChatCompletion:
+        """
+        Execute the multi-turn tool calling loop (async).
+
+        Same logic as _tool_calling_loop but uses async LLM calls and tool execution.
+        """
+        time_start = time.perf_counter()
+
+        # Build initial conversation with system prompt and user message
+        conversation: list[dict[str, Any]] = [
+            {"role": "system", "content": self.system_prompt},
+        ]
+
+        # Handle prompt formats (string, dict, or list of messages)
+        if isinstance(prompt, str):
+            conversation.append({"role": "user", "content": prompt})
+        elif isinstance(prompt, dict):
+            conversation.append(prompt)  # type: ignore[arg-type]
+        elif isinstance(prompt, list):
+            conversation.extend(prompt)  # type: ignore[arg-type]
+        else:
+            conversation.append({"role": "user", "content": str(prompt)})
+
+        for _ in range(self.max_tool_iterations):
+            # Create request with tools
+            request = LLMRequest(
+                prompt=conversation,
+                tools=tool_definitions,
+                tool_choice="auto",
+            )
+
+            # Call LLM
+            completion = await self.llm.acomplete(request)
+            _add_usage_totals(usage_totals, completion.usage_summary)
+
+            # If no tool calls, we have a final answer
+            if not completion.tool_calls:
+                time_end = time.perf_counter()
+                return ChatCompletion(
+                    root_model=completion.root_model,
+                    prompt=prompt,
+                    response=completion.response,
+                    usage_summary=_clone_usage_totals(usage_totals),
+                    execution_time=time_end - time_start,
+                    finish_reason=completion.finish_reason,
+                )
+
+            # Add assistant's tool call message to conversation
+            conversation.append(
+                self._build_assistant_tool_call_message(completion.tool_calls, completion.response)
+            )
+
+            # Execute each tool call and add results to conversation
+            for tool_call in completion.tool_calls:
+                result = await self._aexecute_tool_call(tool_call)
+                tool_message = self._build_tool_result_message(result)
+                conversation.append(tool_message)  # type: ignore[arg-type]
+
+        # Max iterations reached - request final answer
+        conversation.append(
+            {
+                "role": "user",
+                "content": "Please provide your final answer based on the tool results.",
+            }
+        )
+        final_request = LLMRequest(
+            prompt=conversation,
+            tools=tool_definitions,
+            tool_choice="none",  # Force text response
+        )
+        final_completion = await self.llm.acomplete(final_request)
+        _add_usage_totals(usage_totals, final_completion.usage_summary)
+
+        time_end = time.perf_counter()
+        return ChatCompletion(
+            root_model=final_completion.root_model,
+            prompt=prompt,
+            response=final_completion.response,
+            usage_summary=_clone_usage_totals(usage_totals),
+            execution_time=time_end - time_start,
+            finish_reason="max_iterations",
+        )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Main Completion Methods
+    # ─────────────────────────────────────────────────────────────────────────
+
     def completion(
         self,
         prompt: Prompt,
@@ -115,13 +434,13 @@ class RLMOrchestrator:
         if self.agent_mode == "tools":
             if self.tool_registry is None:
                 raise ValueError("agent_mode='tools' requires a tool_registry to be provided")
-            # Tool calling mode is infrastructure-ready but not yet implemented.
-            # Phase 2 will add: tool definitions in LLM requests, tool_call parsing,
-            # tool execution, and result injection into conversation.
-            raise NotImplementedError(
-                "Tool calling mode is not yet implemented. "
-                "Use agent_mode='code' (default) for now. "
-                "See domain/agent_ports.py for the extension points."
+            # Use tool calling loop instead of code execution
+            tool_definitions = self._build_tool_definitions()
+            usage_totals: dict[str, ModelUsageSummary] = {}
+            return self._tool_calling_loop(
+                prompt,
+                tool_definitions=tool_definitions,
+                usage_totals=usage_totals,
             )
 
         # Accumulate orchestrator (root) usage incrementally to avoid repeatedly
@@ -266,10 +585,13 @@ class RLMOrchestrator:
         if self.agent_mode == "tools":
             if self.tool_registry is None:
                 raise ValueError("agent_mode='tools' requires a tool_registry to be provided")
-            raise NotImplementedError(
-                "Tool calling mode is not yet implemented. "
-                "Use agent_mode='code' (default) for now. "
-                "See domain/agent_ports.py for the extension points."
+            # Use async tool calling loop instead of code execution
+            tool_definitions = self._build_tool_definitions()
+            usage_totals: dict[str, ModelUsageSummary] = {}
+            return await self._atool_calling_loop(
+                prompt,
+                tool_definitions=tool_definitions,
+                usage_totals=usage_totals,
             )
 
         root_usage_totals: dict[str, ModelUsageSummary] = {}

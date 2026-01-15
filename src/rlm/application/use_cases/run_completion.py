@@ -212,6 +212,8 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                     response=cc.response,
                     usage_summary=merged_usage,
                     execution_time=cc.execution_time,
+                    tool_calls=cc.tool_calls,
+                    finish_reason=cc.finish_reason,
                 )
             except RLMError:
                 raise
@@ -296,6 +298,8 @@ async def arun_completion(
                     response=cc.response,
                     usage_summary=merged_usage,
                     execution_time=cc.execution_time,
+                    tool_calls=cc.tool_calls,
+                    finish_reason=cc.finish_reason,
                 )
             except RLMError:
                 raise
