@@ -28,6 +28,9 @@ def find_final_answer(text: str, *, environment: EnvironmentPort | None = None) 
 
     - FINAL(answer) returns the answer substring (stripped).
     - FINAL_VAR(name) optionally queries the environment to resolve a variable.
+
+    Performance: Since FINAL() typically appears at the end of LLM responses,
+    we search backwards to avoid scanning through potentially large prefixes.
     """
 
     def _extract_call_arg(call_name: str) -> str | None:
@@ -37,12 +40,33 @@ def find_final_answer(text: str, *, environment: EnvironmentPort | None = None) 
 
         We can't use a naive regex like `.*?` because answers may contain
         parentheses (e.g. `FINAL(f(x) == 5)`).
+
+        Optimization: Search backwards from end of text since FINAL markers
+        typically appear at the end of responses.
         """
-        m = re.search(rf"^\s*{re.escape(call_name)}\(", text, re.MULTILINE)
-        if not m:
+        # Fast path: check if marker exists at all
+        marker = f"{call_name}("
+        marker_pos = text.rfind(marker)
+        if marker_pos == -1:
             return None
 
-        start = m.end()
+        # Find the start of the line containing this marker
+        line_start = text.rfind("\n", 0, marker_pos) + 1  # +1 to skip the newline itself
+
+        # Verify marker is at start of line (with optional whitespace)
+        line_prefix = text[line_start:marker_pos]
+        if line_prefix and not line_prefix.isspace():
+            # Marker not at line start; search for earlier occurrences
+            # Fall back to forward regex search for correctness
+            m = re.search(rf"^\s*{re.escape(call_name)}\(", text, re.MULTILINE)
+            if not m:
+                return None
+            start = m.end()
+        else:
+            # Marker is at line start (with optional whitespace)
+            start = marker_pos + len(marker)
+
+        # Parse balanced parentheses
         depth = 1
         in_single = False
         in_double = False
@@ -103,14 +127,35 @@ async def afind_final_answer(
     Async variant of `find_final_answer`.
 
     This avoids blocking the event loop when FINAL_VAR needs environment execution.
+
+    Performance: Since FINAL() typically appears at the end of LLM responses,
+    we search backwards to avoid scanning through potentially large prefixes.
     """
 
     def _extract_call_arg(call_name: str) -> str | None:
-        m = re.search(rf"^\s*{re.escape(call_name)}\(", text, re.MULTILINE)
-        if not m:
+        # Fast path: check if marker exists at all
+        marker = f"{call_name}("
+        marker_pos = text.rfind(marker)
+        if marker_pos == -1:
             return None
 
-        start = m.end()
+        # Find the start of the line containing this marker
+        line_start = text.rfind("\n", 0, marker_pos) + 1  # +1 to skip the newline itself
+
+        # Verify marker is at start of line (with optional whitespace)
+        line_prefix = text[line_start:marker_pos]
+        if line_prefix and not line_prefix.isspace():
+            # Marker not at line start; search for earlier occurrences
+            # Fall back to forward regex search for correctness
+            m = re.search(rf"^\s*{re.escape(call_name)}\(", text, re.MULTILINE)
+            if not m:
+                return None
+            start = m.end()
+        else:
+            # Marker is at line start (with optional whitespace)
+            start = marker_pos + len(marker)
+
+        # Parse balanced parentheses
         depth = 1
         in_single = False
         in_double = False
