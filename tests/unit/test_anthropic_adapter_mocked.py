@@ -60,6 +60,14 @@ class _FakeAsyncClient:
 
 
 @pytest.mark.unit
+def test_anthropic_adapter_reports_tool_prompt_format() -> None:
+    from rlm.adapters.llm.anthropic import AnthropicAdapter
+
+    adapter = AnthropicAdapter(model="claude-test")
+    assert adapter.tool_prompt_format == "anthropic"
+
+
+@pytest.mark.unit
 def test_anthropic_adapter_complete_maps_prompt_and_extracts_text_and_usage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

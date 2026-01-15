@@ -459,6 +459,27 @@ def test_orchestrator_tool_mode_requires_registry() -> None:
 
 
 @pytest.mark.unit
+def test_orchestrator_tool_mode_rejects_non_openai_tool_format() -> None:
+    """Tool mode rejects adapters that don't use OpenAI-style tool messages."""
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(script=["ignored"])
+    llm.tool_prompt_format = "anthropic"
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    with pytest.raises(ValueError, match="OpenAI-style tool messages"):
+        orch.completion("What is 2 + 2?")
+
+
+@pytest.mark.unit
 def test_orchestrator_tool_mode_happy_path_single_tool_call() -> None:
     """Tool mode executes tool and returns final answer."""
     env = QueueEnvironment()

@@ -115,6 +115,17 @@ class RLMOrchestrator:
             return []
         return self.tool_registry.list_definitions()
 
+    def _assert_tool_mode_supported(self) -> None:
+        if self.tool_registry is None:
+            raise ValueError("agent_mode='tools' requires a tool_registry to be provided")
+
+        tool_prompt_format = getattr(self.llm, "tool_prompt_format", "openai")
+        if tool_prompt_format != "openai":
+            raise ValueError(
+                "agent_mode='tools' currently supports OpenAI-style tool messages only; "
+                f"adapter reports tool_prompt_format={tool_prompt_format!r}"
+            )
+
     def _execute_tool_call(self, tool_call: ToolCallRequest, /) -> ToolCallResult:
         """
         Execute a single tool call and return the result.
@@ -432,9 +443,7 @@ class RLMOrchestrator:
 
         # Validate agent mode configuration
         if self.agent_mode == "tools":
-            if self.tool_registry is None:
-                raise ValueError("agent_mode='tools' requires a tool_registry to be provided")
-            # Use tool calling loop instead of code execution
+            self._assert_tool_mode_supported()
             tool_definitions = self._build_tool_definitions()
             usage_totals: dict[str, ModelUsageSummary] = {}
             return self._tool_calling_loop(
@@ -583,9 +592,7 @@ class RLMOrchestrator:
 
         # Validate agent mode configuration
         if self.agent_mode == "tools":
-            if self.tool_registry is None:
-                raise ValueError("agent_mode='tools' requires a tool_registry to be provided")
-            # Use async tool calling loop instead of code execution
+            self._assert_tool_mode_supported()
             tool_definitions = self._build_tool_definitions()
             usage_totals: dict[str, ModelUsageSummary] = {}
             return await self._atool_calling_loop(

@@ -10,9 +10,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
+import types
+import typing
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, get_type_hints
+from typing import Any, get_args, get_origin, get_type_hints
 
 from rlm.adapters.base import BaseToolAdapter
 from rlm.domain.agent_ports import ToolDefinition
@@ -37,9 +39,9 @@ def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
     if python_type in type_map:
         return type_map[python_type]
 
-    # Handle Optional (Union with None)
-    origin = getattr(python_type, "__origin__", None)
-    args = getattr(python_type, "__args__", ())
+    # Handle Optional (Union with None) and parameterized collections
+    origin = get_origin(python_type)
+    args = get_args(python_type)
 
     if origin is list and args:
         return {"type": "array", "items": _python_type_to_json_schema(args[0])}
@@ -52,13 +54,11 @@ def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
         }
 
     # Union types (including Optional)
-    if origin is type(str | int):  # UnionType in 3.10+
+    if origin in (types.UnionType, typing.Union):
         non_none = [a for a in args if a is not type(None)]
         if len(non_none) == 1:
-            # Optional[X] -> X with nullable
-            schema = _python_type_to_json_schema(non_none[0])
-            return schema  # LLMs typically handle None implicitly
-        # True union - use anyOf
+            # Optional[X] -> X (nullable handled implicitly by most LLMs)
+            return _python_type_to_json_schema(non_none[0])
         return {"anyOf": [_python_type_to_json_schema(a) for a in args]}
 
     # Fallback to string for complex types
@@ -217,11 +217,10 @@ class NativeToolAdapter(BaseToolAdapter):
 
     async def aexecute(self, **kwargs: Any) -> Any:
         """Execute the wrapped function asynchronously."""
-        result = self.func(**kwargs)
+        if asyncio.iscoroutinefunction(self.func):
+            return await self.func(**kwargs)
+
+        result = await asyncio.to_thread(self.func, **kwargs)
         if asyncio.iscoroutine(result):
             return await result
-        # If sync function, run in thread pool
-        if not asyncio.iscoroutinefunction(self.func):
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, lambda: self.func(**kwargs))
         return result

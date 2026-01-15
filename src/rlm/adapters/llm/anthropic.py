@@ -127,6 +127,10 @@ class AnthropicAdapter(BaseLLMAdapter):
         return self.model
 
     @property
+    def tool_prompt_format(self) -> str:
+        return "anthropic"
+
+    @property
     def supports_tools(self) -> bool:
         """Anthropic adapter supports native tool use."""
         return True

@@ -24,6 +24,11 @@ class BaseLLMAdapter(ABC):
     @abstractmethod
     def model_name(self) -> str: ...
 
+    @property
+    def tool_prompt_format(self) -> str:
+        """Tool calling prompt format expected by the adapter."""
+        return "openai"
+
     @abstractmethod
     def complete(self, request: LLMRequest, /) -> ChatCompletion: ...
 

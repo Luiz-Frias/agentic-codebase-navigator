@@ -24,6 +24,12 @@ def test_build_gemini_adapter_validates_inputs() -> None:
 
 
 @pytest.mark.unit
+def test_gemini_adapter_reports_tool_prompt_format() -> None:
+    adapter = GeminiAdapter(model="m")
+    assert adapter.tool_prompt_format == "gemini"
+
+
+@pytest.mark.unit
 def test_extract_text_supports_multiple_shapes() -> None:
     assert _extract_text({"text": "hi"}) == "hi"
 
