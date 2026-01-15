@@ -13,6 +13,7 @@ from rlm.application.use_cases.run_completion import (
 )
 from rlm.domain.errors import ValidationError
 from rlm.domain.models import ChatCompletion
+from rlm.domain.models.llm_request import ToolChoice
 from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
 from rlm.domain.services.rlm_orchestrator import AgentMode
 from rlm.domain.types import Prompt
@@ -95,7 +96,13 @@ class RLM:
         self._environment_factory = environment_factory
         self._system_prompt = system_prompt
 
-    def completion(self, prompt: Prompt, *, root_prompt: str | None = None) -> ChatCompletion:
+    def completion(
+        self,
+        prompt: Prompt,
+        *,
+        root_prompt: str | None = None,
+        tool_choice: ToolChoice | None = None,
+    ) -> ChatCompletion:
         broker = self._broker_factory(self._llm)
         # Register additional models for subcalls (Phase 4 multi-backend).
         seen = {self._llm.model_name}
@@ -133,11 +140,16 @@ class RLM:
             root_prompt=root_prompt,
             max_depth=self._max_depth,
             max_iterations=self._max_iterations,
+            tool_choice=tool_choice,
         )
         return run_completion(req, deps=deps)
 
     async def acompletion(
-        self, prompt: Prompt, *, root_prompt: str | None = None
+        self,
+        prompt: Prompt,
+        *,
+        root_prompt: str | None = None,
+        tool_choice: ToolChoice | None = None,
     ) -> ChatCompletion:
         broker = self._broker_factory(self._llm)
         # Register additional models for subcalls (Phase 4 multi-backend).
@@ -172,6 +184,7 @@ class RLM:
             root_prompt=root_prompt,
             max_depth=self._max_depth,
             max_iterations=self._max_iterations,
+            tool_choice=tool_choice,
         )
         return await arun_completion(req, deps=deps)
 

@@ -3,14 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
 from rlm.domain.agent_ports import ToolCallRequest, ToolCallResult, ToolMessage
 from rlm.domain.errors import ToolNotFoundError
 from rlm.domain.models.completion import ChatCompletion
 from rlm.domain.models.iteration import CodeBlock, Iteration
-from rlm.domain.models.llm_request import LLMRequest
+from rlm.domain.models.llm_request import LLMRequest, ToolChoice
 from rlm.domain.models.query_metadata import QueryMetadata
 from rlm.domain.models.usage import ModelUsageSummary, UsageSummary
 from rlm.domain.ports import EnvironmentPort, LLMPort, LoggerPort
@@ -74,6 +75,26 @@ def _clone_usage_totals(totals: dict[str, ModelUsageSummary], /) -> UsageSummary
     )
 
 
+def _tool_json_default(value: Any, /) -> Any:
+    """Coerce tool results into JSON-friendly structures or raise TypeError."""
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, set):
+        return list(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return model_dump()
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
+    as_dict = getattr(value, "dict", None)
+    if callable(as_dict):
+        return as_dict()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 @dataclass(slots=True, frozen=True)
 class RLMOrchestrator:
     """
@@ -104,6 +125,10 @@ class RLMOrchestrator:
 
     # Tool calling configuration (Phase 2.4)
     max_tool_iterations: int = 10
+    context_window_tokens: int | None = None
+    tool_summary_trigger_ratio: float = 0.92
+    tool_summary_keep_last_messages: int = 6
+    tool_summary_min_messages: int = 8
 
     # ─────────────────────────────────────────────────────────────────────────
     # Tool Calling Helpers (Phase 2.4)
@@ -119,12 +144,18 @@ class RLMOrchestrator:
         if self.tool_registry is None:
             raise ValueError("agent_mode='tools' requires a tool_registry to be provided")
 
-        tool_prompt_format = getattr(self.llm, "tool_prompt_format", "openai")
-        if tool_prompt_format != "openai":
+        supports_tools = getattr(self.llm, "supports_tools", None)
+        if supports_tools is False:
             raise ValueError(
-                "agent_mode='tools' currently supports OpenAI-style tool messages only; "
-                f"adapter reports tool_prompt_format={tool_prompt_format!r}"
+                "agent_mode='tools' requires an LLM adapter that supports tool calling"
             )
+        if supports_tools is None:
+            tool_prompt_format = getattr(self.llm, "tool_prompt_format", "openai")
+            if tool_prompt_format != "openai":
+                raise ValueError(
+                    "agent_mode='tools' requires supports_tools=True for non-OpenAI formats; "
+                    f"adapter reports tool_prompt_format={tool_prompt_format!r}"
+                )
 
     def _execute_tool_call(self, tool_call: ToolCallRequest, /) -> ToolCallResult:
         """
@@ -202,10 +233,16 @@ class RLMOrchestrator:
 
         The content is JSON-serialized for consistent parsing by the LLM.
         """
+        payload: Any
         if result["error"] is not None:
-            content = json.dumps({"error": result["error"]})
+            payload = {"error": result["error"]}
         else:
-            content = json.dumps(result["result"])
+            payload = result["result"]
+
+        try:
+            content = json.dumps(payload, default=_tool_json_default)
+        except Exception as exc:  # noqa: BLE001 - serialization boundary
+            content = json.dumps({"error": f"Tool result serialization failed: {exc}"})
 
         return ToolMessage(
             role="tool",
@@ -237,12 +274,176 @@ class RLMOrchestrator:
             ],
         }
 
+    def _build_tool_conversation(self, prompt: Prompt, /) -> list[dict[str, Any]]:
+        """Create the initial tool-mode conversation history."""
+        conversation: list[dict[str, Any]] = [
+            {"role": "system", "content": self.system_prompt},
+        ]
+
+        if isinstance(prompt, str):
+            conversation.append({"role": "user", "content": prompt})
+        elif isinstance(prompt, dict):
+            conversation.append(prompt)  # type: ignore[arg-type]
+        elif isinstance(prompt, list):
+            conversation.extend(prompt)  # type: ignore[arg-type]
+        else:
+            conversation.append({"role": "user", "content": str(prompt)})
+
+        return conversation
+
+    def _build_tool_completion(
+        self,
+        *,
+        completion: ChatCompletion,
+        prompt: Prompt,
+        usage_totals: dict[str, ModelUsageSummary],
+        time_start: float,
+        finish_reason: str | None = None,
+    ) -> ChatCompletion:
+        time_end = time.perf_counter()
+        return ChatCompletion(
+            root_model=completion.root_model,
+            prompt=prompt,
+            response=completion.response,
+            usage_summary=_clone_usage_totals(usage_totals),
+            execution_time=time_end - time_start,
+            tool_calls=completion.tool_calls,
+            finish_reason=finish_reason or completion.finish_reason,
+        )
+
+    def _context_window_tokens(self) -> int | None:
+        """Return the best-known context window size for summarization."""
+        candidates = (
+            self.context_window_tokens,
+            getattr(self.llm, "context_window_tokens", None),
+            getattr(self.llm, "context_window", None),
+            getattr(self.llm, "max_context_tokens", None),
+        )
+        for candidate in candidates:
+            if isinstance(candidate, int) and candidate > 0:
+                return candidate
+        return None
+
+    def _estimate_prompt_tokens(self, prompt: Prompt, tools: list[ToolDefinition] | None, /) -> int:
+        payload: dict[str, Any] = {"prompt": prompt}
+        if tools:
+            payload["tools"] = tools
+        try:
+            raw = json.dumps(payload, ensure_ascii=True, default=str)
+        except TypeError:
+            raw = str(payload)
+        return max(1, len(raw) // 4)
+
+    def _build_tool_summary_prompt(self, messages: list[dict[str, Any]], /) -> Prompt:
+        summary_instructions = (
+            "Summarize the conversation history for a tool-calling agent. "
+            "Preserve the user goal, constraints, tool calls (ids, names, args), "
+            "tool results/errors, and any partial decisions. Keep it compact but "
+            "high-fidelity so the agent can continue without losing detail."
+        )
+        serialized = json.dumps(messages, ensure_ascii=True, default=str)
+        return [
+            {"role": "system", "content": summary_instructions},
+            {"role": "user", "content": f"Messages:\n{serialized}"},
+        ]
+
+    def _maybe_summarize_tool_conversation(
+        self,
+        conversation: list[dict[str, Any]],
+        *,
+        tool_definitions: list[ToolDefinition],
+        usage_totals: dict[str, ModelUsageSummary],
+    ) -> list[dict[str, Any]]:
+        context_window = self._context_window_tokens()
+        if context_window is None:
+            return conversation
+        if len(conversation) < self.tool_summary_min_messages:
+            return conversation
+
+        estimated_tokens = self._estimate_prompt_tokens(conversation, tool_definitions)
+        trigger_at = int(context_window * self.tool_summary_trigger_ratio)
+        if estimated_tokens < trigger_at:
+            return conversation
+
+        keep_last = max(0, self.tool_summary_keep_last_messages)
+        head_start = 1 if conversation and conversation[0].get("role") == "system" else 0
+        tail = conversation[-keep_last:] if keep_last else []
+        head = conversation[head_start : len(conversation) - len(tail)]
+        if not head:
+            return conversation
+
+        summary_prompt = self._build_tool_summary_prompt(head)
+        summary_completion = self.llm.complete(
+            LLMRequest(prompt=summary_prompt, tool_choice="none")
+        )
+        _add_usage_totals(usage_totals, summary_completion.usage_summary)
+        summary_text = summary_completion.response.strip()
+        if not summary_text:
+            return conversation
+
+        summary_message = {
+            "role": "assistant",
+            "content": f"Summary of prior conversation:\n{summary_text}",
+        }
+        rebuilt: list[dict[str, Any]] = []
+        if head_start:
+            rebuilt.append(conversation[0])
+        rebuilt.append(summary_message)
+        rebuilt.extend(tail)
+        return rebuilt
+
+    async def _maybe_asummarize_tool_conversation(
+        self,
+        conversation: list[dict[str, Any]],
+        *,
+        tool_definitions: list[ToolDefinition],
+        usage_totals: dict[str, ModelUsageSummary],
+    ) -> list[dict[str, Any]]:
+        context_window = self._context_window_tokens()
+        if context_window is None:
+            return conversation
+        if len(conversation) < self.tool_summary_min_messages:
+            return conversation
+
+        estimated_tokens = self._estimate_prompt_tokens(conversation, tool_definitions)
+        trigger_at = int(context_window * self.tool_summary_trigger_ratio)
+        if estimated_tokens < trigger_at:
+            return conversation
+
+        keep_last = max(0, self.tool_summary_keep_last_messages)
+        head_start = 1 if conversation and conversation[0].get("role") == "system" else 0
+        tail = conversation[-keep_last:] if keep_last else []
+        head = conversation[head_start : len(conversation) - len(tail)]
+        if not head:
+            return conversation
+
+        summary_prompt = self._build_tool_summary_prompt(head)
+        summary_completion = await self.llm.acomplete(
+            LLMRequest(prompt=summary_prompt, tool_choice="none")
+        )
+        _add_usage_totals(usage_totals, summary_completion.usage_summary)
+        summary_text = summary_completion.response.strip()
+        if not summary_text:
+            return conversation
+
+        summary_message = {
+            "role": "assistant",
+            "content": f"Summary of prior conversation:\n{summary_text}",
+        }
+        rebuilt: list[dict[str, Any]] = []
+        if head_start:
+            rebuilt.append(conversation[0])
+        rebuilt.append(summary_message)
+        rebuilt.extend(tail)
+        return rebuilt
+
     def _tool_calling_loop(
         self,
         prompt: Prompt,
         *,
         tool_definitions: list[ToolDefinition],
         usage_totals: dict[str, ModelUsageSummary],
+        tool_choice: ToolChoice | None,
     ) -> ChatCompletion:
         """
         Execute the multi-turn tool calling loop (sync).
@@ -261,27 +462,20 @@ class RLMOrchestrator:
         """
         time_start = time.perf_counter()
 
-        # Build initial conversation with system prompt and user message
-        conversation: list[dict[str, Any]] = [
-            {"role": "system", "content": self.system_prompt},
-        ]
-
-        # Handle prompt formats (string, dict, or list of messages)
-        if isinstance(prompt, str):
-            conversation.append({"role": "user", "content": prompt})
-        elif isinstance(prompt, dict):
-            conversation.append(prompt)  # type: ignore[arg-type]
-        elif isinstance(prompt, list):
-            conversation.extend(prompt)  # type: ignore[arg-type]
-        else:
-            conversation.append({"role": "user", "content": str(prompt)})
+        conversation = self._build_tool_conversation(prompt)
+        request_tool_choice: ToolChoice = tool_choice if tool_choice is not None else "auto"
 
         for _ in range(self.max_tool_iterations):
+            conversation = self._maybe_summarize_tool_conversation(
+                conversation,
+                tool_definitions=tool_definitions,
+                usage_totals=usage_totals,
+            )
             # Create request with tools
             request = LLMRequest(
                 prompt=conversation,
                 tools=tool_definitions,
-                tool_choice="auto",
+                tool_choice=request_tool_choice,
             )
 
             # Call LLM
@@ -290,14 +484,11 @@ class RLMOrchestrator:
 
             # If no tool calls, we have a final answer
             if not completion.tool_calls:
-                time_end = time.perf_counter()
-                return ChatCompletion(
-                    root_model=completion.root_model,
+                return self._build_tool_completion(
+                    completion=completion,
                     prompt=prompt,
-                    response=completion.response,
-                    usage_summary=_clone_usage_totals(usage_totals),
-                    execution_time=time_end - time_start,
-                    finish_reason=completion.finish_reason,
+                    usage_totals=usage_totals,
+                    time_start=time_start,
                 )
 
             # Add assistant's tool call message to conversation
@@ -318,6 +509,11 @@ class RLMOrchestrator:
                 "content": "Please provide your final answer based on the tool results.",
             }
         )
+        conversation = self._maybe_summarize_tool_conversation(
+            conversation,
+            tool_definitions=tool_definitions,
+            usage_totals=usage_totals,
+        )
         final_request = LLMRequest(
             prompt=conversation,
             tools=tool_definitions,
@@ -326,13 +522,11 @@ class RLMOrchestrator:
         final_completion = self.llm.complete(final_request)
         _add_usage_totals(usage_totals, final_completion.usage_summary)
 
-        time_end = time.perf_counter()
-        return ChatCompletion(
-            root_model=final_completion.root_model,
+        return self._build_tool_completion(
+            completion=final_completion,
             prompt=prompt,
-            response=final_completion.response,
-            usage_summary=_clone_usage_totals(usage_totals),
-            execution_time=time_end - time_start,
+            usage_totals=usage_totals,
+            time_start=time_start,
             finish_reason="max_iterations",
         )
 
@@ -342,6 +536,7 @@ class RLMOrchestrator:
         *,
         tool_definitions: list[ToolDefinition],
         usage_totals: dict[str, ModelUsageSummary],
+        tool_choice: ToolChoice | None,
     ) -> ChatCompletion:
         """
         Execute the multi-turn tool calling loop (async).
@@ -350,27 +545,20 @@ class RLMOrchestrator:
         """
         time_start = time.perf_counter()
 
-        # Build initial conversation with system prompt and user message
-        conversation: list[dict[str, Any]] = [
-            {"role": "system", "content": self.system_prompt},
-        ]
-
-        # Handle prompt formats (string, dict, or list of messages)
-        if isinstance(prompt, str):
-            conversation.append({"role": "user", "content": prompt})
-        elif isinstance(prompt, dict):
-            conversation.append(prompt)  # type: ignore[arg-type]
-        elif isinstance(prompt, list):
-            conversation.extend(prompt)  # type: ignore[arg-type]
-        else:
-            conversation.append({"role": "user", "content": str(prompt)})
+        conversation = self._build_tool_conversation(prompt)
+        request_tool_choice: ToolChoice = tool_choice if tool_choice is not None else "auto"
 
         for _ in range(self.max_tool_iterations):
+            conversation = await self._maybe_asummarize_tool_conversation(
+                conversation,
+                tool_definitions=tool_definitions,
+                usage_totals=usage_totals,
+            )
             # Create request with tools
             request = LLMRequest(
                 prompt=conversation,
                 tools=tool_definitions,
-                tool_choice="auto",
+                tool_choice=request_tool_choice,
             )
 
             # Call LLM
@@ -379,14 +567,11 @@ class RLMOrchestrator:
 
             # If no tool calls, we have a final answer
             if not completion.tool_calls:
-                time_end = time.perf_counter()
-                return ChatCompletion(
-                    root_model=completion.root_model,
+                return self._build_tool_completion(
+                    completion=completion,
                     prompt=prompt,
-                    response=completion.response,
-                    usage_summary=_clone_usage_totals(usage_totals),
-                    execution_time=time_end - time_start,
-                    finish_reason=completion.finish_reason,
+                    usage_totals=usage_totals,
+                    time_start=time_start,
                 )
 
             # Add assistant's tool call message to conversation
@@ -407,6 +592,11 @@ class RLMOrchestrator:
                 "content": "Please provide your final answer based on the tool results.",
             }
         )
+        conversation = await self._maybe_asummarize_tool_conversation(
+            conversation,
+            tool_definitions=tool_definitions,
+            usage_totals=usage_totals,
+        )
         final_request = LLMRequest(
             prompt=conversation,
             tools=tool_definitions,
@@ -415,13 +605,11 @@ class RLMOrchestrator:
         final_completion = await self.llm.acomplete(final_request)
         _add_usage_totals(usage_totals, final_completion.usage_summary)
 
-        time_end = time.perf_counter()
-        return ChatCompletion(
-            root_model=final_completion.root_model,
+        return self._build_tool_completion(
+            completion=final_completion,
             prompt=prompt,
-            response=final_completion.response,
-            usage_summary=_clone_usage_totals(usage_totals),
-            execution_time=time_end - time_start,
+            usage_totals=usage_totals,
+            time_start=time_start,
             finish_reason="max_iterations",
         )
 
@@ -438,6 +626,7 @@ class RLMOrchestrator:
         depth: int = 0,
         max_iterations: int = 30,
         correlation_id: str | None = None,
+        tool_choice: ToolChoice | None = None,
     ) -> ChatCompletion:
         time_start = time.perf_counter()
 
@@ -450,6 +639,7 @@ class RLMOrchestrator:
                 prompt,
                 tool_definitions=tool_definitions,
                 usage_totals=usage_totals,
+                tool_choice=tool_choice,
             )
 
         # Accumulate orchestrator (root) usage incrementally to avoid repeatedly
@@ -579,6 +769,7 @@ class RLMOrchestrator:
         depth: int = 0,
         max_iterations: int = 30,
         correlation_id: str | None = None,
+        tool_choice: ToolChoice | None = None,
     ) -> ChatCompletion:
         """
         Async variant of `completion()`.
@@ -599,6 +790,7 @@ class RLMOrchestrator:
                 prompt,
                 tool_definitions=tool_definitions,
                 usage_totals=usage_totals,
+                tool_choice=tool_choice,
             )
 
         root_usage_totals: dict[str, ModelUsageSummary] = {}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -361,6 +362,10 @@ class _ToolQueueLLM:
     def model_name(self) -> str:
         return self._model_name
 
+    @property
+    def supports_tools(self) -> bool:
+        return True
+
     def _pop_next(self) -> tuple[str, list[ToolCallRequest] | None, str | None]:
         """Pop next script item and return (response, tool_calls, finish_reason)."""
         if not self._script:
@@ -426,6 +431,12 @@ def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolC
     return ToolCallRequest(id=tool_id, name=name, arguments=arguments)
 
 
+def _extract_tool_messages(prompt: object) -> list[dict[str, Any]]:
+    if isinstance(prompt, list):
+        return [m for m in prompt if isinstance(m, dict) and m.get("role") == "tool"]
+    return []
+
+
 def simple_add(a: int, b: int) -> int:
     """Simple add function for testing."""
     return a + b
@@ -459,14 +470,19 @@ def test_orchestrator_tool_mode_requires_registry() -> None:
 
 
 @pytest.mark.unit
-def test_orchestrator_tool_mode_rejects_non_openai_tool_format() -> None:
-    """Tool mode rejects adapters that don't use OpenAI-style tool messages."""
+def test_orchestrator_tool_mode_rejects_adapters_without_tool_support() -> None:
+    """Tool mode rejects adapters that report supports_tools=False."""
+
+    class _NoToolsLLM(_ToolQueueLLM):
+        @property
+        def supports_tools(self) -> bool:  # type: ignore[override]
+            return False
+
     env = QueueEnvironment()
     registry = InMemoryToolRegistry()
     registry.register(simple_add)
 
-    llm = _ToolQueueLLM(script=["ignored"])
-    llm.tool_prompt_format = "anthropic"
+    llm = _NoToolsLLM(script=["ignored"])
 
     orch = RLMOrchestrator(
         llm=llm,  # type: ignore[arg-type]
@@ -475,7 +491,7 @@ def test_orchestrator_tool_mode_rejects_non_openai_tool_format() -> None:
         tool_registry=registry,
     )
 
-    with pytest.raises(ValueError, match="OpenAI-style tool messages"):
+    with pytest.raises(ValueError, match="supports tool calling"):
         orch.completion("What is 2 + 2?")
 
 
@@ -512,6 +528,131 @@ def test_orchestrator_tool_mode_happy_path_single_tool_call() -> None:
     assert cc.finish_reason == "stop"
     # Usage should account for both LLM calls
     assert cc.usage_summary.model_usage_summaries["tool-mock"].total_calls == 2
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_propagates_tool_choice() -> None:
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(script=["Direct answer"])
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    orch.completion("Hello", tool_choice="required")
+
+    assert llm._calls
+    assert llm._calls[0].tool_choice == "required"
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_serializes_dataclass_tool_results() -> None:
+    @dataclass
+    class _Payload:
+        total: int
+        note: str
+
+    def produce_payload() -> _Payload:
+        return _Payload(total=5, note="ok")
+
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(produce_payload)
+
+    llm = _ToolQueueLLM(
+        script=[
+            {"tool_calls": [_make_tool_call("call_1", "produce_payload", {})]},
+            "Done.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    orch.completion("Run tool")
+
+    tool_messages = _extract_tool_messages(llm._calls[1].prompt)
+    assert len(tool_messages) == 1
+    payload = json.loads(tool_messages[0]["content"])
+    assert payload == {"total": 5, "note": "ok"}
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_serialization_error_is_reported() -> None:
+    class _Unserializable:
+        def __init__(self) -> None:
+            self.value = object()
+
+    def produce_unserializable() -> _Unserializable:
+        return _Unserializable()
+
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(produce_unserializable)
+
+    llm = _ToolQueueLLM(
+        script=[
+            {"tool_calls": [_make_tool_call("call_1", "produce_unserializable", {})]},
+            "Done.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+    )
+
+    orch.completion("Run tool")
+
+    tool_messages = _extract_tool_messages(llm._calls[1].prompt)
+    assert len(tool_messages) == 1
+    payload = json.loads(tool_messages[0]["content"])
+    assert "error" in payload
+    assert "serialization failed" in payload["error"]
+
+
+@pytest.mark.unit
+def test_orchestrator_tool_mode_summarizes_long_conversations() -> None:
+    env = QueueEnvironment()
+    registry = InMemoryToolRegistry()
+    registry.register(simple_add)
+
+    llm = _ToolQueueLLM(
+        script=[
+            "Summary text.",
+            {"tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 1, "b": 2})]},
+            "Final.",
+        ]
+    )
+
+    orch = RLMOrchestrator(
+        llm=llm,  # type: ignore[arg-type]
+        environment=env,
+        agent_mode="tools",
+        tool_registry=registry,
+        system_prompt="sys",
+        context_window_tokens=500,
+        tool_summary_trigger_ratio=0.5,
+        tool_summary_keep_last_messages=0,
+        tool_summary_min_messages=2,
+    )
+
+    long_prompt = "x" * 2000
+    orch.completion(long_prompt)
+
+    assert len(llm._calls) == 3
+    assert _prompt_contains(llm._calls[1].prompt, "Summary of prior conversation")
 
 
 @pytest.mark.unit

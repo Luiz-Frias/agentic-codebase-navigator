@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Protocol, overload
 
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion, RunMetadata
+from rlm.domain.models.llm_request import ToolChoice
 from rlm.domain.models.usage import merge_usage_summaries
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
@@ -126,6 +127,7 @@ class RunCompletionRequest:
     root_prompt: str | None = None
     max_depth: int = 1
     max_iterations: int = 30
+    tool_choice: ToolChoice | None = None
 
 
 def _infer_environment_type(env: EnvironmentPort, /) -> str:
@@ -201,6 +203,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                     depth=0,
                     max_iterations=request.max_iterations,
                     correlation_id=correlation_id,
+                    tool_choice=request.tool_choice,
                 )
                 # Merge orchestrator usage (root calls) with broker usage (env subcalls).
                 merged_usage = merge_usage_summaries(
@@ -289,6 +292,7 @@ async def arun_completion(
                     depth=0,
                     max_iterations=request.max_iterations,
                     correlation_id=correlation_id,
+                    tool_choice=request.tool_choice,
                 )
                 broker_usage = await asyncio.to_thread(deps.broker.get_usage_summary)
                 merged_usage = merge_usage_summaries([cc.usage_summary, broker_usage])

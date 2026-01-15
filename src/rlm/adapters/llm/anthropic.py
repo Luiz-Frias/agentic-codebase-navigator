@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass, field
 from threading import Lock
@@ -37,6 +38,37 @@ def _require_anthropic() -> Any:
     return anthropic
 
 
+def _normalize_anthropic_content(content: Any, /) -> str | list[dict[str, Any]]:
+    if isinstance(content, list):
+        return content
+    if content is None:
+        return ""
+    return str(content)
+
+
+def _openai_tool_calls_to_anthropic_blocks(
+    tool_calls: list[dict[str, Any]], /
+) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for tc in tool_calls:
+        tc_id = tc.get("id", "")
+        if "function" in tc:
+            function = tc.get("function", {}) or {}
+            name = function.get("name", "")
+            raw_args = function.get("arguments", {})
+        else:
+            name = tc.get("name", "")
+            raw_args = tc.get("arguments", {})
+        args = raw_args
+        if isinstance(raw_args, str):
+            try:
+                args = json.loads(raw_args)
+            except Exception:
+                args = {}
+        blocks.append({"type": "tool_use", "id": tc_id, "name": name, "input": args})
+    return blocks
+
+
 def _messages_and_system(prompt: Prompt, /) -> tuple[list[dict[str, Any]], str | None]:
     """
     Convert a Prompt into Anthropic `messages` and optional `system`.
@@ -53,11 +85,39 @@ def _messages_and_system(prompt: Prompt, /) -> tuple[list[dict[str, Any]], str |
         messages = messages[1:]
 
     clean: list[dict[str, Any]] = []
+    pending_tool_results: list[dict[str, Any]] = []
+
     for m in messages:
         role = str(m.get("role", "user"))
         if role == "system":
             continue
-        clean.append({"role": role, "content": str(m.get("content", "") or "")})
+
+        if role == "tool":
+            tool_call_id = str(m.get("tool_call_id", "") or "")
+            content = _normalize_anthropic_content(m.get("content"))
+            pending_tool_results.append(
+                {"type": "tool_result", "tool_use_id": tool_call_id, "content": content}
+            )
+            continue
+
+        if pending_tool_results:
+            clean.append({"role": "user", "content": pending_tool_results})
+            pending_tool_results = []
+
+        tool_calls = m.get("tool_calls")
+        if role == "assistant" and tool_calls:
+            blocks: list[dict[str, Any]] = []
+            raw_content = m.get("content", "")
+            if raw_content:
+                blocks.append({"type": "text", "text": str(raw_content)})
+            blocks.extend(_openai_tool_calls_to_anthropic_blocks(tool_calls))
+            clean.append({"role": "assistant", "content": blocks})
+            continue
+
+        clean.append({"role": role, "content": _normalize_anthropic_content(m.get("content"))})
+
+    if pending_tool_results:
+        clean.append({"role": "user", "content": pending_tool_results})
 
     return (clean, system)
 

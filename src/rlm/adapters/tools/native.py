@@ -210,9 +210,12 @@ class NativeToolAdapter(BaseToolAdapter):
     def execute(self, **kwargs: Any) -> Any:
         """Execute the wrapped function synchronously."""
         result = self.func(**kwargs)
-        # If the function returns a coroutine, run it
         if asyncio.iscoroutine(result):
-            return asyncio.get_event_loop().run_until_complete(result)
+            result.close()
+            raise TypeError(
+                "Tool function returned a coroutine in sync execution. "
+                "Declare the tool as async or call it via aexecute()."
+            )
         return result
 
     async def aexecute(self, **kwargs: Any) -> Any:
@@ -222,5 +225,9 @@ class NativeToolAdapter(BaseToolAdapter):
 
         result = await asyncio.to_thread(self.func, **kwargs)
         if asyncio.iscoroutine(result):
-            return await result
+            result.close()
+            raise TypeError(
+                "Tool function returned a coroutine from a sync implementation. "
+                "Declare the tool as async instead."
+            )
         return result

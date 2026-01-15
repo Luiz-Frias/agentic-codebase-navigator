@@ -29,6 +29,11 @@ class BaseLLMAdapter(ABC):
         """Tool calling prompt format expected by the adapter."""
         return "openai"
 
+    @property
+    def supports_tools(self) -> bool:
+        """Whether the adapter supports native tool calling."""
+        return False
+
     @abstractmethod
     def complete(self, request: LLMRequest, /) -> ChatCompletion: ...
 

@@ -331,7 +331,7 @@ def test_extract_tool_calls_gemini_from_dict() -> None:
 
     assert result is not None
     assert len(result) == 1
-    assert result[0]["id"] == "gemini_call_1"  # Generated ID
+    assert result[0]["id"].startswith("gemini_call_")  # Generated ID
     assert result[0]["name"] == "get_weather"
     assert result[0]["arguments"] == {"location": "Seattle"}
 

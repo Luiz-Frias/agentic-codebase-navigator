@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass, field
 from threading import Lock
@@ -11,12 +12,13 @@ from rlm.adapters.llm.provider_base import (
     UsageTracker,
     extract_finish_reason_gemini,
     extract_tool_calls_gemini,
-    prompt_to_text,
+    prompt_to_messages,
     safe_provider_error_message,
     tool_definition_to_gemini_format,
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
+from rlm.domain.types import Prompt
 
 
 def _require_google_genai() -> Any:
@@ -96,6 +98,84 @@ def _extract_usage_tokens(response: Any, /) -> tuple[int, int]:
     return (in_tokens, out_tokens)
 
 
+def _normalize_openai_tool_call(tc: dict[str, Any], /) -> tuple[str, dict[str, Any], str]:
+    tc_id = str(tc.get("id", "") or "")
+    if "function" in tc:
+        function = tc.get("function", {}) or {}
+        name = str(function.get("name", "") or "")
+        raw_args = function.get("arguments", {})
+    else:
+        name = str(tc.get("name", "") or "")
+        raw_args = tc.get("arguments", {})
+    args = raw_args
+    if isinstance(raw_args, str):
+        try:
+            args = json.loads(raw_args)
+        except Exception:
+            args = {}
+    if not isinstance(args, dict):
+        args = {"value": args}
+    return name, args, tc_id
+
+
+def _parse_tool_response_content(content: Any, /) -> Any:
+    if isinstance(content, str):
+        try:
+            return json.loads(content)
+        except Exception:
+            return {"content": content}
+    return content
+
+
+def _prompt_to_gemini_contents(prompt: Prompt, /) -> list[dict[str, Any]] | str:
+    if isinstance(prompt, str):
+        return prompt
+
+    messages = prompt_to_messages(prompt)
+    contents: list[dict[str, Any]] = []
+    call_id_to_name: dict[str, str] = {}
+
+    for message in messages:
+        role = str(message.get("role", "user"))
+
+        if role == "tool":
+            tool_call_id = str(message.get("tool_call_id", "") or "")
+            tool_name = call_id_to_name.get(tool_call_id, tool_call_id)
+            response_payload = _parse_tool_response_content(message.get("content"))
+            contents.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {"function_response": {"name": tool_name, "response": response_payload}}
+                    ],
+                }
+            )
+            continue
+
+        tool_calls = message.get("tool_calls")
+        if role == "assistant" and tool_calls:
+            parts: list[dict[str, Any]] = []
+            content = message.get("content")
+            if content:
+                parts.append({"text": str(content)})
+            for tc in tool_calls:
+                name, args, tc_id = _normalize_openai_tool_call(tc)
+                if tc_id:
+                    call_id_to_name[tc_id] = name
+                parts.append({"function_call": {"name": name, "args": args}})
+            contents.append({"role": "model", "parts": parts})
+            continue
+
+        content = message.get("content", "")
+        if role == "system":
+            content = f"System: {content}"
+
+        mapped_role = "model" if role == "assistant" else "user"
+        contents.append({"role": mapped_role, "parts": [{"text": str(content)}]})
+
+    return contents
+
+
 @dataclass
 class GeminiAdapter(BaseLLMAdapter):
     """Adapter skeleton: Google GenAI SDK -> domain `LLMPort`."""
@@ -126,7 +206,7 @@ class GeminiAdapter(BaseLLMAdapter):
         client = self._get_client(genai)
 
         model = request.model or self.model
-        contents = prompt_to_text(request.prompt)
+        contents = _prompt_to_gemini_contents(request.prompt)
 
         # Build kwargs with tools if provided
         api_kwargs: dict[str, Any] = dict(self.default_request_kwargs)

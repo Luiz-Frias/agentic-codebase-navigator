@@ -9,6 +9,7 @@ from rlm.adapters.llm.gemini import (
     GeminiAdapter,
     _extract_text,
     _extract_usage_tokens,
+    _prompt_to_gemini_contents,
     build_gemini_adapter,
 )
 from rlm.domain.errors import LLMError
@@ -79,6 +80,37 @@ def test_extract_usage_tokens_supports_multiple_shapes() -> None:
         usage_metadata = BadUsage()
 
     assert _extract_usage_tokens(Resp2()) == (0, 0)
+
+
+@pytest.mark.unit
+def test_prompt_to_gemini_contents_maps_tool_messages() -> None:
+    prompt = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "get_weather", "arguments": '{"city": "NYC"}'},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": '{"temp": 72}'},
+    ]
+
+    contents = _prompt_to_gemini_contents(prompt)
+
+    assert isinstance(contents, list)
+    assert contents[0]["role"] == "user"
+    assert contents[1]["role"] == "model"
+    func_call = contents[1]["parts"][-1]["function_call"]
+    assert func_call["name"] == "get_weather"
+    assert func_call["args"] == {"city": "NYC"}
+    func_resp = contents[2]["parts"][0]["function_response"]
+    assert func_resp["name"] == "get_weather"
+    assert func_resp["response"] == {"temp": 72}
 
 
 @pytest.mark.unit

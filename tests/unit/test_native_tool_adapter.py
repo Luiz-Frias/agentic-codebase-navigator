@@ -29,3 +29,29 @@ async def test_native_tool_adapter_aexecute_runs_sync_once() -> None:
 
     assert result == 2
     assert calls["count"] == 1
+
+
+@pytest.mark.unit
+def test_native_tool_adapter_execute_rejects_coroutine_result() -> None:
+    async def inner() -> int:
+        return 1
+
+    def returns_coroutine() -> object:
+        return inner()
+
+    adapter = NativeToolAdapter(returns_coroutine)
+    with pytest.raises(TypeError, match="returned a coroutine"):
+        adapter.execute()
+
+
+@pytest.mark.unit
+async def test_native_tool_adapter_aexecute_rejects_coroutine_result() -> None:
+    async def inner() -> int:
+        return 1
+
+    def returns_coroutine() -> object:
+        return inner()
+
+    adapter = NativeToolAdapter(returns_coroutine)
+    with pytest.raises(TypeError, match="returned a coroutine"):
+        await adapter.aexecute()

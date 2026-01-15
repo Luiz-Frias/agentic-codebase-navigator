@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from itertools import count
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +12,9 @@ from rlm.domain.types import Prompt
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolCallRequest, ToolDefinition
     from rlm.domain.models.llm_request import ToolChoice
+
+
+_GEMINI_CALL_COUNTER = count(1)
 
 
 def safe_provider_error_message(provider: str, exc: BaseException, /) -> str:
@@ -372,7 +376,6 @@ def extract_tool_calls_gemini(response: Any, /) -> list[ToolCallRequest] | None:
         return None
 
     result: list[ToolCallRequest] = []
-    call_counter = 0
     for part in parts:
         function_call = None
         try:
@@ -396,9 +399,8 @@ def extract_tool_calls_gemini(response: Any, /) -> list[ToolCallRequest] | None:
             else:
                 continue
 
-        # Gemini doesn't provide IDs, so we generate them
-        call_counter += 1
-        tc_id = f"gemini_call_{call_counter}"
+        # Gemini doesn't provide IDs, so we generate process-unique ones
+        tc_id = f"gemini_call_{next(_GEMINI_CALL_COUNTER)}"
 
         result.append({"id": tc_id, "name": name, "arguments": args})
 
