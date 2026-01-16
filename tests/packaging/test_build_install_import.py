@@ -136,6 +136,8 @@ assert cc.response == "ok"
             "mock",
             "--final",
             "ok",
+            "--environment",
+            "local",
         ],
         cwd=repo_root,
     )
