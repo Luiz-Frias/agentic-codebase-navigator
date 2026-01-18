@@ -1,8 +1,12 @@
 {
+  "$schema": "https://raw.githubusercontent.com/DetachHead/basedpyright/main/packages/pyright/schemas/pyrightconfig.schema.json",
   "include": ["src/rlm/domain", "src/rlm/application"],
   "exclude": ["src/rlm/_legacy", "references", "tests", "**/__pycache__"],
   "pythonVersion": "3.12",
-  "typeCheckingMode": "basic",
+  "typeCheckingMode": "standard",
   "reportMissingImports": false,
-  "reportMissingTypeStubs": false
+  "reportMissingTypeStubs": false,
+  "reportAny": true,
+  "reportUnusedImport": false,
+  "reportUnusedVariable": false
 }

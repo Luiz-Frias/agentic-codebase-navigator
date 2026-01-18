@@ -187,7 +187,7 @@ commit-msg:
 
     # Call Claude CLI with system prompt to constrain output
     echo "🤖 Generating commit message..."
-    MSG=$(echo "$DIFF" | claude --print --system-prompt "$SYSTEM_PROMPT" "$PROMPT")
+    MSG=$(echo "$DIFF" | claude --print --system-prompt "$SYSTEM_PROMPT" "$PROMPT" --model "haiku")
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -64,7 +64,7 @@ dev = [
     "ruff>=0.14.10",
     "ty>=0.0.7",
     "mypy>=1.14.1",
-    "pyright>=1.1.406",
+    "basedpyright>=1.22.0",
     "bandit>=1.8.6",
     "pre-commit>=4.5.1",
     "detect-secrets>=1.5.0",
@@ -75,6 +75,8 @@ test = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
     "pytest-benchmark>=4.0.0",
+    "pytest-watcher>=0.4.0",
+    "pytest-xdist>=3.5.0",
 ]
 
 [tool.pytest.ini_options]
@@ -101,19 +103,105 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
+    "ALL", # All rules
 ]
 ignore = [
+    # Style rules - disable globally for now
+    "D100",   # Missing docstring in public module
+    "D101",   # Missing docstring in public class
+    "D102",   # Missing docstring in public method
+    "D103",   # Missing docstring in public function
+    "D104",   # Missing docstring in public package
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in __init__
+    "D200",   # One-line docstring should fit on one line
+    "D205",   # 1 blank line required between summary line and description
+    "D400",   # First line should end with a period
+    "D401",   # First line should be in imperative mood
+    "D415",   # First line should end with a period, question mark, or exclamation point
+    # Formatting handled by ruff format
     "E501",   # line too long (handled by formatter)
+    # Overly pedantic
+    "EM101",  # Exception must not use a string literal
+    "EM102",  # Exception must not use an f-string literal
+    "TRY003", # Avoid specifying long messages outside the exception class
+    "TRY004", # Prefer TypeError exception for invalid type
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: relax rules that add noise without value
+"tests/**/*.py" = [
+    "S101",    # assert is standard pytest practice
+    "S105",    # Possible hardcoded password (test fixtures)
+    "S106",    # Possible hardcoded password (test fixtures)
+    "S311",    # Standard pseudo-random generators (fine for tests)
+    "ANN",     # Type annotations not required in tests
+    "ARG",     # Unused arguments (pytest fixtures)
+    "PLR2004", # Magic value comparison (fine in test assertions)
+    "PLR0913", # Too many arguments (test factories/fixtures)
+    "SLF001",  # Private member access (testing internals is valid)
+    "PT018",   # Assertion should be broken into multiple parts
+    "FBT",     # Boolean trap (fine in test parameters)
+    "INP001",  # Missing __init__.py (tests don't need it)
+    "T201",    # print() found (debugging in tests is fine)
+    "BLE001",  # Blind except (sometimes needed in error tests)
+    "TRY",     # Try/except style (relaxed in tests)
+    "PLC0415", # Import outside top-level (dynamic imports in tests)
+    "TC001",   # Move import into TYPE_CHECKING block
+    "TC003",   # Move import into TYPE_CHECKING block
+    "C901",    # Too complex (test setup can be complex)
+    "PLR0911", # Too many return statements
+    "PLR0912", # Too many branches
+    "PLR0915", # Too many statements
+    "ERA001",  # Commented out code (WIP tests)
+]
+# Benchmark/performance tests: even more relaxed
+"tests/benchmark/**/*.py" = [
+    "D",       # All docstring rules
+    "S",       # All security rules
+    "ANN",     # All annotation rules
+    "ARG",     # Unused arguments
+    "PLR",     # Pylint refactor rules
+    "INP001",
+    "T201",
+    "BLE001",
+    "TRY",
+    "PLC0415",
+    "TC",
+    "C901",
+    "FBT",
+    "SLF001",
+    "PT018",
+    "ERA001",
+]
+"tests/performance/**/*.py" = [
+    "D",       # All docstring rules
+    "S",       # All security rules
+    "ANN",     # All annotation rules
+    "ARG",     # Unused arguments
+    "PLR",     # Pylint refactor rules
+    "INP001",
+    "T201",
+    "BLE001",
+    "TRY",
+    "PLC0415",
+    "TC",
+    "C901",
+    "FBT",
+    "SLF001",
+    "PT018",
+    "ERA001",
+]
+# Conftest files: fixtures have specific patterns
+"**/conftest.py" = [
+    "ANN",     # Fixtures don't need full annotations
+    "ARG001",  # Unused function argument (fixtures)
+    "ARG002",  # Unused method argument
 ]
 
 [tool.ruff.format]
 quote-style = "double"
+docstring-code-format = true
 
 [tool.coverage.run]
 branch = true
@@ -163,3 +251,25 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "modal"
 ignore_missing_imports = true
+
+[tool.basedpyright]
+# basedpyright unlocks Pylance features without VSCode lock-in
+pythonVersion = "3.12"
+typeCheckingMode = "standard"  # Options: off, basic, standard, strict, all
+include = ["src/rlm"]
+exclude = ["src/rlm/_legacy", "references", "tests", "build", "**/__pycache__"]
+
+# Relax some strict checks for pragmatic development
+reportAny = false                      # Allow 'Any' usage (too noisy for mixed codebase)
+reportMissingImports = false           # Handled by import resolution
+reportMissingTypeStubs = false         # Don't require stubs for all packages
+reportUnusedImport = false             # Let Ruff handle unused imports
+reportUnusedVariable = false           # Let Ruff handle unused variables
+
+[tool.pytest-watcher]
+# pytest-watcher configuration for "bacon-style" feedback loop
+now = true                              # Run immediately on start
+runner = "pytest"
+runner_args = ["-n", "auto", "-q", "--tb=short"]  # Parallel + quiet + short tracebacks
+patterns = ["*.py"]
+ignore_patterns = [".*", "__pycache__", "*.pyc", ".venv", "build", "dist"]

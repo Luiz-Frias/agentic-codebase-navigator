@@ -64,7 +64,7 @@ repos:
   # SECURITY & SECRETS
   # =============================================================================
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.24.0
+    rev: v8.30.0
     hooks:
       - id: gitleaks
         name: gitleaks (secrets scan)
@@ -92,7 +92,7 @@ repos:
   #       files: secrets/.*\.(yaml|yml|json|env)$|\.env\.(prod|production|staging)$
 
   - repo: https://github.com/returntocorp/semgrep
-    rev: v1.139.0
+    rev: v1.148.0
     hooks:
       - id: semgrep
         name: semgrep (policy)
@@ -105,7 +105,7 @@ repos:
           - "120"
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.6
+    rev: 1.9.2
     hooks:
       - id: bandit
         args:
@@ -151,7 +151,7 @@ repos:
   # GENERAL HYGIENE
   # =============================================================================
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -183,7 +183,7 @@ repos:
   # PYTHON QUALITY
   # =============================================================================
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0
+    rev: v0.14.13
     hooks:
       - id: ruff
         args: ["--fix", "--exit-non-zero-on-fix", "--config=pyproject.toml"]
@@ -191,7 +191,7 @@ repos:
         args: ["--config=pyproject.toml"]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+    rev: v1.19.1
     hooks:
       - id: mypy
         args: ["--config-file=pyproject.toml"]
@@ -207,10 +207,10 @@ repos:
           - numpy>=2.2.2
           - loguru>=0.7.0
 
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.406
+  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+    rev: 1.37.1
     hooks:
-      - id: pyright
+      - id: basedpyright
         stages: [pre-commit]
         files: ^src/rlm/
         exclude: ^(tests/|build/|references/)
@@ -223,27 +223,28 @@ repos:
   # PYTHON TEST MATRICES (uv-run)
   # =============================================================================
   - repo: https://github.com/andrewaylett/pre-commit-hooks
-    rev: v0.7.0
+    rev: v0.7.1
     hooks:
-      # Fast feedback: unit tests on every commit
+      # Fast feedback: unit tests on every commit (parallel via pytest-xdist)
       - id: uv-run
         name: python unit tests (uv)
         stages: [pre-commit]
-        args: ["pytest", "tests/unit", "-q", "--maxfail=1", "--disable-warnings"]
+        args: ["pytest", "tests/unit", "-n", "auto", "-q", "--maxfail=1", "--disable-warnings"]
 
       # Pre-push: integration, e2e, and performance tests before code reaches remote
       - id: uv-run
         name: python integration tests (uv)
         stages: [pre-push]
-        args: ["pytest", "tests/integration", "-q", "--maxfail=1", "--disable-warnings"]
+        args: ["pytest", "tests/integration", "-n", "auto", "-q", "--maxfail=1", "--disable-warnings"]
 
       - id: uv-run
         name: python e2e tests (uv)
         stages: [pre-push]
-        args: ["pytest", "tests/e2e", "-q", "--maxfail=1", "--disable-warnings"]
+        args: ["pytest", "tests/e2e", "-n", "auto", "-q", "--maxfail=1", "--disable-warnings"]
 
   - repo: local
     hooks:
+      # NOTE: Benchmarks run serially (no -n auto) to avoid timing skew from CPU contention
       - id: pytest-performance-benchmarks
         name: python performance benchmarks (uv)
         stages: [pre-push]
@@ -256,13 +257,13 @@ repos:
   # CONTAINERS
   # =============================================================================
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.13.1
+    rev: v2.14.0
     hooks:
       - id: hadolint-docker
         args: ["--ignore", "DL3008", "--ignore", "DL3013", "--ignore", "DL3009"]
 
   - repo: https://github.com/pryorda/dockerfilelint-precommit-hooks
-    rev: 1880d3752044754d2b88f3aa32e44620e02092fe  # pragma: allowlist secret
+    rev: v0.1.0  # pragma: allowlist secret
     hooks:
       - id: dockerfilelint
         files: Dockerfile.*$
@@ -271,21 +272,21 @@ repos:
   # YAML / JSON / GITOPS
   # =============================================================================
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.35.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
         args: ["-c", ".yamllint.yaml"]
         exclude: ^(charts/|templates/|\.github/workflows/)
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.34.0
+    rev: 0.36.0
     hooks:
       - id: check-github-workflows
       - id: check-github-actions
       - id: check-dependabot
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.8
+    rev: v1.7.10
     hooks:
       - id: actionlint
         stages: [pre-commit]
@@ -294,7 +295,7 @@ repos:
   # COMMITS & DOCS
   # =============================================================================
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.2.1
+    rev: v4.11.6
     hooks:
       - id: commitizen
         stages: [commit-msg]
@@ -308,8 +309,16 @@ repos:
       - id: gitlint
         stages: [commit-msg]
 
+  - repo: https://github.com/spinergie/pre-commit-dprint
+    rev: v0.50.1
+    hooks:
+      - id: dprint
+        name: dprint (markdown formatter)
+        types: [markdown]
+        exclude: ^(CHANGELOG\.md|LICENSE\.md|docs/.*|\.cursor/.*|AGENTS\.md|README\.md|tests/.*/README\.md)$
+
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: d7a4f7cf4914d3bffb9b83bdbc45fd2a00c91ff9  # pragma: allowlist secret
+    rev: v0.20.0  # pragma: allowlist secret
     hooks:
       - id: markdownlint-cli2
         args: ["--config", ".markdownlint.yaml"]

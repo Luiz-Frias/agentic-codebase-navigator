@@ -1,0 +1,158 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Please fill out the details below to help us diagnose the issue.
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Execution Environment
+      description: Which environment are you using?
+      options:
+        - Local (in-process)
+        - Docker
+        - Modal
+        - Other
+      validations:
+        required: true
+
+  - type: input
+    id: rlm_version
+    attributes:
+      label: RLM Version
+      description: "Output of `rlm --version`"
+      placeholder: "1.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python_version
+    attributes:
+      label: Python Version
+      description: "Output of `python --version`"
+      placeholder: "Python 3.12.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: llm_provider
+    attributes:
+      label: LLM Provider
+      description: Which LLM provider are you using?
+      options:
+        - OpenAI (GPT-4, GPT-4o, etc.)
+        - Anthropic (Claude)
+        - Google Gemini
+        - Azure OpenAI
+        - LiteLLM
+        - Portkey
+        - Mock/Testing
+        - Other
+      validations:
+        required: true
+
+  - type: input
+    id: llm_model
+    attributes:
+      label: LLM Model
+      description: "Which specific model? (e.g., gpt-4o, claude-3-opus)"
+      placeholder: "gpt-4o"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agent_mode
+    attributes:
+      label: Agent Mode
+      description: Are you using code or tools mode?
+      options:
+        - Code mode (default, generates Python code)
+        - Tools mode (function calling)
+        - Both
+      validations:
+        required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: "What is the bug? What did you expect to happen?"
+      placeholder: |
+        I expected X to happen, but Y happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: minimal_reproduction
+    attributes:
+      label: Minimal Reproduction Code
+      description: "Provide the minimal code that reproduces the bug"
+      placeholder: |
+        ```python
+        from rlm import create_rlm
+        from rlm.adapters.llm import MockLLMAdapter
+
+        rlm = create_rlm(MockLLMAdapter(...))
+        result = rlm.completion("test")
+        ```
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected Behavior
+      description: "What should have happened?"
+      placeholder: |
+        The code should execute successfully and return a result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: Actual Behavior / Error Message
+      description: "What actually happened? Include full error traceback if applicable."
+      placeholder: |
+        ```
+        Traceback (most recent call last):
+          File "test.py", line 10, in <module>
+            result = rlm.completion("test")
+        ...
+        ```
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: "If you have JSONL logs from `--jsonl-log-dir`, paste a sample here"
+      render: json
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: "Anything else that might help us reproduce the issue?"
+      placeholder: |
+        - Operating system: macOS 14.2
+        - Network conditions: Offline, slow connection, etc.
+        - Custom configuration: Non-standard environment settings
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: "I have searched the [existing issues](https://github.com/Luiz-Frias/agentic-codebase-navigator/issues) for similar reports"
+          required: true
+        - label: "I have read the [documentation](https://github.com/Luiz-Frias/agentic-codebase-navigator#readme)"
+          required: true
+        - label: "This is not a security vulnerability (report those [privately](https://github.com/Luiz-Frias/agentic-codebase-navigator/security/advisories))"
+          required: true
