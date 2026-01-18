@@ -58,10 +58,18 @@ def test_domain_models_are_eq_comparable_but_unhashable_by_default() -> None:
         hash(cc1)
 
     repl1 = ReplResult(
-        stdout="out", stderr="", locals={"x": 1}, llm_calls=[cc1], execution_time=0.2
+        stdout="out",
+        stderr="",
+        locals={"x": 1},
+        llm_calls=[cc1],
+        execution_time=0.2,
     )
     repl2 = ReplResult(
-        stdout="out", stderr="", locals={"x": 1}, llm_calls=[cc2], execution_time=0.2
+        stdout="out",
+        stderr="",
+        locals={"x": 1},
+        llm_calls=[cc2],
+        execution_time=0.2,
     )
     assert repl1 == repl2
     with pytest.raises(TypeError):

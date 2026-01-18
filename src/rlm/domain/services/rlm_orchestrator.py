@@ -343,7 +343,9 @@ class RLMOrchestrator:
         )
 
     def _build_assistant_tool_call_message(
-        self, tool_calls: list[ToolCallRequest], response_text: str = "",
+        self,
+        tool_calls: list[ToolCallRequest],
+        response_text: str = "",
     ) -> dict[str, Any]:
         """Build an assistant message containing tool calls.
 
@@ -416,7 +418,10 @@ class RLMOrchestrator:
         return None
 
     def _estimate_prompt_tokens_fallback(
-        self, prompt: Prompt, tools: list[ToolDefinition] | None, /,
+        self,
+        prompt: Prompt,
+        tools: list[ToolDefinition] | None,
+        /,
     ) -> int:
         payload: dict[str, Any] = {"prompt": prompt}
         if tools:
@@ -439,7 +444,10 @@ class RLMOrchestrator:
         return self._estimate_prompt_tokens_fallback(prompt, tools)
 
     async def _aestimate_prompt_tokens(
-        self, prompt: Prompt, tools: list[ToolDefinition] | None, /,
+        self,
+        prompt: Prompt,
+        tools: list[ToolDefinition] | None,
+        /,
     ) -> int:
         counter = getattr(self.llm, "count_prompt_tokens", None)
         if callable(counter):
@@ -855,7 +863,8 @@ class RLMOrchestrator:
         # Build initial message history (system + metadata hint).
         query_metadata = QueryMetadata.from_context(prompt)
         message_history: list[dict[str, str]] = build_rlm_system_prompt(
-            self.system_prompt, query_metadata,
+            self.system_prompt,
+            query_metadata,
         )
 
         for i in range(max_iterations):
@@ -996,7 +1005,8 @@ class RLMOrchestrator:
 
         query_metadata = QueryMetadata.from_context(prompt)
         message_history: list[dict[str, str]] = build_rlm_system_prompt(
-            self.system_prompt, query_metadata,
+            self.system_prompt,
+            query_metadata,
         )
 
         for i in range(max_iterations):

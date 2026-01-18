@@ -19,7 +19,7 @@ class _SpyBroker:
     def __init__(self) -> None:
         self.registered: list[str] = []
 
-    def register_llm(self, model_name: str, llm, /) -> None:  # noqa: ANN001
+    def register_llm(self, model_name: str, llm, /) -> None:
         self.registered.append(model_name)
 
 
@@ -31,7 +31,7 @@ def test_rlm_facade_registers_other_models_and_passes_system_prompt_conditionall
 
     captured: dict[str, object] = {}
 
-    def _stub_run_completion(req, *, deps):  # noqa: ANN001
+    def _stub_run_completion(req, *, deps):
         captured["req"] = req
         captured["deps"] = deps
         return ChatCompletion(
@@ -57,7 +57,7 @@ def test_rlm_facade_registers_other_models_and_passes_system_prompt_conditionall
     broker2 = _SpyBroker()
     captured2: dict[str, object] = {}
 
-    def _stub_run_completion2(req, *, deps):  # noqa: ANN001
+    def _stub_run_completion2(req, *, deps):
         captured2["deps"] = deps
         return ChatCompletion(
             root_model="m",
@@ -97,7 +97,7 @@ async def test_rlm_facade_acompletion_registers_models_and_passes_system_prompt(
     broker = _SpyBroker()
     captured: dict[str, object] = {}
 
-    async def _stub_arun_completion(req, *, deps):  # noqa: ANN001
+    async def _stub_arun_completion(req, *, deps):
         captured["deps"] = deps
         return ChatCompletion(
             root_model="m",
@@ -125,7 +125,7 @@ async def test_rlm_facade_acompletion_registers_models_and_passes_system_prompt(
 async def test_rlm_facade_acompletion_rejects_duplicate_other_model_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def _stub_arun_completion(req, *, deps):  # noqa: ANN001
+    async def _stub_arun_completion(req, *, deps):
         raise AssertionError("should not be called")
 
     monkeypatch.setattr(rlm_mod, "arun_completion", _stub_arun_completion)

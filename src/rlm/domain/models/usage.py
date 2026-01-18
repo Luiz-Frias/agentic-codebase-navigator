@@ -42,10 +42,12 @@ class ModelUsageSummary:
         # Enforce invariants and normalize any int-like inputs.
         self.total_calls = _as_non_negative_int(self.total_calls, "total_calls")
         self.total_input_tokens = _as_non_negative_int(
-            self.total_input_tokens, "total_input_tokens",
+            self.total_input_tokens,
+            "total_input_tokens",
         )
         self.total_output_tokens = _as_non_negative_int(
-            self.total_output_tokens, "total_output_tokens",
+            self.total_output_tokens,
+            "total_output_tokens",
         )
 
     def to_dict(self) -> dict[str, int]:
@@ -60,10 +62,12 @@ class ModelUsageSummary:
         return cls(
             total_calls=_as_non_negative_int(data.get("total_calls", 0), "total_calls"),
             total_input_tokens=_as_non_negative_int(
-                data.get("total_input_tokens", 0), "total_input_tokens",
+                data.get("total_input_tokens", 0),
+                "total_input_tokens",
             ),
             total_output_tokens=_as_non_negative_int(
-                data.get("total_output_tokens", 0), "total_output_tokens",
+                data.get("total_output_tokens", 0),
+                "total_output_tokens",
             ),
         )
 

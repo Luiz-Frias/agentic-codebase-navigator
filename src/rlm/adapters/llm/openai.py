@@ -160,7 +160,9 @@ class OpenAIAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = await client.chat.completions.create(  # type: ignore[reportAny]  # OpenAI response has no stubs
-                model=model, messages=messages, **api_kwargs,
+                model=model,
+                messages=messages,
+                **api_kwargs,
             )
         except Exception as e:
             raise LLMError(_safe_openai_error_message(e)) from None

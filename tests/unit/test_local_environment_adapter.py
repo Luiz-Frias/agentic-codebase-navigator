@@ -100,7 +100,7 @@ def test_local_environment_llm_query_batched_returns_error_strings_when_broker_b
     None
 ):
     broker = InMemoryBroker(
-        default_llm=QueueLLM(model_name="sub", responses=[RuntimeError("boom")])
+        default_llm=QueueLLM(model_name="sub", responses=[RuntimeError("boom")]),
     )
     env = LocalEnvironmentAdapter(broker=broker, broker_address=("127.0.0.1", 0))
     try:

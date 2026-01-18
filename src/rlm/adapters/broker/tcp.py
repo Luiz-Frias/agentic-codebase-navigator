@@ -152,7 +152,10 @@ class _TcpBrokerRequestHandler(StreamRequestHandler):
         broker: TcpBrokerAdapter = self.server.broker  # type: ignore[attr-defined]
 
         try:
-            raw: dict[str, Any] | None = recv_frame(self.connection, max_message_bytes=DEFAULT_MAX_MESSAGE_BYTES)
+            raw: dict[str, Any] | None = recv_frame(
+                self.connection,
+                max_message_bytes=DEFAULT_MAX_MESSAGE_BYTES,
+            )
             if raw is None:
                 return
 
@@ -170,7 +173,9 @@ class _TcpBrokerRequestHandler(StreamRequestHandler):
             send_frame(
                 self.connection,
                 WireResponse(
-                    correlation_id=None, error=_safe_error_message(exc), results=None,
+                    correlation_id=None,
+                    error=_safe_error_message(exc),
+                    results=None,
                 ).to_dict(),
             )
 
@@ -350,13 +355,17 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         try:
             if request.prompt is not None:
                 try:
-                    cc: ChatCompletion = self.complete(LLMRequest(prompt=request.prompt, model=request.model))
+                    cc: ChatCompletion = self.complete(
+                        LLMRequest(prompt=request.prompt, model=request.model),
+                    )
                     result: WireResult = WireResult(error=None, chat_completion=cc)
                 except Exception as exc:
                     result = WireResult(error=_safe_error_message(exc), chat_completion=None)
 
                 return WireResponse(
-                    correlation_id=request.correlation_id, error=None, results=[result],
+                    correlation_id=request.correlation_id,
+                    error=None,
+                    results=[result],
                 )
 
             if request.prompts is None:
@@ -367,10 +376,16 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                 )
 
             llm: LLMPort = self._select_llm(request.model)
-            prompts: list[str | dict[str, Any] | list[Any]] = request.prompts  # Capture for closure type narrowing
+            prompts: list[str | dict[str, Any] | list[Any]] = (
+                request.prompts
+            )  # Capture for closure type narrowing
 
             async def _run() -> list[WireResult]:
-                out: list[ChatCompletion | Exception] = await _acomplete_prompts_batched(llm, prompts, llm.model_name)
+                out: list[ChatCompletion | Exception] = await _acomplete_prompts_batched(
+                    llm,
+                    prompts,
+                    llm.model_name,
+                )
                 results: list[WireResult] = []
                 for item in out:
                     if isinstance(item, Exception):
@@ -404,7 +419,9 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
 
 
 async def _acomplete_prompts_batched(
-    llm: LLMPort, prompts: list[str | dict[str, Any] | list[Any]], model: str | None,
+    llm: LLMPort,
+    prompts: list[str | dict[str, Any] | list[Any]],
+    model: str | None,
 ) -> list[ChatCompletion | Exception]:
     """Run multiple `llm.acomplete(...)` calls concurrently and preserve ordering.
 

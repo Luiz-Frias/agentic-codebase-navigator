@@ -94,7 +94,8 @@ def _extract_usage_tokens(response: Any, /) -> tuple[int, int]:
         getattr(usage, "prompt_token_count", None) or getattr(usage, "input_token_count", None),
     )
     out_tokens = _int(
-        getattr(usage, "candidates_token_count", None) or getattr(usage, "output_token_count", None),
+        getattr(usage, "candidates_token_count", None)
+        or getattr(usage, "output_token_count", None),
     )
     return (in_tokens, out_tokens)
 

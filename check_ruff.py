@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Quick script to check ruff errors in specific files."""
+
 import subprocess
 import sys
 
@@ -12,9 +13,9 @@ files = [
 
 all_clean = True
 for file in files:
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Checking: {file}")
-    print('='*60)
+    print("=" * 60)
     result = subprocess.run(
         ["ruff", "check", file, "--output-format=text"],
         capture_output=True,
@@ -29,7 +30,7 @@ for file in files:
             print("STDERR:", result.stderr)
         all_clean = False
 
-print(f"\n{'='*60}")
+print(f"\n{'=' * 60}")
 if all_clean:
     print("✅ All files passed ruff check!")
     sys.exit(0)

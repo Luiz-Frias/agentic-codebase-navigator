@@ -130,7 +130,9 @@ class PortkeyAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = await client.chat.completions.create(
-                model=model, messages=messages, **api_kwargs,
+                model=model,
+                messages=messages,
+                **api_kwargs,
             )
         except Exception as e:
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
@@ -214,7 +216,10 @@ class PortkeyAdapter(BaseLLMAdapter):
 
 
 def build_portkey_adapter(
-    *, model: str, api_key: str | None = None, **kwargs: Any,
+    *,
+    model: str,
+    api_key: str | None = None,
+    **kwargs: Any,
 ) -> PortkeyAdapter:
     if not isinstance(model, str) or not model.strip():
         raise ValueError("PortkeyAdapter requires a non-empty 'model'")

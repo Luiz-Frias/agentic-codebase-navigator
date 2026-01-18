@@ -85,7 +85,9 @@ Think step by step carefully, plan, and execute this plan immediately in your re
 
 
 def build_rlm_system_prompt(
-    system_prompt: str, query_metadata: QueryMetadata, /,
+    system_prompt: str,
+    query_metadata: QueryMetadata,
+    /,
 ) -> list[dict[str, str]]:
     """Build the initial prompt message history for an RLM run.
 

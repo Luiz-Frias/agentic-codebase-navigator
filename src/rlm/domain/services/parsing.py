@@ -118,7 +118,9 @@ def find_final_answer(text: str, *, environment: EnvironmentPort | None = None) 
 
 
 async def afind_final_answer(
-    text: str, *, environment: EnvironmentPort | None = None,
+    text: str,
+    *,
+    environment: EnvironmentPort | None = None,
 ) -> str | None:
     """Async variant of `find_final_answer`.
 
@@ -194,7 +196,8 @@ async def afind_final_answer(
         if environment is None:
             return None
         result = await asyncio.to_thread(
-            environment.execute_code, f"print(FINAL_VAR({variable_name!r}))",
+            environment.execute_code,
+            f"print(FINAL_VAR({variable_name!r}))",
         )
         final_answer = result.stdout.strip()
         if final_answer == "":
@@ -231,7 +234,9 @@ def format_execution_result(result: ReplResult) -> str:
 
 
 def format_iteration(
-    iteration: Iteration, *, max_character_length: int = 20000,
+    iteration: Iteration,
+    *,
+    max_character_length: int = 20000,
 ) -> list[dict[str, str]]:
     """Format an iteration to append to the next prompt message history.
 

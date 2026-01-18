@@ -1,5 +1,4 @@
-"""
-Unit tests for passthrough LLM adapters (Azure, LiteLLM, Portkey) tool calling support.
+"""Unit tests for passthrough LLM adapters (Azure, LiteLLM, Portkey) tool calling support.
 
 These adapters use OpenAI-compatible formats for tools.
 """
@@ -57,7 +56,7 @@ def test_azure_adapter_complete_with_tools_passes_to_api(
             "name": "get_weather",
             "description": "Get weather",
             "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-        }
+        },
     ]
 
     adapter = AzureOpenAIAdapter(deployment="my-deploy")
@@ -94,11 +93,11 @@ def test_azure_adapter_complete_extracts_tool_calls(
                                         "name": "get_weather",
                                         "arguments": '{"city": "Seattle"}',
                                     },
-                                }
+                                },
                             ],
                         },
                         "finish_reason": "tool_calls",
-                    }
+                    },
                 ],
                 "usage": {},
             }
@@ -140,7 +139,7 @@ async def test_azure_adapter_acomplete_with_tools(
     monkeypatch.setattr(azure_mod, "_require_openai", lambda: dummy_openai)
 
     tools: list[ToolDefinition] = [
-        {"name": "search", "description": "Search", "parameters": {"type": "object"}}
+        {"name": "search", "description": "Search", "parameters": {"type": "object"}},
     ]
 
     adapter = AzureOpenAIAdapter(deployment="my-deploy")
@@ -184,7 +183,7 @@ def test_litellm_adapter_complete_with_tools_passes_to_api(
             "name": "calculate",
             "description": "Do math",
             "parameters": {"type": "object", "properties": {}},
-        }
+        },
     ]
 
     adapter = LiteLLMAdapter(model="gpt-4")
@@ -216,11 +215,11 @@ def test_litellm_adapter_complete_extracts_tool_calls(
                                     "name": "calculate",
                                     "arguments": '{"a": 2, "b": 3}',
                                 },
-                            }
+                            },
                         ],
                     },
                     "finish_reason": "tool_calls",
-                }
+                },
             ],
             "usage": {},
         }
@@ -256,7 +255,7 @@ async def test_litellm_adapter_acomplete_with_tools(
     monkeypatch.setattr(litellm_mod, "_require_litellm", lambda: dummy_litellm)
 
     tools: list[ToolDefinition] = [
-        {"name": "calc", "description": "Math", "parameters": {"type": "object"}}
+        {"name": "calc", "description": "Math", "parameters": {"type": "object"}},
     ]
 
     adapter = LiteLLMAdapter(model="gpt-4")
@@ -304,7 +303,7 @@ def test_portkey_adapter_complete_with_tools_passes_to_api(
             "name": "search",
             "description": "Search",
             "parameters": {"type": "object", "properties": {}},
-        }
+        },
     ]
 
     adapter = PortkeyAdapter(model="gpt-4")
@@ -340,11 +339,11 @@ def test_portkey_adapter_complete_extracts_tool_calls(
                                         "name": "search",
                                         "arguments": '{"query": "python"}',
                                     },
-                                }
+                                },
                             ],
                         },
                         "finish_reason": "tool_calls",
-                    }
+                    },
                 ],
                 "usage": {},
             }
@@ -386,7 +385,7 @@ async def test_portkey_adapter_acomplete_with_tools(
     monkeypatch.setattr(portkey_mod, "_require_portkey", lambda: dummy_portkey)
 
     tools: list[ToolDefinition] = [
-        {"name": "search", "description": "Search", "parameters": {"type": "object"}}
+        {"name": "search", "description": "Search", "parameters": {"type": "object"}},
     ]
 
     adapter = PortkeyAdapter(model="gpt-4")

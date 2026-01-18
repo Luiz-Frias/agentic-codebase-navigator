@@ -12,7 +12,7 @@ def test_python_type_to_json_schema_handles_optional_and_union() -> None:
     assert _python_type_to_json_schema(typing.Optional[int]) == {"type": "integer"}  # noqa: UP045
     assert _python_type_to_json_schema(int | None) == {"type": "integer"}
     assert _python_type_to_json_schema(typing.Union[int, str]) == {  # noqa: UP007
-        "anyOf": [{"type": "integer"}, {"type": "string"}]
+        "anyOf": [{"type": "integer"}, {"type": "string"}],
     }
 
 

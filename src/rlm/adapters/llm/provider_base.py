@@ -276,7 +276,8 @@ def tool_choice_to_anthropic_format(tool_choice: ToolChoice, /) -> dict[str, Any
 
 
 def tool_choice_to_gemini_function_calling_config(
-    tool_choice: ToolChoice, /,
+    tool_choice: ToolChoice,
+    /,
 ) -> dict[str, Any] | None:
     """Convert a ToolChoice to Gemini's function_calling_config shape.
 

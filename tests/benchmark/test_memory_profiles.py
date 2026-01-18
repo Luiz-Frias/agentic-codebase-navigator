@@ -158,7 +158,7 @@ def test_code_block_accumulation_memory(benchmark) -> None:
                         llm_calls=[],
                         execution_time=0.001,
                     ),
-                )
+                ),
             )
         total_size = measure_object_size(code_blocks)
         return total_size
@@ -183,7 +183,7 @@ def test_usage_summary_memory_scaling(benchmark) -> None:
                         total_output_tokens=25000,
                     )
                     for i in range(num_models)
-                }
+                },
             )
             sizes.append((num_models, measure_object_size(summary)))
         return sizes

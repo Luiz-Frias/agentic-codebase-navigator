@@ -118,7 +118,9 @@ def memory_tracker(top_n: int = 10) -> Generator[MemoryResult, None, None]:
         snapshot = tracemalloc.take_snapshot()
 
         result.after = MemorySnapshot(
-            current_bytes=current, peak_bytes=peak, traced_blocks=len(snapshot.traces)
+            current_bytes=current,
+            peak_bytes=peak,
+            traced_blocks=len(snapshot.traces),
         )
 
         # Get top allocations
@@ -245,8 +247,8 @@ class BenchmarkLLM(LLMPort):
                         total_calls=1,
                         total_input_tokens=input_tokens,
                         total_output_tokens=output_tokens,
-                    )
-                }
+                    ),
+                },
             ),
             execution_time=self._delay,
         )
@@ -261,8 +263,8 @@ class BenchmarkLLM(LLMPort):
                     total_calls=self._call_count,
                     total_input_tokens=self._total_input_tokens,
                     total_output_tokens=self._total_output_tokens,
-                )
-            }
+                ),
+            },
         )
 
     def get_last_usage(self) -> UsageSummary:
@@ -329,7 +331,7 @@ def make_iteration(
                     llm_calls=[],
                     execution_time=0.001,
                 ),
-            )
+            ),
         )
 
     return Iteration(
@@ -449,8 +451,7 @@ def get_llm_for_benchmark(
         provider = get_live_llm_provider()
         if provider == "anthropic":
             return _create_anthropic_adapter()
-        else:
-            return _create_openai_adapter()
+        return _create_openai_adapter()
 
     return BenchmarkLLM(
         include_final=include_final,

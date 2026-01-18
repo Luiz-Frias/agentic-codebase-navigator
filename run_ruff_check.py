@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Run ruff check and display errors."""
+
 import subprocess
 import sys
+
 
 def main():
     files = [
@@ -11,9 +13,9 @@ def main():
     ]
 
     for filepath in files:
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print(f"FILE: {filepath}")
-        print('='*80)
+        print("=" * 80)
 
         try:
             result = subprocess.run(
@@ -34,6 +36,7 @@ def main():
             print(f"ERROR: Timeout checking {filepath}")
         except Exception as e:
             print(f"ERROR: {e}")
+
 
 if __name__ == "__main__":
     main()

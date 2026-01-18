@@ -84,7 +84,9 @@ def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
     if google_match:
         args_section = google_match.group(1)
         for match in re.finditer(
-            r"(\w+)\s*(?:\([^)]*\))?:\s*(.+?)(?=\n\s+\w+|\n\n|$)", args_section, re.DOTALL,
+            r"(\w+)\s*(?:\([^)]*\))?:\s*(.+?)(?=\n\s+\w+|\n\n|$)",
+            args_section,
+            re.DOTALL,
         ):
             params[match.group(1)] = match.group(2).strip()
 
@@ -94,7 +96,9 @@ def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
     if numpy_match and not params:
         params_section = numpy_match.group(1)
         for match in re.finditer(
-            r"(\w+)\s*:\s*\w+.*?\n\s+(.+?)(?=\n\w+\s*:|\n\n|$)", params_section, re.DOTALL,
+            r"(\w+)\s*:\s*\w+.*?\n\s+(.+?)(?=\n\w+\s*:|\n\n|$)",
+            params_section,
+            re.DOTALL,
         ):
             params[match.group(1)] = match.group(2).strip()
 

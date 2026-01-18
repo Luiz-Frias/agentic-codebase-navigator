@@ -106,7 +106,9 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
         last = self._usage_tracker.record(
-            deployment, input_tokens=in_tokens, output_tokens=out_tokens,
+            deployment,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
         )
         # Use the per-call usage returned by `record()` (race-free under concurrency).
         last_usage = UsageSummary(model_usage_summaries={deployment: last})
@@ -138,7 +140,9 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = await client.chat.completions.create(
-                model=deployment, messages=messages, **api_kwargs,
+                model=deployment,
+                messages=messages,
+                **api_kwargs,
             )
         except Exception as e:
             raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
@@ -160,7 +164,9 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
         last = self._usage_tracker.record(
-            deployment, input_tokens=in_tokens, output_tokens=out_tokens,
+            deployment,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
         )
         # Use the per-call usage returned by `record()` (race-free under concurrency).
         last_usage = UsageSummary(model_usage_summaries={deployment: last})

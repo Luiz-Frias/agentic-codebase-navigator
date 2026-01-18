@@ -176,7 +176,10 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
     try:
         try:
             env = _build_environment(
-                deps.environment_factory, deps.broker, broker_addr, correlation_id,
+                deps.environment_factory,
+                deps.broker,
+                broker_addr,
+                correlation_id,
             )
         except Exception as e:
             raise ExecutionError("Failed to build environment") from e
@@ -243,7 +246,9 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
 
 
 async def arun_completion(
-    request: RunCompletionRequest, *, deps: RunCompletionDeps,
+    request: RunCompletionRequest,
+    *,
+    deps: RunCompletionDeps,
 ) -> ChatCompletion:
     """Async use case: run an RLM completion using the domain orchestrator.
 

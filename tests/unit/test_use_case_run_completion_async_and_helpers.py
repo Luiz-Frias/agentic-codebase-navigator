@@ -194,10 +194,10 @@ async def test_arun_completion_does_not_double_wrap_domain_errors(
     import rlm.application.use_cases.run_completion as uc
 
     class _ExplodingOrchestrator:
-        def __init__(self, **_kwargs):  # noqa: ANN003
+        def __init__(self, **_kwargs):
             pass
 
-        async def acompletion(self, *_args, **_kwargs):  # noqa: ANN001, ANN003
+        async def acompletion(self, *_args, **_kwargs):
             raise ExecutionError("bad context")
 
     monkeypatch.setattr(uc, "RLMOrchestrator", _ExplodingOrchestrator)

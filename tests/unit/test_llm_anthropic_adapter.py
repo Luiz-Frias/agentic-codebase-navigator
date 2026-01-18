@@ -64,7 +64,7 @@ def test_anthropic_adapter_complete_error_mapped(monkeypatch: pytest.MonkeyPatch
 
     class _Messages:
         def create(self, **_kwargs):
-            raise TimeoutError()
+            raise TimeoutError
 
     class _Client:
         def __init__(self, **_kwargs):
@@ -123,7 +123,7 @@ def test_anthropic_adapter_complete_with_tools_passes_to_api(
                 "properties": {"city": {"type": "string"}},
                 "required": ["city"],
             },
-        }
+        },
     ]
 
     adapter = AnthropicAdapter(model="claude-3")
@@ -164,7 +164,7 @@ def test_anthropic_adapter_complete_extracts_tool_use(
                         id="toolu_abc123",
                         name="get_weather",
                         input={"city": "NYC"},
-                    )
+                    ),
                 ],
                 usage=SimpleNamespace(input_tokens=10, output_tokens=5),
                 stop_reason="tool_use",
@@ -258,7 +258,7 @@ async def test_anthropic_adapter_acomplete_with_tools(
             "name": "search",
             "description": "Search the web",
             "parameters": {"type": "object", "properties": {}},
-        }
+        },
     ]
 
     adapter = AnthropicAdapter(model="claude-3")
@@ -285,7 +285,7 @@ async def test_anthropic_adapter_acomplete_extracts_tool_use(
                         id="async_call_1",
                         name="calculate",
                         input={"a": 5, "b": 3},
-                    )
+                    ),
                 ],
                 usage=SimpleNamespace(input_tokens=5, output_tokens=3),
                 stop_reason="tool_use",

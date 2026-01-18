@@ -45,7 +45,7 @@ def test_gemini_adapter_complete_maps_prompt_and_extracts_text_and_usage(
     resp = _Response("hi", prompt_tokens=3, output_tokens=5)
     created: list[_FakeClient] = []
 
-    class Client:  # noqa: N801 - matches SDK naming
+    class Client:
         def __init__(self, **kwargs):
             client = _FakeClient(response=resp, **kwargs)
             created.append(client)
@@ -86,7 +86,7 @@ async def test_gemini_adapter_acomplete_runs_sync_path_in_thread(
 
     resp = _Response("ahi", prompt_tokens=1, output_tokens=2)
 
-    class Client:  # noqa: N801
+    class Client:
         def __init__(self, **kwargs):
             self.models = _FakeModels(resp)
 

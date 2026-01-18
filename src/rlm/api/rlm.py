@@ -115,7 +115,8 @@ class RLM:
         if environment_factory is None:
             environment_factory = DefaultEnvironmentRegistry().build(
                 EnvironmentConfig(
-                    environment=environment, environment_kwargs=environment_kwargs or {},
+                    environment=environment,
+                    environment_kwargs=environment_kwargs or {},
                 ),
             )
         self._environment_factory = environment_factory

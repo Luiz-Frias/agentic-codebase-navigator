@@ -86,7 +86,7 @@ def test_portkey_adapter_complete_maps_prompt_and_extracts_text_and_usage(
     resp = _Response("hi", prompt_tokens=3, completion_tokens=5)
     created: list[_FakeClient] = []
 
-    class Portkey:  # noqa: N801 - matches SDK naming
+    class Portkey:
         def __init__(self, **kwargs):
             client = _FakeClient(response=resp, **kwargs)
             created.append(client)
@@ -124,7 +124,7 @@ async def test_portkey_adapter_acomplete_maps_prompt_and_extracts_text_and_usage
     resp = _Response("ahi", prompt_tokens=1, completion_tokens=2)
     created: list[_FakeAsyncClient] = []
 
-    class AsyncPortkey:  # noqa: N801 - matches SDK naming
+    class AsyncPortkey:
         def __init__(self, **kwargs):
             client = _FakeAsyncClient(response=resp, **kwargs)
             created.append(client)

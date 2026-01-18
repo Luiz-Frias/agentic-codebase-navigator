@@ -51,13 +51,13 @@ def test_extract_usage_tokens_supports_multiple_shapes() -> None:
     assert _extract_usage_tokens({}) == (0, 0)
 
     assert _extract_usage_tokens(
-        {"usage_metadata": {"prompt_token_count": 1, "candidates_token_count": 2}}
+        {"usage_metadata": {"prompt_token_count": 1, "candidates_token_count": 2}},
     ) == (
         1,
         2,
     )
     assert _extract_usage_tokens(
-        {"usage_metadata": {"input_token_count": "3", "output_token_count": "4"}}
+        {"usage_metadata": {"input_token_count": "3", "output_token_count": "4"}},
     ) == (
         3,
         4,
@@ -94,7 +94,7 @@ def test_prompt_to_gemini_contents_maps_tool_messages() -> None:
                     "id": "call_1",
                     "type": "function",
                     "function": {"name": "get_weather", "arguments": '{"city": "NYC"}'},
-                }
+                },
             ],
         },
         {"role": "tool", "tool_call_id": "call_1", "content": '{"temp": 72}'},
@@ -139,7 +139,7 @@ def test_gemini_adapter_complete_success_error_and_client_cache(
                         "prompt_token_count": 1,
                         "candidates_token_count": 2,
                     },
-                }
+                },
             )
 
     dummy_genai = SimpleNamespace(Client=Client)
@@ -189,7 +189,7 @@ async def test_gemini_adapter_acomplete_runs_sync_path_in_thread(
     class Client:
         def __init__(self, **_kwargs):
             self.models = SimpleNamespace(
-                generate_content=lambda **_k: {"text": "ok"}  # noqa: ARG005
+                generate_content=lambda **_k: {"text": "ok"},
             )
 
     dummy_genai = SimpleNamespace(Client=Client)
@@ -244,7 +244,7 @@ def test_gemini_adapter_complete_with_tools_passes_to_api(
                 "properties": {"city": {"type": "string"}},
                 "required": ["city"],
             },
-        }
+        },
     ]
 
     adapter = GeminiAdapter(model="gemini-pro")
@@ -289,12 +289,12 @@ def test_gemini_adapter_complete_extracts_function_call(
                                     "function_call": {
                                         "name": "get_weather",
                                         "args": {"city": "NYC"},
-                                    }
-                                }
-                            ]
+                                    },
+                                },
+                            ],
                         },
                         "finish_reason": "STOP",
-                    }
+                    },
                 ],
                 "usage_metadata": {"prompt_token_count": 10, "candidates_token_count": 5},
             }
@@ -334,10 +334,10 @@ def test_gemini_adapter_complete_multiple_function_calls(
                             "parts": [
                                 {"function_call": {"name": "get_weather", "args": {"city": "NYC"}}},
                                 {"function_call": {"name": "get_time", "args": {"tz": "EST"}}},
-                            ]
+                            ],
                         },
                         "finish_reason": "STOP",
-                    }
+                    },
                 ],
                 "usage_metadata": {},
             }
@@ -373,10 +373,10 @@ def test_gemini_adapter_complete_mixed_text_and_function_call(
                             "parts": [
                                 {"text": "Let me check that for you."},
                                 {"function_call": {"name": "search", "args": {"q": "python"}}},
-                            ]
+                            ],
                         },
                         "finish_reason": "STOP",
-                    }
+                    },
                 ],
                 "usage_metadata": {},
             }
@@ -424,7 +424,7 @@ async def test_gemini_adapter_acomplete_with_tools(
             "name": "search",
             "description": "Search the web",
             "parameters": {"type": "object", "properties": {}},
-        }
+        },
     ]
 
     adapter = GeminiAdapter(model="gemini-pro")

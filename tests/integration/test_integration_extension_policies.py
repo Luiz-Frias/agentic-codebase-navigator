@@ -1,5 +1,4 @@
-"""
-Integration tests for extension protocol injection.
+"""Integration tests for extension protocol injection.
 
 Tests the full stack: RLM facade → orchestrator with custom policies injected.
 Verifies that custom StoppingPolicy, ContextCompressor, and NestedCallPolicy
@@ -34,8 +33,7 @@ def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolC
 
 @dataclass
 class TrackingStoppingPolicy:
-    """
-    Custom stopping policy that tracks invocations for testing.
+    """Custom stopping policy that tracks invocations for testing.
 
     Allows configuring early stopping based on iteration count or
     response content.
@@ -68,16 +66,14 @@ class TrackingStoppingPolicy:
                 "method": "on_iteration_complete",
                 "context": dict(context),
                 "result_response": result.response,
-            }
+            },
         )
         self.iteration_results.append(result.response)
 
 
 @dataclass
 class TrackingContextCompressor:
-    """
-    Custom context compressor that tracks invocations for testing.
-    """
+    """Custom context compressor that tracks invocations for testing."""
 
     prefix: str = "[COMPRESSED] "
     invocation_log: list[dict[str, Any]] = field(default_factory=list)
@@ -89,16 +85,14 @@ class TrackingContextCompressor:
                 "method": "compress",
                 "result_length": len(result),
                 "max_tokens": max_tokens,
-            }
+            },
         )
         return self.prefix + result
 
 
 @dataclass
 class TrackingNestedCallPolicy:
-    """
-    Custom nested call policy that tracks invocations for testing.
-    """
+    """Custom nested call policy that tracks invocations for testing."""
 
     orchestrate_at_depth: int = 0  # Never orchestrate by default
     invocation_log: list[dict[str, Any]] = field(default_factory=list)
@@ -110,7 +104,7 @@ class TrackingNestedCallPolicy:
                 "method": "should_orchestrate",
                 "prompt": prompt[:50] + "..." if len(prompt) > 50 else prompt,
                 "depth": depth,
-            }
+            },
         )
         return depth >= self.orchestrate_at_depth and self.orchestrate_at_depth > 0
 
@@ -130,6 +124,7 @@ def simple_tool(value: str) -> str:
 
     Args:
         value: The input value
+
     """
     return f"Result: {value}"
 
@@ -139,6 +134,7 @@ def multi_call_tool(count: int) -> str:
 
     Args:
         count: A number
+
     """
     return f"Called with count={count}"
 

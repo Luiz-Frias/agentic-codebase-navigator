@@ -32,8 +32,7 @@ def _fake_chat_completion(*, prompt: object, response: str, model: str = "m") ->
 
 
 class _WireProtocolHandler(StreamRequestHandler):
-    """
-    Minimal in-process broker stub that speaks the infra wire protocol.
+    """Minimal in-process broker stub that speaks the infra wire protocol.
 
     This is intentionally tiny: it validates/decodes WireRequest via `try_parse_request`
     and returns a WireResponse using the same framing/codec as production.
@@ -41,7 +40,7 @@ class _WireProtocolHandler(StreamRequestHandler):
 
     MODEL: ClassVar[str] = "stub"
 
-    def handle(self) -> None:  # noqa: D401 - socketserver API
+    def handle(self) -> None:
         raw = recv_frame(self.connection, max_message_bytes=DEFAULT_MAX_MESSAGE_BYTES)
         if raw is None:
             return
@@ -76,7 +75,7 @@ class _WireProtocolHandler(StreamRequestHandler):
                             response=f"r{i + 1}",
                             model=self.MODEL,
                         ),
-                    )
+                    ),
                 )
 
         send_frame(

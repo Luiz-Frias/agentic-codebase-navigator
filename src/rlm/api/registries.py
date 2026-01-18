@@ -68,7 +68,8 @@ class DefaultLLMRegistry(LLMRegistry):
                 from rlm.adapters.llm.mock import MockLLMAdapter
 
                 return MockLLMAdapter(
-                    model=config.model_name or "mock-model", **config.backend_kwargs,
+                    model=config.model_name or "mock-model",
+                    **config.backend_kwargs,
                 )
             case "openai":
                 from rlm.adapters.llm.openai import build_openai_adapter
@@ -131,7 +132,9 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
 
         env_name = config.environment
         env_kwargs = _validate_environment_kwargs(
-            env_name, dict(config.environment_kwargs), allow_legacy_keys=True,
+            env_name,
+            dict(config.environment_kwargs),
+            allow_legacy_keys=True,
         )
 
         def _build(
@@ -187,7 +190,8 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
                     case (broker, (str() as host, int() as port)):
                         return _build(broker, (host, port), None)  # type: ignore[arg-type]
                     case (broker, (str() as host, int() as port), cid) if cid is None or isinstance(
-                        cid, str,
+                        cid,
+                        str,
                     ):
                         return _build(broker, (host, port), cid)  # type: ignore[arg-type]
                     case ((str() as host, int() as port), cid) if isinstance(cid, str):
@@ -324,21 +328,25 @@ def _validate_environment_kwargs(
                 docker_out["image"] = _expect_str("image")
             if "subprocess_timeout_s" in kwargs:
                 docker_out["subprocess_timeout_s"] = _expect_float(
-                    "subprocess_timeout_s", allow_none=False,
+                    "subprocess_timeout_s",
+                    allow_none=False,
                 )
             if "proxy_http_timeout_s" in kwargs:
                 docker_out["proxy_http_timeout_s"] = _expect_float(
-                    "proxy_http_timeout_s", allow_none=False,
+                    "proxy_http_timeout_s",
+                    allow_none=False,
                 )
             if "stop_grace_s" in kwargs:
                 docker_out["stop_grace_s"] = _expect_int("stop_grace_s")
             if "cleanup_subprocess_timeout_s" in kwargs:
                 docker_out["cleanup_subprocess_timeout_s"] = _expect_float(
-                    "cleanup_subprocess_timeout_s", allow_none=False,
+                    "cleanup_subprocess_timeout_s",
+                    allow_none=False,
                 )
             if "thread_join_timeout_s" in kwargs:
                 docker_out["thread_join_timeout_s"] = _expect_float(
-                    "thread_join_timeout_s", allow_none=False,
+                    "thread_join_timeout_s",
+                    allow_none=False,
                 )
             if (ctx := _expect_context_payload()) is not None:
                 docker_out["context_payload"] = ctx
@@ -388,7 +396,9 @@ class DefaultLoggerRegistry(LoggerRegistry):
                 from rlm.adapters.logger.jsonl import JsonlLoggerAdapter
 
                 return JsonlLoggerAdapter(
-                    log_dir=log_dir, file_name=file_name, rotate_per_run=rotate_per_run,
+                    log_dir=log_dir,
+                    file_name=file_name,
+                    rotate_per_run=rotate_per_run,
                 )
             case "console":
                 enabled = config.logger_kwargs.get("enabled", True)

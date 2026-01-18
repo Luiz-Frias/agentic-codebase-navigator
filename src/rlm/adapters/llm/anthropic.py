@@ -48,7 +48,8 @@ def _normalize_anthropic_content(content: Any, /) -> str | list[dict[str, Any]]:
 
 
 def _openai_tool_calls_to_anthropic_blocks(
-    tool_calls: list[dict[str, Any]], /,
+    tool_calls: list[dict[str, Any]],
+    /,
 ) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     for tc in tool_calls:
@@ -265,7 +266,10 @@ class AnthropicAdapter(BaseLLMAdapter):
                 )
             else:
                 resp = client.messages.create(
-                    model=model, messages=messages, max_tokens=max_tokens, **kwargs,
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    **kwargs,
                 )
         except Exception as e:
             raise LLMError(safe_provider_error_message("Anthropic", e)) from None
@@ -334,7 +338,10 @@ class AnthropicAdapter(BaseLLMAdapter):
                 )
             else:
                 resp = await client.messages.create(
-                    model=model, messages=messages, max_tokens=max_tokens, **kwargs,
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    **kwargs,
                 )
         except Exception as e:
             raise LLMError(safe_provider_error_message("Anthropic", e)) from None
@@ -415,7 +422,10 @@ class AnthropicAdapter(BaseLLMAdapter):
 
 
 def build_anthropic_adapter(
-    *, model: str, api_key: str | None = None, **kwargs: Any,
+    *,
+    model: str,
+    api_key: str | None = None,
+    **kwargs: Any,
 ) -> AnthropicAdapter:
     if not isinstance(model, str) or not model.strip():
         raise ValueError("AnthropicAdapter requires a non-empty 'model'")

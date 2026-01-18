@@ -105,13 +105,13 @@ def test_extract_openai_style_token_usage_handles_dict_object_and_missing_usage(
     assert extract_openai_style_token_usage({}) == (0, 0)
 
     assert extract_openai_style_token_usage(
-        {"usage": {"prompt_tokens": 1, "completion_tokens": 2}}
+        {"usage": {"prompt_tokens": 1, "completion_tokens": 2}},
     ) == (
         1,
         2,
     )
     assert extract_openai_style_token_usage(
-        {"usage": {"input_tokens": "3", "output_tokens": "4"}}
+        {"usage": {"input_tokens": "3", "output_tokens": "4"}},
     ) == (
         3,
         4,
@@ -279,12 +279,12 @@ def test_extract_tool_calls_openai_from_dict() -> None:
                                 "name": "get_weather",
                                 "arguments": '{"city": "NYC"}',
                             },
-                        }
-                    ]
+                        },
+                    ],
                 },
                 "finish_reason": "tool_calls",
-            }
-        ]
+            },
+        ],
     }
 
     result = extract_tool_calls_openai(response)
@@ -343,12 +343,12 @@ def test_extract_tool_calls_gemini_from_dict() -> None:
                             "function_call": {
                                 "name": "get_weather",
                                 "args": {"location": "Seattle"},
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
+                            },
+                        },
+                    ],
+                },
+            },
+        ],
     }
 
     result = extract_tool_calls_gemini(response)

@@ -25,12 +25,10 @@ def test_goal2_ports_module_imports_and_exposes_types() -> None:
 
 @pytest.mark.unit
 def test_goal2_ports_not_imported_by_default_completion_paths() -> None:
-    """
-    Guard: Goal 1 runtime paths must not import Goal 2 placeholder modules.
+    """Guard: Goal 1 runtime paths must not import Goal 2 placeholder modules.
 
     We run this in a subprocess to avoid pytest import ordering interactions.
     """
-
     code = textwrap.dedent(
         """
         from rlm.api import create_rlm
@@ -48,7 +46,7 @@ def test_goal2_ports_not_imported_by_default_completion_paths() -> None:
         import sys
 
         print("rlm.domain.goal2_ports" in sys.modules)
-        """
+        """,
     ).strip()
 
     cp = subprocess.run(

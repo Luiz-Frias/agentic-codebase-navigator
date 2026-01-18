@@ -15,12 +15,10 @@ from tests.fakes_ports import QueueLLM
 def test_default_environment_registry_does_not_import_modal_when_building_local(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    Optional env adapters must not be imported unless selected.
+    """Optional env adapters must not be imported unless selected.
 
     In particular: selecting the local env should not import the optional `modal` package.
     """
-
     orig_import = builtins.__import__
 
     def _guarded_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -40,10 +38,7 @@ def test_default_environment_registry_does_not_import_modal_when_building_local(
 def test_selecting_modal_without_dependency_yields_helpful_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    Selecting modal without optional deps should fail fast with a helpful message.
-    """
-
+    """Selecting modal without optional deps should fail fast with a helpful message."""
     orig_import = builtins.__import__
 
     def _missing_modal(name, *args, **kwargs):  # type: ignore[no-untyped-def]

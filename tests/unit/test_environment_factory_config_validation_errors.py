@@ -19,8 +19,9 @@ def test_environment_registry_rejects_invalid_local_allowed_import_roots_type() 
     with pytest.raises(ValueError, match="allowed_import_roots"):
         reg.build(
             EnvironmentConfig(
-                environment="local", environment_kwargs={"allowed_import_roots": "nope"}
-            )
+                environment="local",
+                environment_kwargs={"allowed_import_roots": "nope"},
+            ),
         )
 
 
@@ -32,7 +33,7 @@ def test_environment_registry_ignores_legacy_lm_handler_address_key() -> None:
         EnvironmentConfig(
             environment="local",
             environment_kwargs={"lm_handler_address": ("127.0.0.1", 1234)},
-        )
+        ),
     )
 
 
@@ -61,7 +62,10 @@ def test_environment_registry_rejects_invalid_docker_timeout(
     reg = DefaultEnvironmentRegistry()
     with pytest.raises(ValueError, match="subprocess_timeout_s"):
         reg.build(
-            EnvironmentConfig(environment="docker", environment_kwargs={"subprocess_timeout_s": -1})
+            EnvironmentConfig(
+                environment="docker",
+                environment_kwargs={"subprocess_timeout_s": -1},
+            ),
         )
 
 

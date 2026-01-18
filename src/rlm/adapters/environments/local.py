@@ -252,7 +252,9 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
 
         try:
             results, calls = self._request_completions_batched(
-                prompts=prompts, model=model, correlation_id=cid,
+                prompts=prompts,
+                model=model,
+                correlation_id=cid,
             )
         except Exception as exc:
             return [f"Error: LM query failed - {exc}"] * len(prompts)

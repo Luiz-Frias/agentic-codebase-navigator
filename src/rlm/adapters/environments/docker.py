@@ -469,7 +469,8 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         try:
             result = subprocess.run(  # nosec B603 - safe list-form command, no shell injection risk
                 cmd,
-                check=False, capture_output=True,
+                check=False,
+                capture_output=True,
                 text=True,
                 timeout=self._subprocess_timeout_s,
             )
@@ -505,7 +506,10 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         try:
             lines = result.stdout.strip().split("\n")
             data_raw: Any = json.loads(lines[-1]) if lines else {}
-            data: dict[str, Any] = cast("dict[str, Any]", data_raw if isinstance(data_raw, dict) else {})
+            data: dict[str, Any] = cast(
+                "dict[str, Any]",
+                data_raw if isinstance(data_raw, dict) else {},
+            )
             return ReplResult(
                 stdout=str(data.get("stdout", "")),
                 stderr=str(data.get("stderr", "")) + (result.stderr or ""),
@@ -541,7 +545,8 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                         str(getattr(self, "_stop_grace_s", DEFAULT_DOCKER_STOP_GRACE_S)),
                         container_id,
                     ],
-                    check=False, capture_output=True,
+                    check=False,
+                    capture_output=True,
                     timeout=getattr(
                         self,
                         "_cleanup_subprocess_timeout_s",
@@ -647,7 +652,8 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
 
         result = subprocess.run(  # nosec B603 B607 - safe list-form command, Docker CLI is standard
             cmd,
-            check=False, capture_output=True,
+            check=False,
+            capture_output=True,
             text=True,
             timeout=self._subprocess_timeout_s,
         )

@@ -88,7 +88,7 @@ def test_azure_openai_adapter_complete_maps_prompt_and_extracts_text_and_usage(
     resp = _Response("hi", prompt_tokens=3, completion_tokens=5)
     created: list[_FakeClient] = []
 
-    class AzureOpenAI:  # noqa: N801 - matches SDK naming
+    class AzureOpenAI:
         def __init__(self, **kwargs):
             client = _FakeClient(response=resp, **kwargs)
             created.append(client)
@@ -131,7 +131,7 @@ async def test_azure_openai_adapter_acomplete_maps_prompt_and_extracts_text_and_
     resp = _Response("ahi", prompt_tokens=1, completion_tokens=2)
     created: list[_FakeAsyncClient] = []
 
-    class AsyncAzureOpenAI:  # noqa: N801 - matches SDK naming
+    class AsyncAzureOpenAI:
         def __init__(self, **kwargs):
             client = _FakeAsyncClient(response=resp, **kwargs)
             created.append(client)
@@ -186,7 +186,7 @@ def test_azure_openai_adapter_validations_client_cache_and_error_mapping(
     resp = _Response("ok", prompt_tokens=1, completion_tokens=2)
     created: list[_FakeClient] = []
 
-    class AzureOpenAI:  # noqa: N801 - matches SDK naming
+    class AzureOpenAI:
         def __init__(self, **kwargs):
             client = _FakeClient(response=resp, **kwargs)
             created.append(client)
@@ -213,7 +213,7 @@ def test_azure_openai_adapter_validations_client_cache_and_error_mapping(
     assert len(created) == 1  # cached client
 
     # Provider exception => mapped to LLMError.
-    class AzureOpenAITimeout:  # noqa: N801 - matches SDK naming
+    class AzureOpenAITimeout:
         def __init__(self, **_kwargs):
             client = _FakeClient(response=resp, **_kwargs)
             client.completions.create = lambda **_k: (_ for _ in ()).throw(TimeoutError())  # type: ignore[method-assign]

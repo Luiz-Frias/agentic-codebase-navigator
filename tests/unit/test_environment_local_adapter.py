@@ -167,7 +167,9 @@ def test_local_environment_broker_address_paths_use_wire_protocol_helpers(
     monkeypatch.setattr(local_mod, "request_completion", _stub_request_completion)
 
     env = LocalEnvironmentAdapter(
-        broker_address=("127.0.0.1", 1234), correlation_id="cid", execute_timeout_s=None
+        broker_address=("127.0.0.1", 1234),
+        correlation_id="cid",
+        execute_timeout_s=None,
     )
     try:
         cc = env._request_completion(prompt="hi", model=None, correlation_id=None)
@@ -194,11 +196,15 @@ def test_local_environment_broker_address_paths_use_wire_protocol_helpers(
     monkeypatch.setattr(local_mod, "request_completions_batched", _stub_request_completions_batched)
 
     env2 = LocalEnvironmentAdapter(
-        broker_address=("127.0.0.1", 1234), correlation_id="cid", execute_timeout_s=None
+        broker_address=("127.0.0.1", 1234),
+        correlation_id="cid",
+        execute_timeout_s=None,
     )
     try:
         out, calls = env2._request_completions_batched(
-            prompts=["p1", "p2"], model=None, correlation_id=None
+            prompts=["p1", "p2"],
+            model=None,
+            correlation_id=None,
         )
         assert out == ["Error: oops", "r2"]
         assert len(calls) == 1 and calls[0].response == "r2"

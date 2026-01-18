@@ -16,9 +16,9 @@ def test_create_rlm_from_config_runs_end_to_end_local() -> None:
                 responses=[
                     "```repl\nprint('HELLO_LOCAL')\n```",
                     "FINAL(ok)",
-                ]
-            )
-        }
+                ],
+            ),
+        },
     )  # type: ignore[arg-type]
 
     cfg = RLMConfig(
@@ -42,15 +42,16 @@ def test_create_rlm_from_config_runs_end_to_end_docker() -> None:
                 responses=[
                     "```repl\nprint('HELLO_DOCKER')\n```",
                     "FINAL(ok)",
-                ]
-            )
-        }
+                ],
+            ),
+        },
     )  # type: ignore[arg-type]
 
     cfg = RLMConfig(
         llm=LLMConfig(backend="mock"),
         env=EnvironmentConfig(
-            environment="docker", environment_kwargs={"image": "python:3.12-slim"}
+            environment="docker",
+            environment_kwargs={"image": "python:3.12-slim"},
         ),
         max_iterations=3,
         verbose=False,

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-import sys
-from ruff.__main__ import find_ruff_bin
-from pathlib import Path
 import subprocess
+import sys
+from pathlib import Path
 
 files = [
     "src/rlm/api/factory.py",
@@ -11,7 +10,7 @@ files = [
 ]
 
 for f in files:
-    print(f"\n{'='*80}\n{f}\n{'='*80}")
+    print(f"\n{'=' * 80}\n{f}\n{'=' * 80}")
     try:
         result = subprocess.run(
             [sys.executable, "-m", "ruff", "check", f, "--output-format=text"],

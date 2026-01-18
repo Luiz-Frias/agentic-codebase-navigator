@@ -8,8 +8,7 @@ from rlm.api import create_rlm
 
 @pytest.mark.e2e
 def test_facade_multi_backend_routes_subcalls_by_model_and_merges_usage() -> None:
-    """
-    Boundary: public facade -> application use case -> broker -> local env -> subcall routing.
+    """Boundary: public facade -> application use case -> broker -> local env -> subcall routing.
 
     The root model emits a repl code block that calls `llm_query(..., model='sub')`.
     """

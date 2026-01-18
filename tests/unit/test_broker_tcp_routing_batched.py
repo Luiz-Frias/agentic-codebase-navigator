@@ -17,8 +17,7 @@ from rlm.infrastructure.comms.protocol import request_completions_batched
 
 @dataclass
 class _BarrierAsyncLLM(LLMPort):
-    """
-    Async LLM that deadlocks if called sequentially in a batched context.
+    """Async LLM that deadlocks if called sequentially in a batched context.
 
     Each `acomplete()` waits until all expected calls have started; this forces the
     broker to use real concurrency for batched requests.
@@ -48,7 +47,7 @@ class _BarrierAsyncLLM(LLMPort):
         await self._all_started.wait()
 
         self._usage = UsageSummary(
-            model_usage_summaries={self._model_name: ModelUsageSummary(1, 0, 0)}
+            model_usage_summaries={self._model_name: ModelUsageSummary(1, 0, 0)},
         )
         return ChatCompletion(
             root_model=request.model or self._model_name,
