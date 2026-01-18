@@ -6,8 +6,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Uuid4IdGenerator:
-    """
-    Default correlation-id generator.
+    """Default correlation-id generator.
 
     This implements the `IdGeneratorPort` protocol via duck typing.
     """

@@ -1,5 +1,4 @@
-"""
-Goal2 placeholder ports (Phase 06).
+"""Goal2 placeholder ports (Phase 06).
 
 These are intentionally *not* used by the Phase 05–06 completion/runtime path.
 They exist only to reserve stable extension points for future codebase-analysis
@@ -9,8 +8,10 @@ capabilities, while keeping the Goal1 core independent (DIP).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from pathlib import Path
-from typing import Any, Literal, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class CodeChunk(TypedDict):
@@ -38,8 +39,7 @@ class SemanticChunkerPort(Protocol):
 
 
 class ContextManagerPort(Protocol):
-    """
-    Select a relevant subset of a codebase index/chunks for a query (placeholder).
+    """Select a relevant subset of a codebase index/chunks for a query (placeholder).
 
     Returns an opaque context payload for now; future phases will introduce typed
     result models once the public surface is finalized.

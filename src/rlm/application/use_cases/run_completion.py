@@ -6,7 +6,6 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, overload
 
-from rlm.domain.agent_ports import ContextCompressor, NestedCallPolicy, StoppingPolicy
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion, RunMetadata
 from rlm.domain.models.llm_request import ToolChoice
@@ -17,12 +16,16 @@ from rlm.domain.services.rlm_orchestrator import AgentMode, RLMOrchestrator
 from rlm.domain.types import Prompt
 
 if TYPE_CHECKING:
-    from rlm.domain.agent_ports import ToolRegistryPort
+    from rlm.domain.agent_ports import (
+        ContextCompressor,
+        NestedCallPolicy,
+        StoppingPolicy,
+        ToolRegistryPort,
+    )
 
 
 class EnvironmentFactory(Protocol):
-    """
-    Builds an EnvironmentPort for a single run.
+    """Builds an EnvironmentPort for a single run.
 
     The factory is responsible for binding any broker address into the environment
     implementation (e.g., legacy LocalREPL/DockerREPL need an LMHandler address for
@@ -54,8 +57,7 @@ def _build_environment(
     correlation_id: str | None,
     /,
 ) -> EnvironmentPort:
-    """
-    Call `EnvironmentFactory.build()` in a backwards-compatible way.
+    """Call `EnvironmentFactory.build()` in a backwards-compatible way.
 
     During the migration, some factories expose:
     - `build(broker_address)`
@@ -64,7 +66,6 @@ def _build_environment(
     We select the call shape via signature introspection so we don't accidentally
     swallow `TypeError` raised *inside* the factory.
     """
-
     try:
         sig = inspect.signature(factory.build)
     except (TypeError, ValueError):
@@ -99,8 +100,7 @@ def _build_environment(
 
 @dataclass(frozen=True, slots=True)
 class RunCompletionDeps:
-    """
-    Dependencies for running a completion.
+    """Dependencies for running a completion.
 
     Notes:
     - `broker` is started/stopped per run.
@@ -114,6 +114,7 @@ class RunCompletionDeps:
     - `stopping_policy`: Custom stopping criteria for iteration loops.
     - `context_compressor`: Compress nested call returns.
     - `nested_call_policy`: Control nested orchestrator spawning.
+
     """
 
     llm: LLMPort
@@ -158,8 +159,7 @@ def _infer_environment_type(env: EnvironmentPort, /) -> str:
 
 
 def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) -> ChatCompletion:
-    """
-    Use case: run an RLM completion using the domain orchestrator.
+    """Use case: run an RLM completion using the domain orchestrator.
 
     This function:
     - starts the broker (for env `llm_query()` subcalls)
@@ -170,15 +170,15 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
     correlation_id = uuid.uuid4().hex
     try:
         broker_addr = deps.broker.start()
-    except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+    except Exception as e:
         raise BrokerError("Failed to start broker") from e
 
     try:
         try:
             env = _build_environment(
-                deps.environment_factory, deps.broker, broker_addr, correlation_id
+                deps.environment_factory, deps.broker, broker_addr, correlation_id,
             )
-        except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+        except Exception as e:
             raise ExecutionError("Failed to build environment") from e
 
         try:
@@ -195,7 +195,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                         environment_kwargs={},
                         other_backends=None,
                         correlation_id=correlation_id,
-                    )
+                    ),
                 )
 
             orch = RLMOrchestrator(
@@ -221,7 +221,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 )
                 # Merge orchestrator usage (root calls) with broker usage (env subcalls).
                 merged_usage = merge_usage_summaries(
-                    [cc.usage_summary, deps.broker.get_usage_summary()]
+                    [cc.usage_summary, deps.broker.get_usage_summary()],
                 )
                 return ChatCompletion(
                     root_model=cc.root_model,
@@ -234,7 +234,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 )
             except RLMError:
                 raise
-            except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+            except Exception as e:
                 raise RLMError("RLM run failed") from e
         finally:
             env.cleanup()
@@ -243,21 +243,20 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
 
 
 async def arun_completion(
-    request: RunCompletionRequest, *, deps: RunCompletionDeps
+    request: RunCompletionRequest, *, deps: RunCompletionDeps,
 ) -> ChatCompletion:
-    """
-    Async use case: run an RLM completion using the domain orchestrator.
+    """Async use case: run an RLM completion using the domain orchestrator.
 
     Notes:
     - `BrokerPort` / `EnvironmentPort` are sync; we execute their blocking methods via
       `asyncio.to_thread` so callers can safely run this in an event loop.
     - Cleanup is cancellation-safe via `asyncio.shield(...)`.
-    """
 
+    """
     correlation_id = uuid.uuid4().hex
     try:
         broker_addr = await asyncio.to_thread(deps.broker.start)
-    except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+    except Exception as e:
         raise BrokerError("Failed to start broker") from e
 
     try:
@@ -269,7 +268,7 @@ async def arun_completion(
                 broker_addr,
                 correlation_id,
             )
-        except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+        except Exception as e:
             raise ExecutionError("Failed to build environment") from e
 
         try:
@@ -324,7 +323,7 @@ async def arun_completion(
                 )
             except RLMError:
                 raise
-            except Exception as e:  # noqa: BLE001 - boundary mapping to domain error
+            except Exception as e:
                 raise RLMError("RLM run failed") from e
         finally:
             await asyncio.shield(asyncio.to_thread(env.cleanup))

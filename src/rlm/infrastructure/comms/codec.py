@@ -35,12 +35,12 @@ def recv_frame(
     *,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> dict[str, Any] | None:
-    """
-    Receive a single length-prefixed JSON object from a socket.
+    """Receive a single length-prefixed JSON object from a socket.
 
     Returns:
         - dict: parsed JSON object
         - None: connection closed cleanly before any length prefix was read
+
     """
     raw_len = bytearray()
     while len(raw_len) < 4:

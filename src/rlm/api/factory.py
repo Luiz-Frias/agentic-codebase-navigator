@@ -12,12 +12,12 @@ from rlm.api.registries import (
     LoggerRegistry,
 )
 from rlm.api.rlm import RLM
-from rlm.application.config import AgentModeName, EnvironmentName, RLMConfig
-from rlm.application.use_cases.run_completion import EnvironmentFactory
-from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
 
 if TYPE_CHECKING:
+    from rlm.application.config import AgentModeName, EnvironmentName, RLMConfig
+    from rlm.application.use_cases.run_completion import EnvironmentFactory
     from rlm.domain.agent_ports import ToolPort
+    from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
 
 
 def create_rlm(
@@ -37,8 +37,7 @@ def create_rlm(
     tools: list[ToolPort | Callable[..., Any]] | None = None,
     agent_mode: AgentModeName = "code",
 ) -> RLM:
-    """
-    Convenience factory for the public `RLM` facade.
+    """Convenience factory for the public `RLM` facade.
 
     Args:
         llm: Primary LLM adapter.
@@ -57,6 +56,7 @@ def create_rlm(
 
     Returns:
         Configured RLM facade instance.
+
     """
     return RLM(
         llm,
@@ -85,8 +85,7 @@ def create_rlm_from_config(
     # Runtime tool injection (tools cannot be serialized to config)
     tools: list[ToolPort | Callable[..., Any]] | None = None,
 ) -> RLM:
-    """
-    Construct an `RLM` from config.
+    """Construct an `RLM` from config.
 
     Args:
         config: RLM configuration object.
@@ -103,16 +102,16 @@ def create_rlm_from_config(
     Note:
         The `agent_mode` is read from config. If agent_mode="tools", you must
         provide tools via the `tools` parameter.
+
     """
     if llm is None:
         if llm_registry is None:
             llm_registry = DefaultLLMRegistry()
         llm = llm_registry.build(config.llm)
-    else:
-        # If the caller provided the root LLM but not a registry, we may still
-        # need a registry for `config.other_llms`.
-        if llm_registry is None:
-            llm_registry = DefaultLLMRegistry()
+    # If the caller provided the root LLM but not a registry, we may still
+    # need a registry for `config.other_llms`.
+    elif llm_registry is None:
+        llm_registry = DefaultLLMRegistry()
 
     other_llms: list[LLMPort] = [llm_registry.build(c) for c in config.other_llms]
 

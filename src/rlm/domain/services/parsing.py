@@ -9,8 +9,7 @@ from rlm.domain.ports import EnvironmentPort
 
 
 def find_code_blocks(text: str) -> list[str]:
-    """
-    Find REPL code blocks in text wrapped in triple backticks.
+    """Find REPL code blocks in text wrapped in triple backticks.
 
     We only execute blocks explicitly tagged as `repl`:
 
@@ -23,8 +22,7 @@ def find_code_blocks(text: str) -> list[str]:
 
 
 def find_final_answer(text: str, *, environment: EnvironmentPort | None = None) -> str | None:
-    """
-    Find FINAL(...) or FINAL_VAR(...) at the start of a line.
+    """Find FINAL(...) or FINAL_VAR(...) at the start of a line.
 
     - FINAL(answer) returns the answer substring (stripped).
     - FINAL_VAR(name) optionally queries the environment to resolve a variable.
@@ -34,8 +32,7 @@ def find_final_answer(text: str, *, environment: EnvironmentPort | None = None) 
     """
 
     def _extract_call_arg(call_name: str) -> str | None:
-        """
-        Extract the argument string from a call like `CALL_NAME(<arg...>)` that
+        """Extract the argument string from a call like `CALL_NAME(<arg...>)` that
         appears at the start of a line.
 
         We can't use a naive regex like `.*?` because answers may contain
@@ -121,10 +118,9 @@ def find_final_answer(text: str, *, environment: EnvironmentPort | None = None) 
 
 
 async def afind_final_answer(
-    text: str, *, environment: EnvironmentPort | None = None
+    text: str, *, environment: EnvironmentPort | None = None,
 ) -> str | None:
-    """
-    Async variant of `find_final_answer`.
+    """Async variant of `find_final_answer`.
 
     This avoids blocking the event loop when FINAL_VAR needs environment execution.
 
@@ -198,7 +194,7 @@ async def afind_final_answer(
         if environment is None:
             return None
         result = await asyncio.to_thread(
-            environment.execute_code, f"print(FINAL_VAR({variable_name!r}))"
+            environment.execute_code, f"print(FINAL_VAR({variable_name!r}))",
         )
         final_answer = result.stdout.strip()
         if final_answer == "":
@@ -235,10 +231,9 @@ def format_execution_result(result: ReplResult) -> str:
 
 
 def format_iteration(
-    iteration: Iteration, *, max_character_length: int = 20000
+    iteration: Iteration, *, max_character_length: int = 20000,
 ) -> list[dict[str, str]]:
-    """
-    Format an iteration to append to the next prompt message history.
+    """Format an iteration to append to the next prompt message history.
 
     Mirrors the legacy prompt-shaping behavior and truncates long REPL outputs.
     """
@@ -258,7 +253,7 @@ def format_iteration(
             {
                 "role": "user",
                 "content": f"Code executed:\n```python\n{code}\n```\n\nREPL output:\n{result}",
-            }
+            },
         )
 
     return messages

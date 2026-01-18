@@ -49,7 +49,7 @@ AgentMode = AgentModeName
 def _add_usage_totals(
     totals: dict[str, ModelUsageSummary],
     summary: UsageSummary,
-    /,  # noqa: D401 - internal helper
+    /,
 ) -> None:
     """Add a usage summary into a running totals dict (mutating totals in-place)."""
     for model, mus in summary.model_usage_summaries.items():
@@ -67,12 +67,12 @@ def _add_usage_totals(
 
 
 def _clone_usage_totals(totals: dict[str, ModelUsageSummary], /) -> UsageSummary:
-    """
-    Snapshot totals into a standalone UsageSummary.
+    """Snapshot totals into a standalone UsageSummary.
 
     Notes:
     - Clones ModelUsageSummary objects to avoid aliasing (callers may mutate).
     - Inserts keys in sorted order for deterministic behavior.
+
     """
     return UsageSummary(
         model_usage_summaries={
@@ -82,7 +82,7 @@ def _clone_usage_totals(totals: dict[str, ModelUsageSummary], /) -> UsageSummary
                 total_output_tokens=mus.total_output_tokens,
             )
             for model, mus in ((m, totals[m]) for m in sorted(totals))
-        }
+        },
     )
 
 
@@ -115,8 +115,7 @@ def _tool_json_default(value: Any, /) -> Any:
 
 @dataclass(slots=True, frozen=True)
 class RLMOrchestrator:
-    """
-    Pure domain orchestrator (Phase 2).
+    """Pure domain orchestrator (Phase 2).
 
     This implements the legacy iteration loop semantics using only domain ports.
     Environment/broker lifecycle is handled outside (composition root).
@@ -138,6 +137,7 @@ class RLMOrchestrator:
     Note:
         Tool calling mode ("tools") requires a tool_registry. If agent_mode is
         "tools" but no registry is provided, a ValueError is raised at runtime.
+
     """
 
     llm: LLMPort
@@ -174,8 +174,7 @@ class RLMOrchestrator:
         history: list[dict[str, Any]] | None = None,
         last_result: ChatCompletion | None = None,
     ) -> dict[str, Any]:
-        """
-        Build context dict for policy callbacks.
+        """Build context dict for policy callbacks.
 
         This context is passed to StoppingPolicy methods and can be extended
         by external apps to track custom state (beliefs, EIG, etc.).
@@ -190,8 +189,7 @@ class RLMOrchestrator:
         }
 
     def _should_stop(self, context: dict[str, Any]) -> bool:
-        """
-        Check if the iteration loop should stop early.
+        """Check if the iteration loop should stop early.
 
         Uses the injected StoppingPolicy if available, otherwise returns False.
         """
@@ -200,8 +198,7 @@ class RLMOrchestrator:
         return self.stopping_policy.should_stop(context)
 
     def _on_iteration_complete(self, context: dict[str, Any], result: ChatCompletion) -> None:
-        """
-        Notify policy that an iteration completed.
+        """Notify policy that an iteration completed.
 
         Allows external apps to track state, update beliefs, etc.
         """
@@ -209,8 +206,7 @@ class RLMOrchestrator:
             self.stopping_policy.on_iteration_complete(context, result)
 
     def _compress_result(self, result: str, max_tokens: int | None = None) -> str:
-        """
-        Compress a nested call result before returning to parent.
+        """Compress a nested call result before returning to parent.
 
         Uses the injected ContextCompressor if available, otherwise passthrough.
         """
@@ -219,8 +215,7 @@ class RLMOrchestrator:
         return self.context_compressor.compress(result, max_tokens)
 
     def _should_orchestrate_nested(self, prompt: str, depth: int) -> bool:
-        """
-        Check if a nested call should spawn a sub-orchestrator.
+        """Check if a nested call should spawn a sub-orchestrator.
 
         Uses the injected NestedCallPolicy if available, otherwise returns False.
         """
@@ -245,19 +240,18 @@ class RLMOrchestrator:
         supports_tools = getattr(self.llm, "supports_tools", None)
         if supports_tools is False:
             raise ValueError(
-                "agent_mode='tools' requires an LLM adapter that supports tool calling"
+                "agent_mode='tools' requires an LLM adapter that supports tool calling",
             )
         if supports_tools is None:
             tool_prompt_format = getattr(self.llm, "tool_prompt_format", "openai")
             if tool_prompt_format != "openai":
                 raise ValueError(
                     "agent_mode='tools' requires supports_tools=True for non-OpenAI formats; "
-                    f"adapter reports tool_prompt_format={tool_prompt_format!r}"
+                    f"adapter reports tool_prompt_format={tool_prompt_format!r}",
                 )
 
     def _execute_tool_call(self, tool_call: ToolCallRequest, /) -> ToolCallResult:
-        """
-        Execute a single tool call and return the result.
+        """Execute a single tool call and return the result.
 
         Args:
             tool_call: The tool call request from the LLM.
@@ -267,6 +261,7 @@ class RLMOrchestrator:
 
         Raises:
             ToolNotFoundError: If the tool is not in the registry.
+
         """
         assert self.tool_registry is not None  # Caller ensures this
 
@@ -282,7 +277,7 @@ class RLMOrchestrator:
                 result=result,
                 error=None,
             )
-        except Exception as e:  # noqa: BLE001 - tool execution boundary
+        except Exception as e:
             return ToolCallResult(
                 id=tool_call["id"],
                 name=tool_call["name"],
@@ -291,8 +286,7 @@ class RLMOrchestrator:
             )
 
     async def _aexecute_tool_call(self, tool_call: ToolCallRequest, /) -> ToolCallResult:
-        """
-        Execute a single tool call asynchronously and return the result.
+        """Execute a single tool call asynchronously and return the result.
 
         Args:
             tool_call: The tool call request from the LLM.
@@ -302,6 +296,7 @@ class RLMOrchestrator:
 
         Raises:
             ToolNotFoundError: If the tool is not in the registry.
+
         """
         assert self.tool_registry is not None  # Caller ensures this
 
@@ -317,7 +312,7 @@ class RLMOrchestrator:
                 result=result,
                 error=None,
             )
-        except Exception as e:  # noqa: BLE001 - tool execution boundary
+        except Exception as e:
             return ToolCallResult(
                 id=tool_call["id"],
                 name=tool_call["name"],
@@ -326,8 +321,7 @@ class RLMOrchestrator:
             )
 
     def _build_tool_result_message(self, result: ToolCallResult, /) -> ToolMessage:
-        """
-        Format a tool execution result as a conversation message.
+        """Format a tool execution result as a conversation message.
 
         The content is JSON-serialized for consistent parsing by the LLM.
         """
@@ -339,7 +333,7 @@ class RLMOrchestrator:
 
         try:
             content = json.dumps(payload, default=_tool_json_default)
-        except Exception as exc:  # noqa: BLE001 - serialization boundary
+        except Exception as exc:
             content = json.dumps({"error": f"Tool result serialization failed: {exc}"})
 
         return ToolMessage(
@@ -349,10 +343,9 @@ class RLMOrchestrator:
         )
 
     def _build_assistant_tool_call_message(
-        self, tool_calls: list[ToolCallRequest], response_text: str = ""
+        self, tool_calls: list[ToolCallRequest], response_text: str = "",
     ) -> dict[str, Any]:
-        """
-        Build an assistant message containing tool calls.
+        """Build an assistant message containing tool calls.
 
         This follows the OpenAI chat format for assistant messages with tool_calls.
         """
@@ -423,7 +416,7 @@ class RLMOrchestrator:
         return None
 
     def _estimate_prompt_tokens_fallback(
-        self, prompt: Prompt, tools: list[ToolDefinition] | None, /
+        self, prompt: Prompt, tools: list[ToolDefinition] | None, /,
     ) -> int:
         payload: dict[str, Any] = {"prompt": prompt}
         if tools:
@@ -446,7 +439,7 @@ class RLMOrchestrator:
         return self._estimate_prompt_tokens_fallback(prompt, tools)
 
     async def _aestimate_prompt_tokens(
-        self, prompt: Prompt, tools: list[ToolDefinition] | None, /
+        self, prompt: Prompt, tools: list[ToolDefinition] | None, /,
     ) -> int:
         counter = getattr(self.llm, "count_prompt_tokens", None)
         if callable(counter):
@@ -498,7 +491,7 @@ class RLMOrchestrator:
 
         summary_prompt = self._build_tool_summary_prompt(head)
         summary_completion = self.llm.complete(
-            LLMRequest(prompt=summary_prompt, tool_choice="none")
+            LLMRequest(prompt=summary_prompt, tool_choice="none"),
         )
         _add_usage_totals(usage_totals, summary_completion.usage_summary)
         summary_text = summary_completion.response.strip()
@@ -543,7 +536,7 @@ class RLMOrchestrator:
 
         summary_prompt = self._build_tool_summary_prompt(head)
         summary_completion = await self.llm.acomplete(
-            LLMRequest(prompt=summary_prompt, tool_choice="none")
+            LLMRequest(prompt=summary_prompt, tool_choice="none"),
         )
         _add_usage_totals(usage_totals, summary_completion.usage_summary)
         summary_text = summary_completion.response.strip()
@@ -570,8 +563,7 @@ class RLMOrchestrator:
         tool_choice: ToolChoice | None,
         depth: int = 0,
     ) -> ChatCompletion:
-        """
-        Execute the multi-turn tool calling loop (sync).
+        """Execute the multi-turn tool calling loop (sync).
 
         The loop continues until:
         - The LLM returns a response without tool_calls (final answer)
@@ -587,6 +579,7 @@ class RLMOrchestrator:
 
         Returns:
             ChatCompletion with the final response.
+
         """
         time_start = time.perf_counter()
 
@@ -651,7 +644,7 @@ class RLMOrchestrator:
 
             # Add assistant's tool call message to conversation
             conversation.append(
-                self._build_assistant_tool_call_message(completion.tool_calls, completion.response)
+                self._build_assistant_tool_call_message(completion.tool_calls, completion.response),
             )
 
             # Execute each tool call and add results to conversation
@@ -665,7 +658,7 @@ class RLMOrchestrator:
             {
                 "role": "user",
                 "content": "Please provide your final answer based on the tool results.",
-            }
+            },
         )
         conversation = self._maybe_summarize_tool_conversation(
             conversation,
@@ -697,8 +690,7 @@ class RLMOrchestrator:
         tool_choice: ToolChoice | None,
         depth: int = 0,
     ) -> ChatCompletion:
-        """
-        Execute the multi-turn tool calling loop (async).
+        """Execute the multi-turn tool calling loop (async).
 
         Same logic as _tool_calling_loop but uses async LLM calls and tool execution.
         Includes StoppingPolicy integration for custom early termination.
@@ -766,7 +758,7 @@ class RLMOrchestrator:
 
             # Add assistant's tool call message to conversation
             conversation.append(
-                self._build_assistant_tool_call_message(completion.tool_calls, completion.response)
+                self._build_assistant_tool_call_message(completion.tool_calls, completion.response),
             )
 
             # Execute each tool call and add results to conversation
@@ -780,7 +772,7 @@ class RLMOrchestrator:
             {
                 "role": "user",
                 "content": "Please provide your final answer based on the tool results.",
-            }
+            },
         )
         conversation = await self._maybe_asummarize_tool_conversation(
             conversation,
@@ -863,14 +855,14 @@ class RLMOrchestrator:
         # Build initial message history (system + metadata hint).
         query_metadata = QueryMetadata.from_context(prompt)
         message_history: list[dict[str, str]] = build_rlm_system_prompt(
-            self.system_prompt, query_metadata
+            self.system_prompt, query_metadata,
         )
 
         for i in range(max_iterations):
             iter_start = time.perf_counter()
 
             current_prompt: Prompt = message_history + [
-                build_user_prompt(root_prompt=root_prompt, iteration=i)
+                build_user_prompt(root_prompt=root_prompt, iteration=i),
             ]
 
             llm_cc = self.llm.complete(LLMRequest(prompt=current_prompt))
@@ -936,7 +928,7 @@ class RLMOrchestrator:
             {
                 "role": "user",
                 "content": "Please provide a final answer to the user's question based on the information provided.",
-            }
+            },
         ]
         last_cc = self.llm.complete(LLMRequest(prompt=final_prompt))
         _add_usage_totals(root_usage_totals, last_cc.usage_summary)
@@ -961,13 +953,13 @@ class RLMOrchestrator:
         correlation_id: str | None = None,
         tool_choice: ToolChoice | None = None,
     ) -> ChatCompletion:
-        """
-        Async variant of `completion()`.
+        """Async variant of `completion()`.
 
         Notes:
         - We still execute code blocks sequentially to preserve environment semantics.
         - We use `asyncio.TaskGroup` + `asyncio.to_thread` to avoid blocking the event loop
           while loading context / executing code.
+
         """
         time_start = time.perf_counter()
 
@@ -1004,20 +996,20 @@ class RLMOrchestrator:
 
         query_metadata = QueryMetadata.from_context(prompt)
         message_history: list[dict[str, str]] = build_rlm_system_prompt(
-            self.system_prompt, query_metadata
+            self.system_prompt, query_metadata,
         )
 
         for i in range(max_iterations):
             iter_start = time.perf_counter()
             current_prompt: Prompt = message_history + [
-                build_user_prompt(root_prompt=root_prompt, iteration=i)
+                build_user_prompt(root_prompt=root_prompt, iteration=i),
             ]
 
             # On the first iteration, load context and run the LLM call concurrently.
             if i == 0:
                 async with asyncio.TaskGroup() as tg:
                     tg.create_task(
-                        asyncio.to_thread(self.environment.load_context, prompt)  # type: ignore[arg-type]
+                        asyncio.to_thread(self.environment.load_context, prompt),  # type: ignore[arg-type]
                     )
                     llm_task = tg.create_task(self.llm.acomplete(LLMRequest(prompt=current_prompt)))
                 llm_cc = llm_task.result()
@@ -1081,7 +1073,7 @@ class RLMOrchestrator:
             {
                 "role": "user",
                 "content": "Please provide a final answer to the user's question based on the information provided.",
-            }
+            },
         ]
         last_cc = await self.llm.acomplete(LLMRequest(prompt=final_prompt))
         _add_usage_totals(root_usage_totals, last_cc.usage_summary)

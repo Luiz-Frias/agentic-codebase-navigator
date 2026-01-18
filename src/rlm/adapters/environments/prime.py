@@ -6,8 +6,7 @@ from rlm.domain.types import ContextPayload
 
 
 class PrimeEnvironmentAdapter(BaseEnvironmentAdapter):
-    """
-    Placeholder adapter for the (future) "prime" environment.
+    """Placeholder adapter for the (future) "prime" environment.
 
     Phase 05:
     - We register a concrete adapter so configuration/selection can be validated.
@@ -19,7 +18,7 @@ class PrimeEnvironmentAdapter(BaseEnvironmentAdapter):
     def __init__(self, **_kwargs: object) -> None:
         raise NotImplementedError(
             "Environment 'prime' is not implemented yet. "
-            "Use environment='local' or environment='docker' instead."
+            "Use environment='local' or environment='docker' instead.",
         )
 
     def load_context(self, context_payload: ContextPayload, /) -> None:  # pragma: no cover

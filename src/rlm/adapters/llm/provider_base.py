@@ -26,12 +26,10 @@ def _next_gemini_call_id() -> str:
 
 
 def safe_provider_error_message(provider: str, exc: BaseException, /) -> str:
-    """
-    Convert provider exceptions into safe, user-facing messages.
+    """Convert provider exceptions into safe, user-facing messages.
 
     This intentionally avoids leaking stack traces or provider response bodies.
     """
-
     if isinstance(exc, TimeoutError):
         return f"{provider} request timed out"
     if isinstance(exc, (ConnectionError, OSError)):
@@ -40,12 +38,10 @@ def safe_provider_error_message(provider: str, exc: BaseException, /) -> str:
 
 
 def prompt_to_messages(prompt: Prompt, /) -> list[dict[str, Any]]:
-    """
-    Convert a domain Prompt payload to an OpenAI-style chat messages list.
+    """Convert a domain Prompt payload to an OpenAI-style chat messages list.
 
     Many provider SDKs accept this common `messages=[{role, content}, ...]` shape.
     """
-
     match prompt:
         case str():
             return [{"role": "user", "content": prompt}]
@@ -69,7 +65,6 @@ def prompt_to_messages(prompt: Prompt, /) -> list[dict[str, Any]]:
 
 def prompt_to_text(prompt: Prompt, /) -> str:
     """Best-effort prompt stringification for providers that accept plain text."""
-
     match prompt:
         case str():
             return prompt
@@ -100,8 +95,7 @@ def count_openai_prompt_tokens(
     model: str,
     /,
 ) -> int | None:
-    """
-    Count tokens for OpenAI-style chat prompts using tiktoken if available.
+    """Count tokens for OpenAI-style chat prompts using tiktoken if available.
 
     Returns None if tiktoken is not installed or counting fails.
     """
@@ -143,12 +137,10 @@ def count_openai_prompt_tokens(
 
 
 def extract_text_from_chat_response(response: Any, /) -> str:
-    """
-    Extract a response string from an OpenAI-style chat completion payload.
+    """Extract a response string from an OpenAI-style chat completion payload.
 
     Supports both object-style (SDK models) and dict-style payloads.
     """
-
     if isinstance(response, str):
         return response
 
@@ -192,8 +184,7 @@ def extract_text_from_chat_response(response: Any, /) -> str:
 
 
 def tool_definition_to_openai_format(tool: ToolDefinition, /) -> dict[str, Any]:
-    """
-    Convert a ToolDefinition to OpenAI's function calling format.
+    """Convert a ToolDefinition to OpenAI's function calling format.
 
     OpenAI expects tools in the format:
     {
@@ -216,8 +207,7 @@ def tool_definition_to_openai_format(tool: ToolDefinition, /) -> dict[str, Any]:
 
 
 def tool_definition_to_anthropic_format(tool: ToolDefinition, /) -> dict[str, Any]:
-    """
-    Convert a ToolDefinition to Anthropic's tool format.
+    """Convert a ToolDefinition to Anthropic's tool format.
 
     Anthropic expects tools in the format:
     {
@@ -234,8 +224,7 @@ def tool_definition_to_anthropic_format(tool: ToolDefinition, /) -> dict[str, An
 
 
 def tool_definition_to_gemini_format(tool: ToolDefinition, /) -> dict[str, Any]:
-    """
-    Convert a ToolDefinition to Google Gemini's FunctionDeclaration format.
+    """Convert a ToolDefinition to Google Gemini's FunctionDeclaration format.
 
     Gemini expects tools wrapped in a Tool object with function_declarations:
     {
@@ -252,8 +241,7 @@ def tool_definition_to_gemini_format(tool: ToolDefinition, /) -> dict[str, Any]:
 
 
 def tool_choice_to_openai_format(tool_choice: ToolChoice, /) -> dict[str, Any] | str | None:
-    """
-    Convert a ToolChoice to OpenAI's tool_choice format.
+    """Convert a ToolChoice to OpenAI's tool_choice format.
 
     - "auto" → "auto"
     - "required" → "required"
@@ -269,8 +257,7 @@ def tool_choice_to_openai_format(tool_choice: ToolChoice, /) -> dict[str, Any] |
 
 
 def tool_choice_to_anthropic_format(tool_choice: ToolChoice, /) -> dict[str, Any] | None:
-    """
-    Convert a ToolChoice to Anthropic's tool_choice format.
+    """Convert a ToolChoice to Anthropic's tool_choice format.
 
     - "auto" → {"type": "auto"}
     - "required" → {"type": "any"}
@@ -289,10 +276,9 @@ def tool_choice_to_anthropic_format(tool_choice: ToolChoice, /) -> dict[str, Any
 
 
 def tool_choice_to_gemini_function_calling_config(
-    tool_choice: ToolChoice, /
+    tool_choice: ToolChoice, /,
 ) -> dict[str, Any] | None:
-    """
-    Convert a ToolChoice to Gemini's function_calling_config shape.
+    """Convert a ToolChoice to Gemini's function_calling_config shape.
 
     - "auto" → {"mode": "AUTO"}
     - "required" → {"mode": "ANY"}
@@ -311,8 +297,7 @@ def tool_choice_to_gemini_function_calling_config(
 
 
 def extract_tool_calls_openai(response: Any, /) -> list[ToolCallRequest] | None:
-    """
-    Extract tool calls from an OpenAI-style chat completion response.
+    """Extract tool calls from an OpenAI-style chat completion response.
 
     OpenAI returns tool calls in:
     response.choices[0].message.tool_calls[].{id, function.name, function.arguments}
@@ -381,8 +366,7 @@ def extract_tool_calls_openai(response: Any, /) -> list[ToolCallRequest] | None:
 
 
 def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | None:
-    """
-    Extract tool calls from an Anthropic response.
+    """Extract tool calls from an Anthropic response.
 
     Anthropic returns tool use in content blocks:
     response.content[].{type: "tool_use", id, name, input}
@@ -431,8 +415,7 @@ def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | No
 
 
 def extract_tool_calls_gemini(response: Any, /) -> list[ToolCallRequest] | None:
-    """
-    Extract tool calls from a Google Gemini response.
+    """Extract tool calls from a Google Gemini response.
 
     Gemini returns function calls in:
     response.candidates[0].content.parts[].function_call.{name, args}
@@ -506,8 +489,7 @@ def extract_tool_calls_gemini(response: Any, /) -> list[ToolCallRequest] | None:
 
 
 def extract_finish_reason_openai(response: Any, /) -> str | None:
-    """
-    Extract finish_reason from an OpenAI-style response.
+    """Extract finish_reason from an OpenAI-style response.
 
     Returns: "stop", "tool_calls", "length", etc. or None if not available.
     """
@@ -531,8 +513,7 @@ def extract_finish_reason_openai(response: Any, /) -> str | None:
 
 
 def extract_finish_reason_anthropic(response: Any, /) -> str | None:
-    """
-    Extract stop_reason from an Anthropic response and normalize to OpenAI-style.
+    """Extract stop_reason from an Anthropic response and normalize to OpenAI-style.
 
     Anthropic uses "end_turn", "tool_use", "max_tokens" etc.
     We normalize to "stop", "tool_calls", "length" for consistency.
@@ -558,8 +539,7 @@ def extract_finish_reason_anthropic(response: Any, /) -> str | None:
 
 
 def extract_finish_reason_gemini(response: Any, /) -> str | None:
-    """
-    Extract finish_reason from a Gemini response and normalize to OpenAI-style.
+    """Extract finish_reason from a Gemini response and normalize to OpenAI-style.
 
     Gemini uses STOP, MAX_TOKENS, SAFETY, etc.
     We normalize to "stop", "length", etc. for consistency.
@@ -602,13 +582,11 @@ def extract_finish_reason_gemini(response: Any, /) -> str | None:
 
 
 def extract_openai_style_token_usage(response: Any, /) -> tuple[int, int]:
-    """
-    Best-effort token extraction from `response.usage`.
+    """Best-effort token extraction from `response.usage`.
 
     Supports both the classic (prompt_tokens/completion_tokens) and newer
     (input_tokens/output_tokens) key names.
     """
-
     usage: Any | None
     try:
         usage = response.usage
@@ -633,15 +611,14 @@ def extract_openai_style_token_usage(response: Any, /) -> tuple[int, int]:
 
     in_tokens = _int(getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", None))
     out_tokens = _int(
-        getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None)
+        getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None),
     )
     return (in_tokens, out_tokens)
 
 
 @dataclass
 class UsageTracker:
-    """
-    Shared usage accounting helper for provider adapters.
+    """Shared usage accounting helper for provider adapters.
 
     - Tracks totals per model
     - Tracks last-call usage as a single-entry summary (legacy-compatible)
@@ -698,7 +675,7 @@ class UsageTracker:
                     total_output_tokens=output_tokens,
                 )
                 for model, calls, input_tokens, output_tokens in items
-            }
+            },
         )
 
     def get_last_usage(self) -> UsageSummary:
@@ -720,5 +697,5 @@ class UsageTracker:
                     total_output_tokens=output_tokens,
                 )
                 for model, calls, input_tokens, output_tokens in items
-            }
+            },
         )

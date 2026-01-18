@@ -3,22 +3,21 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from rlm.application.config import EnvironmentConfig, EnvironmentName
+from rlm.adapters.broker.tcp import TcpBrokerAdapter
+from rlm.adapters.tools import InMemoryToolRegistry
+from rlm.api.registries import DefaultEnvironmentRegistry
+from rlm.application.config import EnvironmentConfig
 from rlm.application.use_cases.run_completion import (
-    EnvironmentFactory,
     RunCompletionDeps,
     RunCompletionRequest,
     arun_completion,
     run_completion,
 )
 from rlm.domain.errors import ValidationError
-from rlm.domain.models import ChatCompletion
-from rlm.domain.models.llm_request import ToolChoice
-from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
-from rlm.domain.services.rlm_orchestrator import AgentMode
-from rlm.domain.types import Prompt
 
 if TYPE_CHECKING:
+    from rlm.application.config import EnvironmentName
+    from rlm.application.use_cases.run_completion import EnvironmentFactory
     from rlm.domain.agent_ports import (
         ContextCompressor,
         NestedCallPolicy,
@@ -26,11 +25,17 @@ if TYPE_CHECKING:
         ToolPort,
         ToolRegistryPort,
     )
+    from rlm.domain.models import ChatCompletion
+    from rlm.domain.models.llm_request import ToolChoice
+    from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
+    from rlm.domain.services.rlm_orchestrator import AgentMode
+    from rlm.domain.types import Prompt
+
+__all__ = ["RLM"]
 
 
 class RLM:
-    """
-    Public RLM facade (Phase 1).
+    """Public RLM facade (Phase 1).
 
     This facade is intentionally small while we migrate from the upstream legacy
     implementation. In Phase 2 it delegates to the domain orchestrator via the
@@ -55,6 +60,7 @@ class RLM:
     Note:
         Tool calling mode (agent_mode="tools") is infrastructure-ready but not
         yet implemented. Use the default "code" mode for now.
+
     """
 
     def __init__(
@@ -100,8 +106,6 @@ class RLM:
 
         # Build tool registry if tools provided
         if tools:
-            from rlm.adapters.tools import InMemoryToolRegistry
-
             registry = InMemoryToolRegistry()
             for tool in tools:
                 registry.register(tool)
@@ -109,12 +113,10 @@ class RLM:
 
         self._broker_factory = broker_factory or _default_tcp_broker_factory
         if environment_factory is None:
-            from rlm.api.registries import DefaultEnvironmentRegistry
-
             environment_factory = DefaultEnvironmentRegistry().build(
                 EnvironmentConfig(
-                    environment=environment, environment_kwargs=environment_kwargs or {}
-                )
+                    environment=environment, environment_kwargs=environment_kwargs or {},
+                ),
             )
         self._environment_factory = environment_factory
         self._system_prompt = system_prompt
@@ -225,11 +227,8 @@ class RLM:
 
 
 def _default_tcp_broker_factory(llm: LLMPort, /) -> BrokerPort:
-    """
-    Default broker: TCP broker speaking the infra wire protocol.
+    """Default broker: TCP broker speaking the infra wire protocol.
 
     This is used so environments can call `llm_query()` during code execution.
     """
-    from rlm.adapters.broker.tcp import TcpBrokerAdapter
-
     return TcpBrokerAdapter(llm)

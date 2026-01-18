@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rlm.domain.errors import BrokerError
-from rlm.domain.models import ChatCompletion
 from rlm.domain.policies.timeouts import DEFAULT_BROKER_CLIENT_TIMEOUT_S
-from rlm.domain.types import Prompt
 from rlm.infrastructure.comms.codec import DEFAULT_MAX_MESSAGE_BYTES, request_response
 from rlm.infrastructure.comms.messages import WireRequest, WireResponse, WireResult
 
+if TYPE_CHECKING:
+    from rlm.domain.models import ChatCompletion
+    from rlm.domain.types import Prompt
+
 
 def _safe_error_message(exc: BaseException, /) -> str:
-    """
-    Convert internal exceptions into a client-safe error string.
+    """Convert internal exceptions into a client-safe error string.
 
     Important: do not leak stack traces or repr() of large/sensitive payloads.
     """
@@ -35,8 +36,7 @@ def _safe_error_message(exc: BaseException, /) -> str:
 
 
 def try_parse_request(message: dict[str, Any], /) -> tuple[WireRequest | None, WireResponse | None]:
-    """
-    Parse a decoded JSON request into a WireRequest, or produce a safe WireResponse error.
+    """Parse a decoded JSON request into a WireRequest, or produce a safe WireResponse error.
 
     This is intended for broker servers to avoid crashing on malformed client payloads.
     """
@@ -44,7 +44,7 @@ def try_parse_request(message: dict[str, Any], /) -> tuple[WireRequest | None, W
     cid = correlation_id if isinstance(correlation_id, str) else None
     try:
         return WireRequest.from_dict(message), None
-    except Exception as exc:  # noqa: BLE001 - boundary: convert to safe error response
+    except Exception as exc:
         return None, WireResponse(correlation_id=cid, error=_safe_error_message(exc), results=None)
 
 
@@ -61,11 +61,11 @@ def send_request(
     timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> WireResponse:
-    """
-    Client helper: send a WireRequest and parse the WireResponse.
+    """Client helper: send a WireRequest and parse the WireResponse.
 
     Raises:
         BrokerError: if the server responds with a request-level error.
+
     """
     try:
         raw = request_response(
@@ -74,12 +74,12 @@ def send_request(
             timeout_s=timeout_s,
             max_message_bytes=max_message_bytes,
         )
-    except Exception as exc:  # noqa: BLE001 - boundary: map transport/protocol errors
+    except Exception as exc:
         raise BrokerError(_safe_error_message(exc)) from None
 
     try:
         response = parse_response(raw)
-    except Exception as exc:  # noqa: BLE001 - boundary: server bug / unexpected payload
+    except Exception as exc:
         raise BrokerError(_safe_error_message(exc)) from None
     if response.error is not None:
         raise BrokerError(response.error)
@@ -96,11 +96,11 @@ def request_completion(
     timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> ChatCompletion:
-    """
-    Convenience client: request a single completion and return the ChatCompletion.
+    """Convenience client: request a single completion and return the ChatCompletion.
 
     Raises:
         BrokerError: for request-level errors or per-item errors.
+
     """
     req = WireRequest(correlation_id=correlation_id, prompt=prompt, model=model)
     resp = send_request(
@@ -130,14 +130,14 @@ def request_completions_batched(
     timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> list[WireResult]:
-    """
-    Convenience client: request a batched completion.
+    """Convenience client: request a batched completion.
 
     Returns:
         A per-prompt list of WireResult, preserving ordering.
 
     Raises:
         BrokerError: for request-level errors (invalid request/transport).
+
     """
     if not prompts:
         return []
@@ -152,6 +152,6 @@ def request_completions_batched(
         raise BrokerError("Invalid broker response: missing results")
     if len(resp.results) != len(prompts):
         raise BrokerError(
-            f"Invalid broker response: expected {len(prompts)} results, got {len(resp.results)}"
+            f"Invalid broker response: expected {len(prompts)} results, got {len(resp.results)}",
         )
     return resp.results

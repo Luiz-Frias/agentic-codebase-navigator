@@ -80,15 +80,14 @@ IMPORTANT: When you are done with the iterative process, you MUST provide a fina
 2. Use FINAL_VAR(variable_name) to return a variable you have created in the REPL environment as your final output
 
 Think step by step carefully, plan, and execute this plan immediately in your response -- do not just say "I will do this" or "I will do that". Output to the REPL environment and recursive LLMs as much as possible. Remember to explicitly answer the original query in your final answer.
-"""
+""",
 )
 
 
 def build_rlm_system_prompt(
-    system_prompt: str, query_metadata: QueryMetadata, /
+    system_prompt: str, query_metadata: QueryMetadata, /,
 ) -> list[dict[str, str]]:
-    """
-    Build the initial prompt message history for an RLM run.
+    """Build the initial prompt message history for an RLM run.
 
     Mirrors the upstream behavior:
     - system prompt as a "system" role message

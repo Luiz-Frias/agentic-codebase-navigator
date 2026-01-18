@@ -1,5 +1,4 @@
-"""
-Domain layer (hexagonal core).
+"""Domain layer (hexagonal core).
 
 Pure business logic and ports (no adapters, no infrastructure, no third-party deps).
 """

@@ -1,5 +1,4 @@
-"""
-Domain models (hexagonal core).
+"""Domain models (hexagonal core).
 
 These are pure, dependency-free dataclasses that represent the core entities and
 results flowing through the system (prompts, completions, execution results,

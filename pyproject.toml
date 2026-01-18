@@ -198,6 +198,121 @@ ignore = [
     "ARG001",  # Unused function argument (fixtures)
     "ARG002",  # Unused method argument
 ]
+# CLI module: print() is legitimate for CLI output
+"src/rlm/cli.py" = [
+    "T201",    # print() found (legitimate for CLI output)
+]
+
+# ============================================================================
+# ADAPTER LAYER - Hexagonal boundary justifications
+# ============================================================================
+# Adapters are the translation layer between external systems and domain.
+# BLE001: Catching Exception at boundaries is correct - external SDKs can throw
+#         anything, and we convert ALL errors to domain errors (LLMError, etc.)
+# PLC0415/E402: Lazy imports for OPTIONAL dependencies (anthropic, gemini, etc.)
+#         that may not be installed. Import happens inside functions.
+# ANN401: External SDKs (OpenAI, Anthropic) lack type stubs. We accept Any from
+#         their APIs but MUST convert to typed domain models at the boundary.
+# ============================================================================
+
+# LLM provider adapters - external SDK boundaries
+"src/rlm/adapters/llm/openai.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: openai is optional dependency
+    "E402",     # Module import after lazy check
+    "ANN401",   # OpenAI SDK has no type stubs
+]
+"src/rlm/adapters/llm/anthropic.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: anthropic is optional
+    "E402",     # Module import after lazy check
+    "ANN401",   # Anthropic SDK has no complete stubs
+]
+"src/rlm/adapters/llm/gemini.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: google-genai is optional
+    "E402",     # Module import after lazy check
+    "ANN401",   # Gemini SDK typing incomplete
+]
+"src/rlm/adapters/llm/azure_openai.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: openai is optional
+    "E402",     # Module import after lazy check
+]
+"src/rlm/adapters/llm/litellm.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: litellm is optional
+    "E402",     # Module import after lazy check
+]
+"src/rlm/adapters/llm/portkey.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: portkey-ai is optional
+    "E402",     # Module import after lazy check
+]
+"src/rlm/adapters/llm/provider_base.py" = [
+    "BLE001",   # Boundary: response parsing can fail in many ways
+    "ANN401",   # Base adapter handles Any from multiple SDKs
+    "PLC0415",  # Lazy import: tiktoken is optional
+]
+
+# Environment adapters - execution boundaries
+"src/rlm/adapters/environments/docker.py" = [
+    "BLE001",   # Boundary: container/network errors → domain errors
+]
+"src/rlm/adapters/environments/local.py" = [
+    "BLE001",   # Boundary: execution errors captured to stderr
+    "S102",     # exec() is CORE FEATURE for code execution (secured by namespace policy)
+]
+"src/rlm/adapters/environments/modal.py" = [
+    "PLC0415",  # Lazy import: modal is optional
+]
+
+# Broker adapter - network protocol boundary
+"src/rlm/adapters/broker/tcp.py" = [
+    "BLE001",   # Boundary: network/protocol errors → safe wire response
+]
+
+# ============================================================================
+# INFRASTRUCTURE LAYER
+# ============================================================================
+"src/rlm/infrastructure/execution_namespace_policy.py" = [
+    "A002",     # Matches stdlib __import__(globals, locals) signature exactly
+    "ANN001",   # Signature must match builtins.__import__
+]
+"src/rlm/infrastructure/comms/protocol.py" = [
+    "BLE001",   # Boundary: wire protocol errors → safe error response
+]
+"src/rlm/infrastructure/logging.py" = [
+    "PLW0603",  # Global _configured flag for one-time setup (loguru pattern)
+    "ERA001",   # Comments documenting loguru configuration options
+]
+
+# ============================================================================
+# DOMAIN LAYER - orchestrator complexity is inherent
+# ============================================================================
+"src/rlm/domain/services/rlm_orchestrator.py" = [
+    "BLE001",   # Boundary: tool execution can fail in many ways
+    "C901",     # Orchestrator loop IS complex - many states and transitions
+    "PLR0912",  # Many branches in agent decision loop
+    "PLR0911",  # Multiple termination conditions
+    "PLR0915",  # Agent loop has many sequential steps
+]
+
+# ============================================================================
+# APPLICATION LAYER - use case boundaries
+# ============================================================================
+"src/rlm/application/use_cases/run_completion.py" = [
+    "BLE001",   # Boundary: map infrastructure errors to domain errors
+]
+
+# ============================================================================
+# API LAYER - registry/factory complexity
+# ============================================================================
+"src/rlm/api/registries.py" = [
+    "C901",     # Registry builder dispatches on many backend types
+    "PLR0912",  # Many branches for different backends
+    "PLR0911",  # Multiple return paths for config combinations
+]
 
 [tool.ruff.format]
 quote-style = "double"

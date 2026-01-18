@@ -1,20 +1,23 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 from rlm.domain.errors import ValidationError
 
 
 @dataclass(frozen=True, slots=True)
 class ModelSpec:
-    """
-    Domain model describing a selectable model name and its aliases.
+    """Domain model describing a selectable model name and its aliases.
 
     Notes:
     - `name` is the canonical routing key used by the broker/LLM adapters.
     - `aliases` are alternate user-facing names that should resolve to `name`.
     - Exactly one `ModelSpec` in a set should be marked as `is_default=True`.
+
     """
 
     name: str
@@ -33,8 +36,7 @@ class ModelSpec:
 
 @dataclass(frozen=True, slots=True)
 class ModelRoutingRules:
-    """
-    Routing rules for model selection.
+    """Routing rules for model selection.
 
     Rules:
     - If no model is requested: use `default_model`.
@@ -54,7 +56,7 @@ class ModelRoutingRules:
     def __post_init__(self) -> None:
         if not isinstance(self.models, tuple) or not self.models:
             raise ValidationError(
-                "ModelRoutingRules.models must be a non-empty tuple[ModelSpec, ...]"
+                "ModelRoutingRules.models must be a non-empty tuple[ModelSpec, ...]",
             )
 
         lookup: dict[str, str] = {}
@@ -63,7 +65,7 @@ class ModelRoutingRules:
         for spec in self.models:
             if not isinstance(spec, ModelSpec):
                 raise ValidationError(
-                    "ModelRoutingRules.models must contain only ModelSpec instances"
+                    "ModelRoutingRules.models must contain only ModelSpec instances",
                 )
 
             # Canonical name mapping.
@@ -84,17 +86,17 @@ class ModelRoutingRules:
 
         if default is None:
             raise ValidationError(
-                "ModelRoutingRules requires exactly one default ModelSpec (is_default=True)"
+                "ModelRoutingRules requires exactly one default ModelSpec (is_default=True)",
             )
 
         if self.fallback_model is not None:
             if not isinstance(self.fallback_model, str) or not self.fallback_model.strip():
                 raise ValidationError(
-                    "ModelRoutingRules.fallback_model must be a non-empty string when provided"
+                    "ModelRoutingRules.fallback_model must be a non-empty string when provided",
                 )
             if self.fallback_model not in lookup:
                 raise ValidationError(
-                    f"ModelRoutingRules.fallback_model {self.fallback_model!r} is not in allowed models"
+                    f"ModelRoutingRules.fallback_model {self.fallback_model!r} is not in allowed models",
                 )
 
         object.__setattr__(self, "_lookup", lookup)
@@ -110,12 +112,10 @@ class ModelRoutingRules:
         return {spec.name for spec in self.models}
 
     def resolve(self, requested_model: str | None, /) -> str:
-        """
-        Resolve a requested model name (or alias) to a canonical model name.
+        """Resolve a requested model name (or alias) to a canonical model name.
 
         Raises ValidationError if the model is not allowed and no fallback is set.
         """
-
         if requested_model is None:
             return self._default_model
         if not isinstance(requested_model, str):
@@ -132,7 +132,7 @@ class ModelRoutingRules:
             return self.fallback_model
 
         raise ValidationError(
-            f"Unknown model {requested_model!r}. Allowed: {sorted(self.allowed_models)}"
+            f"Unknown model {requested_model!r}. Allowed: {sorted(self.allowed_models)}",
         )
 
 
@@ -142,10 +142,8 @@ def build_routing_rules(
     *,
     fallback_model: str | None = None,
 ) -> ModelRoutingRules:
-    """
-    Convenience builder to construct routing rules from any iterable.
+    """Convenience builder to construct routing rules from any iterable.
 
     Keeps call sites simple when building from config.
     """
-
     return ModelRoutingRules(models=tuple(specs), fallback_model=fallback_model)
