@@ -20,44 +20,42 @@ default:
 # Run all pre-commit hooks on staged files
 pc:
     @echo "→ Running pre-commit hooks on staged files..."
-    pre-commit run
+    prek run
 
 # Run all pre-commit hooks on all files
 pc-all:
     @echo "→ Running pre-commit hooks on all files..."
-    pre-commit run --all-files
+    prek run --all-files
 
 # Run pre-push hooks on all files
 pc-push:
     @echo "→ Running pre-push hooks on all files..."
-    pre-commit run --all-files --hook-stage pre-push
+    prek run --all-files --hook-stage pre-push
 
 # Stage all changes and run all pre-commit hooks
 pc-staged:
     @echo "→ Staging all changes and running pre-commit..."
     git add -A
-    pre-commit run --all-files
+    prek run --all-files
 
 # Full gate: stage, run pre-commit, then pre-push hooks
 pc-full:
     @echo "→ Running full pre-commit + pre-push gate..."
     git add -A
-    pre-commit run --all-files
-    pre-commit run --all-files --hook-stage pre-push
+    prek run --all-files
+    prek run --all-files --hook-stage pre-push
     @echo "✓ All pre-commit and pre-push hooks passed"
 
 # Install all pre-commit hook types
 pc-install:
     @echo "→ Installing pre-commit hooks..."
-    pre-commit install --install-hooks
-    pre-commit install --hook-type commit-msg
-    pre-commit install --hook-type pre-push
+    prek install-hooks
     @echo "✓ All hook types installed"
 
 # Update pre-commit hooks to latest versions
 pc-update:
     @echo "→ Updating pre-commit hooks..."
-    pre-commit autoupdate
+    prek auto-update
     @echo "✓ Hooks updated"
 
 # =============================================================================

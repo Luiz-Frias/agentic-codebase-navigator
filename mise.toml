@@ -1,0 +1,31 @@
+# mise.toml - agentic_codebase_navigator
+# Unified version management + env vars
+# Docs: https://mise.jdx.dev/
+
+[env]
+# Project-specific env vars (loaded automatically when entering directory)
+PYTHONDONTWRITEBYTECODE = "1"
+PYTHONUNBUFFERED = "1"
+
+[tools]
+# Python 3.12+ (matches pyproject.toml requires-python)
+python = "3.12"
+# uv for package management
+uv = "latest"
+just = "latest"
+
+[tasks.check]
+description = "Run linting and type checks"
+run = "just pc-all"
+
+[tasks.test]
+description = "Run tests"
+run = "uv run pytest"
+
+[tasks.gate]
+description = "Full pre-commit + pre-push gate"
+run = "just pc-full"
+
+[tasks.sync]
+description = "Sync dependencies"
+run = "uv sync"
