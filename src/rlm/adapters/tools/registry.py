@@ -1,11 +1,11 @@
-"""In-memory tool registry implementation.
+"""
+In-memory tool registry implementation.
 
 Provides a simple registry for managing tools during an RLM run.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
@@ -13,12 +13,15 @@ from rlm.adapters.base import BaseToolRegistryAdapter
 from rlm.adapters.tools.native import NativeToolAdapter
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rlm.domain.agent_ports import ToolDefinition, ToolPort
 
 
 @dataclass(slots=True)
 class InMemoryToolRegistry(BaseToolRegistryAdapter):
-    """Simple in-memory registry for tools.
+    """
+    Simple in-memory registry for tools.
 
     Stores tools by name and provides lookup and listing functionality.
     Automatically wraps plain callables as NativeToolAdapter instances.
@@ -27,7 +30,8 @@ class InMemoryToolRegistry(BaseToolRegistryAdapter):
     _tools: dict[str, ToolPort] = field(default_factory=dict)
 
     def register(self, tool: ToolPort | Callable[..., Any], /) -> None:
-        """Register a tool in the registry.
+        """
+        Register a tool in the registry.
 
         Args:
             tool: A ToolPort implementation or a plain callable.
@@ -48,14 +52,15 @@ class InMemoryToolRegistry(BaseToolRegistryAdapter):
             wrapped_tool = cast("ToolPort", tool)
 
         tool_definition = wrapped_tool.definition
-        name = cast("str", tool_definition["name"])
+        name = tool_definition["name"]
         if name in self._tools:
             raise ValueError(f"Tool '{name}' is already registered")
 
         self._tools[name] = wrapped_tool
 
     def get(self, name: str, /) -> ToolPort | None:
-        """Look up a tool by name.
+        """
+        Look up a tool by name.
 
         Args:
             name: The tool name to look up.
@@ -67,7 +72,8 @@ class InMemoryToolRegistry(BaseToolRegistryAdapter):
         return self._tools.get(name)
 
     def list_definitions(self) -> list[ToolDefinition]:
-        """Return schemas for all registered tools.
+        """
+        Return schemas for all registered tools.
 
         Returns:
             List of tool definitions in registration order.

@@ -20,10 +20,10 @@ from rlm.domain.policies.timeouts import (
     DEFAULT_DOCKER_SUBPROCESS_TIMEOUT_S,
     DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S,
 )
-from rlm.domain.types import ContextPayload
 
 if TYPE_CHECKING:
     from rlm.domain.ports import BrokerPort
+    from rlm.domain.types import ContextPayload
 from rlm.infrastructure.comms.protocol import (
     request_completion,
     request_completions_batched,
@@ -32,7 +32,8 @@ from rlm.infrastructure.logging import warn_cleanup_failure
 
 
 def _use_host_network() -> bool:
-    """Check if Docker should use host networking mode.
+    """
+    Check if Docker should use host networking mode.
 
     When RLM_DOCKER_USE_HOST_NETWORK=1, the container shares the host's network
     namespace. This is useful in CI environments (like GitHub Actions) where
@@ -48,7 +49,8 @@ def _use_host_network() -> bool:
 
 
 class DockerLLMProxyHandler(BaseHTTPRequestHandler):
-    """Host-side HTTP proxy for `llm_query()` calls issued from within a container.
+    """
+    Host-side HTTP proxy for `llm_query()` calls issued from within a container.
 
     The in-container execution script calls:
     - POST /llm_query
@@ -66,9 +68,13 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
     lock: threading.Lock = threading.Lock()
     timeout_s: float = DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S
 
-    # Silence noisy default logging.
-    def log_message(self, *_args: object) -> None:
-        return
+    # Silence noisy default logging - must match BaseHTTPRequestHandler signature
+    def log_message(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        format: str,  # noqa: A002  # Must shadow builtin to match base class
+        *args: object,
+    ) -> None:
+        pass
 
     def do_POST(self) -> None:
         try:
@@ -201,13 +207,13 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
 
         wire_responses: list[str] = []
         for r in wire_results:
-            if r.error is not None:
-                wire_responses.append(f"Error: {r.error}")
+            cc = r.chat_completion
+            if r.error is not None or cc is None:
+                wire_responses.append(f"Error: {r.error or 'No completion returned'}")
                 continue
-            assert r.chat_completion is not None
             with self.lock:
-                self.pending_calls.append(r.chat_completion)
-            wire_responses.append(r.chat_completion.response)
+                self.pending_calls.append(cc)
+            wire_responses.append(cc.response)
         return {"responses": wire_responses}
 
 
@@ -219,7 +225,8 @@ def _build_exec_script(
     proxy_timeout_s: float = DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S,
     use_host_network: bool = False,
 ) -> str:
-    """Build the container-side Python script.
+    """
+    Build the container-side Python script.
 
     The script:
     - loads persistent locals from /workspace/state.pkl
@@ -349,7 +356,8 @@ print(
 
 
 class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
-    """Native Docker environment adapter (Phase 05).
+    """
+    Native Docker environment adapter (Phase 05).
 
     Runs Python code in a per-session container with:
     - persistent state across executions (pickled state under /workspace)
@@ -415,7 +423,8 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
     # ------------------------------------------------------------------
 
     def load_context(self, context_payload: ContextPayload, /) -> None:
-        """Load context into the container-backed REPL.
+        """
+        Load context into the container-backed REPL.
 
         IMPORTANT: Do *not* embed `json.dumps(context_payload)` directly inside a quoted
         Python string literal. JSON does not escape single quotes, so payloads like

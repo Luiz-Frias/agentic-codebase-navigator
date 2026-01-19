@@ -1,4 +1,5 @@
-"""Default context compressor implementation.
+"""
+Default context compressor implementation.
 
 Provides passthrough behavior without any compression.
 External apps can implement ContextCompressor to add summarization,
@@ -12,7 +13,8 @@ from dataclasses import dataclass
 
 @dataclass
 class NoOpContextCompressor:
-    """No-operation context compressor that passes through unchanged.
+    """
+    No-operation context compressor that passes through unchanged.
 
     This is the default behavior when no custom ContextCompressor is provided.
     Nested call results are returned to the parent orchestrator as-is.
@@ -37,7 +39,8 @@ class NoOpContextCompressor:
     """
 
     def compress(self, result: str, _max_tokens: int | None = None) -> str:
-        """Return result unchanged (passthrough).
+        """
+        Return result unchanged (passthrough).
 
         Args:
             result: The full result string from a nested orchestrator.

@@ -47,7 +47,8 @@ class SequenceIdGenerator(IdGeneratorPort):
 
 
 class QueueLLM(LLMPort):
-    """Deterministic LLMPort for tests.
+    """
+    Deterministic LLMPort for tests.
 
     Provide a sequence of responses (strings) or exceptions. Each call pops one.
     """

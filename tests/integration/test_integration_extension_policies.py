@@ -1,4 +1,5 @@
-"""Integration tests for extension protocol injection.
+"""
+Integration tests for extension protocol injection.
 
 Tests the full stack: RLM facade → orchestrator with custom policies injected.
 Verifies that custom StoppingPolicy, ContextCompressor, and NestedCallPolicy
@@ -33,7 +34,8 @@ def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolC
 
 @dataclass
 class TrackingStoppingPolicy:
-    """Custom stopping policy that tracks invocations for testing.
+    """
+    Custom stopping policy that tracks invocations for testing.
 
     Allows configuring early stopping based on iteration count or
     response content.
@@ -120,7 +122,8 @@ class TrackingNestedCallPolicy:
 
 
 def simple_tool(value: str) -> str:
-    """A simple tool that returns the value with a prefix.
+    """
+    A simple tool that returns the value with a prefix.
 
     Args:
         value: The input value
@@ -130,7 +133,8 @@ def simple_tool(value: str) -> str:
 
 
 def multi_call_tool(count: int) -> str:
-    """A tool that returns a message about call count.
+    """
+    A tool that returns a message about call count.
 
     Args:
         count: A number

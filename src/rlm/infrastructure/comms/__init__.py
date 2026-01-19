@@ -1,4 +1,5 @@
-"""Infrastructure comms (wire protocol).
+"""
+Infrastructure comms (wire protocol).
 
 This package defines the **wire DTOs** and **codec helpers** used by transport
 adapters (e.g., the TCP broker).

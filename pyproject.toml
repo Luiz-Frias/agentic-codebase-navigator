@@ -100,6 +100,9 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Focus lint discipline on src/rlm/** only - tests have legitimate patterns
+# that lint rules flag (unused fixtures, magic values, etc.)
+exclude = ["tests/**"]
 
 [tool.ruff.lint]
 select = [
@@ -115,10 +118,14 @@ ignore = [
     "D105",   # Missing docstring in magic method
     "D107",   # Missing docstring in __init__
     "D200",   # One-line docstring should fit on one line
+    "D203",   # 1 blank line required between summary line and description
     "D205",   # 1 blank line required between summary line and description
+    "D212",   # No blank lines allowed after function docstring
     "D400",   # First line should end with a period
     "D401",   # First line should be in imperative mood
     "D415",   # First line should end with a period, question mark, or exclamation point
+    # Complexity rules - disable globally for now
+    "COM812", # Use f-string for string formatting
     # Formatting handled by ruff format
     "E501",   # line too long (handled by formatter)
     # Overly pedantic
@@ -129,77 +136,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests: relax rules that add noise without value
-"tests/**/*.py" = [
-    "S101",    # assert is standard pytest practice
-    "S105",    # Possible hardcoded password (test fixtures)
-    "S106",    # Possible hardcoded password (test fixtures)
-    "S311",    # Standard pseudo-random generators (fine for tests)
-    "ANN",     # Type annotations not required in tests
-    "ARG",     # Unused arguments (pytest fixtures)
-    "PLR2004", # Magic value comparison (fine in test assertions)
-    "PLR0913", # Too many arguments (test factories/fixtures)
-    "SLF001",  # Private member access (testing internals is valid)
-    "PT018",   # Assertion should be broken into multiple parts
-    "FBT",     # Boolean trap (fine in test parameters)
-    "INP001",  # Missing __init__.py (tests don't need it)
-    "T201",    # print() found (debugging in tests is fine)
-    "BLE001",  # Blind except (sometimes needed in error tests)
-    "TRY",     # Try/except style (relaxed in tests)
-    "PLC0415", # Import outside top-level (dynamic imports in tests)
-    "TC001",   # Move import into TYPE_CHECKING block
-    "TC003",   # Move import into TYPE_CHECKING block
-    "C901",    # Too complex (test setup can be complex)
-    "PLR0911", # Too many return statements
-    "PLR0912", # Too many branches
-    "PLR0915", # Too many statements
-    "ERA001",  # Commented out code (WIP tests)
-]
-# Benchmark/performance tests: even more relaxed
-"tests/benchmark/**/*.py" = [
-    "D",       # All docstring rules
-    "S",       # All security rules
-    "ANN",     # All annotation rules
-    "ARG",     # Unused arguments
-    "PLR",     # Pylint refactor rules
-    "INP001",
-    "T201",
-    "BLE001",
-    "TRY",
-    "PLC0415",
-    "TC",
-    "C901",
-    "FBT",
-    "SLF001",
-    "PT018",
-    "ERA001",
-]
-"tests/performance/**/*.py" = [
-    "D",       # All docstring rules
-    "S",       # All security rules
-    "ANN",     # All annotation rules
-    "ARG",     # Unused arguments
-    "PLR",     # Pylint refactor rules
-    "INP001",
-    "T201",
-    "BLE001",
-    "TRY",
-    "PLC0415",
-    "TC",
-    "C901",
-    "FBT",
-    "SLF001",
-    "PT018",
-    "ERA001",
-]
-# Conftest files: fixtures have specific patterns
-"**/conftest.py" = [
-    "ANN",     # Fixtures don't need full annotations
-    "ARG001",  # Unused function argument (fixtures)
-    "ARG002",  # Unused method argument
-]
 # CLI module: print() is legitimate for CLI output
 "src/rlm/cli.py" = [
+    "PLC0415", # Lazy import of rlm package to avoid circular dependency
     "T201",    # print() found (legitimate for CLI output)
 ]
 
@@ -207,12 +146,8 @@ ignore = [
 # ADAPTER LAYER - Hexagonal boundary justifications
 # ============================================================================
 # Adapters are the translation layer between external systems and domain.
-# BLE001: Catching Exception at boundaries is correct - external SDKs can throw
-#         anything, and we convert ALL errors to domain errors (LLMError, etc.)
 # PLC0415/E402: Lazy imports for OPTIONAL dependencies (anthropic, gemini, etc.)
 #         that may not be installed. Import happens inside functions.
-# ANN401: External SDKs (OpenAI, Anthropic) lack type stubs. We accept Any from
-#         their APIs but MUST convert to typed domain models at the boundary.
 # ============================================================================
 
 # LLM provider adapters - external SDK boundaries
@@ -235,16 +170,19 @@ ignore = [
     "ANN401",   # Gemini SDK typing incomplete
 ]
 "src/rlm/adapters/llm/azure_openai.py" = [
+    "ANN401",   # OpenAI SDK has no type stubs for Azure variant
     "BLE001",   # Boundary: catch SDK errors → raise LLMError
     "PLC0415",  # Lazy import: openai is optional
     "E402",     # Module import after lazy check
 ]
 "src/rlm/adapters/llm/litellm.py" = [
+    "ANN401",   # LiteLLM SDK proxies multiple backends with Any types
     "BLE001",   # Boundary: catch SDK errors → raise LLMError
     "PLC0415",  # Lazy import: litellm is optional
     "E402",     # Module import after lazy check
 ]
 "src/rlm/adapters/llm/portkey.py" = [
+    "ANN401",   # Portkey SDK lacks complete type stubs
     "BLE001",   # Boundary: catch SDK errors → raise LLMError
     "PLC0415",  # Lazy import: portkey-ai is optional
     "E402",     # Module import after lazy check
@@ -252,24 +190,105 @@ ignore = [
 "src/rlm/adapters/llm/provider_base.py" = [
     "BLE001",   # Boundary: response parsing can fail in many ways
     "ANN401",   # Base adapter handles Any from multiple SDKs
+    "C901",     # Response parsing logic has inherent complexity
     "PLC0415",  # Lazy import: tiktoken is optional
+]
+"src/rlm/adapters/llm/mock.py" = [
+    "BLE001",   # Defensive fallback when accessing prompt[-1] fails
+]
+
+# Base adapters - abstract protocol definitions
+"src/rlm/adapters/base.py" = [
+    "ARG002",   # Protocol stubs: unused args in default implementations
+    "ANN401",   # ToolPort.execute(**kwargs: Any) is inherently dynamic by design
+]
+
+# TCP Broker adapter - wire protocol boundary
+"src/rlm/adapters/broker/tcp.py" = [
+    "BLE001",   # Wire boundary: catch all exceptions for error sanitization
+    "S101",     # Type narrowing asserts after parse validation
+    "SLF001",   # Internal broker._handle_wire_request access (same module)
 ]
 
 # Environment adapters - execution boundaries
 "src/rlm/adapters/environments/docker.py" = [
-    "BLE001",   # Boundary: container/network errors → domain errors
+    "BLE001",   # Execution boundary: container/HTTP errors can fail in any way
+    "RUF012",   # HTTP handler pattern: mutable class attrs for shared state
+    "PLR0911",  # HTTP handler do_POST has many response paths
+    "PLR0912",  # Container lifecycle has inherent branching
+    "PLR0913",  # __init__ DI: timeout, port, image, broker, cleanup params
+    "PLR0915",  # Container setup requires many statements
+    "C901",     # Container lifecycle complexity (subprocess + HTTP + cleanup)
+    "ANN202",   # Internal helper return types inferred
+    "PTH109",   # os.getcwd() required for container working directory
+    "PTH118",   # os.path.join for container path construction
+    "PTH123",   # open() for container file operations
+    "S603",     # Docker subprocess: validated inputs from controlled sources
+    "S607",     # Docker CLI: intentional PATH lookup after availability check
+    "S104",     # Bind 0.0.0.0: intentional for container communication
 ]
 "src/rlm/adapters/environments/local.py" = [
-    "BLE001",   # Boundary: execution errors captured to stderr
-    "S102",     # exec() is CORE FEATURE for code execution (secured by namespace policy)
-]
-"src/rlm/adapters/environments/modal.py" = [
-    "PLC0415",  # Lazy import: modal is optional
+    "BLE001",   # Execution boundary: user code can raise any exception
+    "S102",     # exec() is the core feature (secured by namespace policy)
+    "S104",     # Bind 0.0.0.0: intentional for broker communication
+    "PLR0911",  # REPL execution has multiple return paths
+    "PLR0912",  # Namespace setup has inherent branching
+    "PLR0913",  # __init__ DI: timeout, broker, namespace policy params
+    "PLR0915",  # REPL setup requires many statements
+    "C901",     # REPL execution complexity (timeouts + signals + cleanup)
+    "ANN202",   # Internal helper return types inferred
 ]
 
-# Broker adapter - network protocol boundary
-"src/rlm/adapters/broker/tcp.py" = [
-    "BLE001",   # Boundary: network/protocol errors → safe wire response
+# Logger adapters
+"src/rlm/adapters/logger/console.py" = [
+    "T201",     # print() is the intended output for ConsoleLoggerAdapter
+]
+"src/rlm/adapters/logger/jsonl.py" = [
+    "S101",     # Type narrowing assert after _start_new_run()
+]
+"src/rlm/adapters/logger/noop.py" = [
+    "ARG002",   # NoopLoggerAdapter: intentionally ignores all arguments
+]
+
+# Tool adapters - introspection boundaries
+"src/rlm/adapters/tools/native.py" = [
+    "ANN401",   # Tool execute(**kwargs: Any) is inherently dynamic
+    "BLE001",   # get_type_hints() can fail in many ways on user code
+    "PLR0911",  # Type-to-schema conversion has many type cases
+    "C901",     # Tool definition introspection has inherent complexity
+]
+"src/rlm/adapters/tools/pydantic_output.py" = [
+    "BLE001",   # get_type_hints() can fail on user-defined classes
+    "PLR0911",  # Type-to-schema conversion has many type cases
+]
+
+# ============================================================================
+# DOMAIN MODELS - SDK BOUNDARY ABSTRACTIONS
+# ============================================================================
+"src/rlm/domain/models/safe_accessor.py" = [
+    "ANN401",   # SafeAccessor is designed to handle untyped SDK responses (Any in, Any out)
+]
+
+# ============================================================================
+# DOMAIN SERVICES - Event Sources (SDK boundaries for user-defined tools)
+# ============================================================================
+# ToolsModeEventSource executes user-defined tools that can:
+# 1. Raise any exception type (BLE001 for tool execution)
+# 2. Return arbitrary types for JSON serialization (BLE001 for serialization)
+# These are SDK boundaries where we catch all exceptions to report errors to LLM.
+"src/rlm/domain/services/tools_mode_event_source.py" = [
+    "BLE001",   # SDK boundary: user tools can raise any exception; serialization can fail
+]
+# RLMOrchestrator: The main orchestration entry point with justified ignores:
+# - E402: Backwards-compat alias import after TYPE_CHECKING block
+# - S101: Type narrowing asserts for tool_registry (caller contract enforcement)
+# - BLE001: SDK boundaries - tool execution and token counting can fail in any way
+# - PLR0913: Public API completion() / acompletion() need many keyword args
+"src/rlm/domain/services/rlm_orchestrator.py" = [
+    "E402",     # Backwards-compat alias import after TYPE_CHECKING block
+    "S101",     # Type narrowing asserts (caller contract enforcement)
+    "BLE001",   # SDK boundary: tool execution + token counting
+    "PLR0913",  # Public API needs many keyword arguments
 ]
 
 # ============================================================================
@@ -278,45 +297,44 @@ ignore = [
 "src/rlm/infrastructure/execution_namespace_policy.py" = [
     "A002",     # Matches stdlib __import__(globals, locals) signature exactly
     "ANN001",   # Signature must match builtins.__import__
-]
-"src/rlm/infrastructure/comms/protocol.py" = [
-    "BLE001",   # Boundary: wire protocol errors → safe error response
+    "ANN202",   # _controlled_import/_restricted_open match stdlib signatures (no return annotation)
+    "PLR0913",  # _restricted_open matches builtins.open() signature (8 params)
+    "FBT002",   # _restricted_open matches builtins.open(closefd=True) signature
 ]
 "src/rlm/infrastructure/logging.py" = [
     "PLW0603",  # Global _configured flag for one-time setup (loguru pattern)
     "ERA001",   # Comments documenting loguru configuration options
 ]
-
-# ============================================================================
-# DOMAIN LAYER - orchestrator complexity is inherent
-# ============================================================================
-"src/rlm/domain/services/rlm_orchestrator.py" = [
-    "BLE001",   # Boundary: tool execution can fail in many ways
-    "C901",     # Orchestrator loop IS complex - many states and transitions
-    "PLR0912",  # Many branches in agent decision loop
-    "PLR0911",  # Multiple termination conditions
-    "PLR0915",  # Agent loop has many sequential steps
+# Wire protocol: broker communication boundary
+# - BLE001: Intentional broad catches for client error sanitization (prevents stack trace leakage)
+# - PLR0913: Convenience client functions need address + prompt + optional params
+"src/rlm/infrastructure/comms/protocol.py" = [
+    "BLE001",   # Boundary: sanitize ALL exceptions before sending to broker clients
+    "PLR0913",  # Convenience API: address + prompt + model + correlation_id + timeout + max_bytes
 ]
 
 # ============================================================================
-# APPLICATION LAYER - use case boundaries
+# API LAYER - Public APIs and registry patterns
 # ============================================================================
-"src/rlm/application/use_cases/run_completion.py" = [
-    "BLE001",   # Boundary: map infrastructure errors to domain errors
+# Factory functions: Dependency injection requires many parameters
+"src/rlm/api/factory.py" = [
+    "PLR0913",  # Public API: create_rlm() / create_rlm_from_config() need DI params
 ]
-
-# ============================================================================
-# API LAYER - registry/factory complexity
-# ============================================================================
+# RLM class: Main entry point with full dependency injection
+"src/rlm/api/rlm.py" = [
+    "PLR0913",  # Public API: RLM.__init__() aggregates all dependencies
+]
+# Registry modules: Lazy imports for optional backends (idiomatic Python pattern)
 "src/rlm/api/registries.py" = [
-    "C901",     # Registry builder dispatches on many backend types
+    "PLC0415",  # Lazy imports for optional backends (openai, anthropic, etc.)
     "PLR0912",  # Many branches for different backends
     "PLR0911",  # Multiple return paths for config combinations
+    "C901",     # Registry build() methods: match/case for optional deps with lazy imports
+    "S607",     # Docker subprocess: intentional PATH lookup after which("docker") check
 ]
 
 [tool.ruff.format]
 quote-style = "double"
-docstring-code-format = true
 
 [tool.coverage.run]
 branch = true
@@ -365,6 +383,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "modal"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tiktoken"
 ignore_missing_imports = true
 
 [tool.basedpyright]

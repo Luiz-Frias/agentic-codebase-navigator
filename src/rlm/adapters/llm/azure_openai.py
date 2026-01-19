@@ -23,7 +23,8 @@ from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
 
 
 def _require_openai() -> Any:
-    """Lazily import the OpenAI SDK (used for Azure OpenAI as well).
+    """
+    Lazily import the OpenAI SDK (used for Azure OpenAI as well).
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-azure-openai]`.
     """
@@ -39,7 +40,8 @@ def _require_openai() -> Any:
 
 @dataclass
 class AzureOpenAIAdapter(BaseLLMAdapter):
-    """Adapter skeleton: Azure OpenAI (via OpenAI SDK) -> domain `LLMPort`.
+    """
+    Adapter skeleton: Azure OpenAI (via OpenAI SDK) -> domain `LLMPort`.
 
     Phase 4 will implement real request/response mapping.
     """
@@ -90,8 +92,8 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
             raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_openai(resp)
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_openai(resp).unwrap()
         finish_reason = extract_finish_reason_openai(resp)
 
         # Extract text response (may be empty if tool_calls present)
@@ -148,8 +150,8 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
             raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_openai(resp)
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_openai(resp).unwrap()
         finish_reason = extract_finish_reason_openai(resp)
 
         # Extract text response (may be empty if tool_calls present)

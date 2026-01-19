@@ -1,4 +1,5 @@
-"""Domain services (hexagonal core).
+"""
+Domain services (hexagonal core).
 
 Pure, dependency-free services that implement the RLM loop behavior using only
 domain models + ports.

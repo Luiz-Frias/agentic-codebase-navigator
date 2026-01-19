@@ -15,7 +15,8 @@ from tests.fakes_ports import QueueLLM
 @pytest.mark.integration
 @pytest.mark.docker
 def test_docker_completion_jsonl_logs_include_rlm_calls(tmp_path: Path) -> None:
-    """Integration: docker environment + broker subcalls are persisted in JSONL logs.
+    """
+    Integration: docker environment + broker subcalls are persisted in JSONL logs.
 
     This is best-effort and should skip cleanly if Docker isn't available or
     image pulls/container startup are blocked.

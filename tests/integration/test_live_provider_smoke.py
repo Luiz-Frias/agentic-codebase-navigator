@@ -11,7 +11,8 @@ from rlm.domain.models import LLMRequest
 @pytest.mark.integration
 @pytest.mark.live_llm
 def test_live_openai_adapter_smoke() -> None:
-    """Real-network smoke test for OpenAIAdapter.
+    """
+    Real-network smoke test for OpenAIAdapter.
 
     Skipped by default; enable with:
       - RLM_RUN_LIVE_LLM_TESTS=1
@@ -59,7 +60,8 @@ def test_live_openai_adapter_smoke() -> None:
 @pytest.mark.integration
 @pytest.mark.live_llm
 def test_live_openai_adapter_tool_calling() -> None:
-    """Real-network test for OpenAI tool calling.
+    """
+    Real-network test for OpenAI tool calling.
 
     Skipped by default; enable with:
       - RLM_RUN_LIVE_LLM_TESTS=1
@@ -144,7 +146,8 @@ def test_live_openai_adapter_tool_calling() -> None:
 @pytest.mark.integration
 @pytest.mark.live_llm
 def test_live_anthropic_adapter_smoke() -> None:
-    """Real-network smoke test for AnthropicAdapter.
+    """
+    Real-network smoke test for AnthropicAdapter.
 
     Skipped by default; enable with:
       - RLM_RUN_LIVE_LLM_TESTS=1

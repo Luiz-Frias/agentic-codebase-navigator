@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, TypeAlias
-
-from rlm.domain.types import Prompt
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolDefinition
+    from rlm.domain.types import Prompt
 
-# Tool choice options for LLM requests
-ToolChoice: TypeAlias = Literal["auto", "required", "none"] | str | None
+# Tool choice options for LLM requests:
+# - "auto": LLM decides whether to call tools
+# - "required": LLM must call at least one tool
+# - "none": LLM will not call any tools
+# - "<tool_name>": Force a specific tool by name
+type ToolChoice = str | None
 
 
 @dataclass(frozen=True, slots=True)
 class LLMRequest:
-    """A typed LLM request.
+    """
+    A typed LLM request.
 
     This is a Phase 2 bridge model used by ports/adapters and the new orchestrator.
 

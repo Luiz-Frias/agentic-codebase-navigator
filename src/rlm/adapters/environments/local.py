@@ -9,9 +9,10 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from rlm.adapters.base import BaseEnvironmentAdapter
+from rlm.domain.models import BatchedLLMRequest, ChatCompletion, LLMRequest, ReplResult
 from rlm.domain.policies.timeouts import (
     DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     DEFAULT_LOCAL_EXECUTE_TIMEOUT_S,
@@ -24,7 +25,6 @@ from rlm.infrastructure.execution_namespace_policy import ExecutionNamespacePoli
 from rlm.infrastructure.logging import warn_cleanup_failure
 
 if TYPE_CHECKING:
-    from rlm.domain.models import BatchedLLMRequest, ChatCompletion, LLMRequest, ReplResult
     from rlm.domain.ports import BrokerPort
     from rlm.domain.types import ContextPayload, Prompt
 
@@ -39,7 +39,8 @@ _PROCESS_EXEC_LOCK = threading.Lock()
 
 @contextmanager
 def _execution_timeout(timeout_s: float | None, /):
-    """Best-effort execution timeout for runaway code (Local env only).
+    """
+    Best-effort execution timeout for runaway code (Local env only).
 
     Notes:
     - Uses SIGALRM when available and only in the main thread.
@@ -59,7 +60,7 @@ def _execution_timeout(timeout_s: float | None, /):
     prev_handler = signal.getsignal(signal.SIGALRM)
     prev_timer = signal.getitimer(signal.ITIMER_REAL)
 
-    def _on_alarm(_signum: int, _frame):
+    def _on_alarm(_signum: int, _frame: object) -> None:
         raise TimeoutError(f"Execution timed out after {timeout_s}s")
 
     signal.signal(signal.SIGALRM, _on_alarm)
@@ -73,7 +74,8 @@ def _execution_timeout(timeout_s: float | None, /):
 
 
 class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
-    """Native Local environment adapter (Phase 05).
+    """
+    Native Local environment adapter (Phase 05).
 
     Key semantics (legacy-compatible):
     - Persistent namespace across `execute_code` calls.
@@ -163,7 +165,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         # Guard stdout/stderr + cwd changes as they are process-global.
         with _PROCESS_EXEC_LOCK:
             old_stdout, old_stderr = sys.stdout, sys.stderr
-            old_cwd = os.getcwd()
+            old_cwd = Path.cwd()
             try:
                 sys.stdout, sys.stderr = stdout_buf, stderr_buf
                 os.chdir(self._session_dir)
@@ -214,7 +216,8 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         model: str | None = None,
         correlation_id: str | None = None,
     ) -> str:
-        """Query the broker from within executed code.
+        """
+        Query the broker from within executed code.
 
         Legacy semantics:
         - returns the response string on success
@@ -266,7 +269,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    _RESERVED_KEYS = {
+    _RESERVED_KEYS: ClassVar[set[str]] = {
         "__builtins__",
         "__name__",
         "FINAL_VAR",
@@ -331,10 +334,10 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         out: list[str] = []
         calls: list[ChatCompletion] = []
         for r in results:
-            if r.error is not None:
-                out.append(f"Error: {r.error}")
+            cc = r.chat_completion
+            if r.error is not None or cc is None:
+                out.append(f"Error: {r.error or 'No completion returned'}")
                 continue
-            assert r.chat_completion is not None
-            calls.append(r.chat_completion)
-            out.append(r.chat_completion.response)
+            calls.append(cc)
+            out.append(cc.response)
         return out, calls

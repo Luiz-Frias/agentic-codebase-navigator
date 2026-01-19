@@ -7,12 +7,15 @@ from itertools import count
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
+from rlm.domain.errors import LLMError
 from rlm.domain.models import ModelUsageSummary, UsageSummary
-from rlm.domain.types import Prompt
+from rlm.domain.models.result import Err, Ok
+from rlm.domain.models.safe_accessor import SafeAccessor
 
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolCallRequest, ToolDefinition
     from rlm.domain.models.llm_request import ToolChoice
+    from rlm.domain.types import Prompt
 
 
 _GEMINI_CALL_COUNTER = count(1)
@@ -26,7 +29,8 @@ def _next_gemini_call_id() -> str:
 
 
 def safe_provider_error_message(provider: str, exc: BaseException, /) -> str:
-    """Convert provider exceptions into safe, user-facing messages.
+    """
+    Convert provider exceptions into safe, user-facing messages.
 
     This intentionally avoids leaking stack traces or provider response bodies.
     """
@@ -37,30 +41,89 @@ def safe_provider_error_message(provider: str, exc: BaseException, /) -> str:
     return f"{provider} request failed"
 
 
+# =============================================================================
+# Prompt Conversion Helpers (extracted for PLR0911 compliance)
+# =============================================================================
+
+
+def _list_to_messages(messages: list[object]) -> list[dict[str, Any]]:
+    """Convert a list prompt to OpenAI-style messages."""
+    if all(isinstance(m, dict) for m in messages):
+        # Validated: all elements are dicts - create new dict copies
+        return [dict(m.items()) for m in messages if isinstance(m, dict)]
+    return [{"role": "user", "content": str(messages)}]
+
+
+def _dict_to_messages(payload: dict[str, object]) -> list[dict[str, Any]]:
+    """Convert a dict prompt to OpenAI-style messages using SafeAccessor."""
+    accessor = SafeAccessor(payload)
+
+    # Try to extract messages list
+    msgs = accessor.get("messages")
+    if isinstance(msgs, list) and all(isinstance(m, dict) for m in msgs):
+        return [dict(m.items()) for m in msgs if isinstance(m, dict)]
+
+    # Try prompt or content keys
+    prompt_val = accessor.get("prompt")
+    if isinstance(prompt_val, str) and prompt_val:
+        return [{"role": "user", "content": prompt_val}]
+
+    content_val = accessor.get("content")
+    if isinstance(content_val, str) and content_val:
+        return [{"role": "user", "content": content_val}]
+
+    return [{"role": "user", "content": str(payload)}]
+
+
 def prompt_to_messages(prompt: Prompt, /) -> list[dict[str, Any]]:
-    """Convert a domain Prompt payload to an OpenAI-style chat messages list.
+    """
+    Convert a domain Prompt payload to an OpenAI-style chat messages list.
 
     Many provider SDKs accept this common `messages=[{role, content}, ...]` shape.
     """
     match prompt:
         case str():
             return [{"role": "user", "content": prompt}]
-        case list() as messages:
-            if all(isinstance(m, dict) for m in messages):
-                return list(messages)  # type: ignore[return-value]
-            return [{"role": "user", "content": str(prompt)}]
-        case dict() as payload:
-            if "messages" in payload and isinstance(payload.get("messages"), list):
-                msgs = payload.get("messages")
-                if isinstance(msgs, list) and all(isinstance(m, dict) for m in msgs):
-                    return list(msgs)  # type: ignore[return-value]
-            if "prompt" in payload:
-                return [{"role": "user", "content": str(payload.get("prompt"))}]
-            if "content" in payload:
-                return [{"role": "user", "content": str(payload.get("content"))}]
-            return [{"role": "user", "content": str(payload)}]
+        case list():
+            return _list_to_messages(list(prompt))
+        case dict():
+            return _dict_to_messages(prompt)
         case _:
             return [{"role": "user", "content": str(prompt)}]
+
+
+def _list_to_text(messages: list[object]) -> str:
+    """Convert a list prompt to plain text."""
+    if all(isinstance(m, dict) for m in messages):
+        parts: list[str] = []
+        for m in messages:
+            if isinstance(m, dict):
+                role = m.get("role", "")
+                content = m.get("content", "")
+                parts.append(f"{role}: {content}")
+        return "\n".join(parts)
+    return str(messages)
+
+
+def _dict_to_text(payload: dict[str, object]) -> str:
+    """Convert a dict prompt to plain text using SafeAccessor."""
+    accessor = SafeAccessor(payload)
+
+    # Try prompt or content keys first
+    prompt_val = accessor.get("prompt")
+    if isinstance(prompt_val, str) and prompt_val:
+        return prompt_val
+
+    content_val = accessor.get("content")
+    if isinstance(content_val, str) and content_val:
+        return content_val
+
+    # Try messages key (recursive)
+    msgs = accessor.get("messages")
+    if isinstance(msgs, list):
+        return _list_to_text(list(msgs))
+
+    return str(payload)
 
 
 def prompt_to_text(prompt: Prompt, /) -> str:
@@ -68,23 +131,10 @@ def prompt_to_text(prompt: Prompt, /) -> str:
     match prompt:
         case str():
             return prompt
-        case list() as messages:
-            if all(isinstance(m, dict) for m in messages):
-                parts: list[str] = []
-                for m in messages:
-                    role = m.get("role", "")
-                    content = m.get("content", "")
-                    parts.append(f"{role}: {content}")
-                return "\n".join(parts)
-            return str(prompt)
-        case dict() as payload:
-            if "prompt" in payload:
-                return str(payload.get("prompt"))
-            if "content" in payload:
-                return str(payload.get("content"))
-            if "messages" in payload and isinstance(payload.get("messages"), list):
-                return prompt_to_text(payload.get("messages"))  # type: ignore[arg-type]
-            return str(payload)
+        case list():
+            return _list_to_text(list(prompt))
+        case dict():
+            return _dict_to_text(prompt)
         case _:
             return str(prompt)
 
@@ -95,12 +145,13 @@ def count_openai_prompt_tokens(
     model: str,
     /,
 ) -> int | None:
-    """Count tokens for OpenAI-style chat prompts using tiktoken if available.
+    """
+    Count tokens for OpenAI-style chat prompts using tiktoken if available.
 
     Returns None if tiktoken is not installed or counting fails.
     """
     try:
-        import tiktoken  # type: ignore[import-not-found]
+        import tiktoken  # Optional dependency (config: pyproject.toml [[tool.mypy.overrides]])
     except Exception:
         return None
 
@@ -137,7 +188,8 @@ def count_openai_prompt_tokens(
 
 
 def extract_text_from_chat_response(response: Any, /) -> str:
-    """Extract a response string from an OpenAI-style chat completion payload.
+    """
+    Extract a response string from an OpenAI-style chat completion payload.
 
     Supports both object-style (SDK models) and dict-style payloads.
     """
@@ -184,7 +236,8 @@ def extract_text_from_chat_response(response: Any, /) -> str:
 
 
 def tool_definition_to_openai_format(tool: ToolDefinition, /) -> dict[str, Any]:
-    """Convert a ToolDefinition to OpenAI's function calling format.
+    """
+    Convert a ToolDefinition to OpenAI's function calling format.
 
     OpenAI expects tools in the format:
     {
@@ -207,7 +260,8 @@ def tool_definition_to_openai_format(tool: ToolDefinition, /) -> dict[str, Any]:
 
 
 def tool_definition_to_anthropic_format(tool: ToolDefinition, /) -> dict[str, Any]:
-    """Convert a ToolDefinition to Anthropic's tool format.
+    """
+    Convert a ToolDefinition to Anthropic's tool format.
 
     Anthropic expects tools in the format:
     {
@@ -224,7 +278,8 @@ def tool_definition_to_anthropic_format(tool: ToolDefinition, /) -> dict[str, An
 
 
 def tool_definition_to_gemini_format(tool: ToolDefinition, /) -> dict[str, Any]:
-    """Convert a ToolDefinition to Google Gemini's FunctionDeclaration format.
+    """
+    Convert a ToolDefinition to Google Gemini's FunctionDeclaration format.
 
     Gemini expects tools wrapped in a Tool object with function_declarations:
     {
@@ -241,7 +296,8 @@ def tool_definition_to_gemini_format(tool: ToolDefinition, /) -> dict[str, Any]:
 
 
 def tool_choice_to_openai_format(tool_choice: ToolChoice, /) -> dict[str, Any] | str | None:
-    """Convert a ToolChoice to OpenAI's tool_choice format.
+    """
+    Convert a ToolChoice to OpenAI's tool_choice format.
 
     - "auto" → "auto"
     - "required" → "required"
@@ -257,7 +313,8 @@ def tool_choice_to_openai_format(tool_choice: ToolChoice, /) -> dict[str, Any] |
 
 
 def tool_choice_to_anthropic_format(tool_choice: ToolChoice, /) -> dict[str, Any] | None:
-    """Convert a ToolChoice to Anthropic's tool_choice format.
+    """
+    Convert a ToolChoice to Anthropic's tool_choice format.
 
     - "auto" → {"type": "auto"}
     - "required" → {"type": "any"}
@@ -279,7 +336,8 @@ def tool_choice_to_gemini_function_calling_config(
     tool_choice: ToolChoice,
     /,
 ) -> dict[str, Any] | None:
-    """Convert a ToolChoice to Gemini's function_calling_config shape.
+    """
+    Convert a ToolChoice to Gemini's function_calling_config shape.
 
     - "auto" → {"mode": "AUTO"}
     - "required" → {"mode": "ANY"}
@@ -297,77 +355,72 @@ def tool_choice_to_gemini_function_calling_config(
     return {"mode": "ANY", "allowed_function_names": [tool_choice]}
 
 
-def extract_tool_calls_openai(response: Any, /) -> list[ToolCallRequest] | None:
-    """Extract tool calls from an OpenAI-style chat completion response.
+def extract_tool_calls_openai(response: Any, /) -> Ok[list[ToolCallRequest] | None] | Err[LLMError]:
+    """
+    Extract tool calls from an OpenAI-style chat completion response.
 
     OpenAI returns tool calls in:
     response.choices[0].message.tool_calls[].{id, function.name, function.arguments}
 
-    Returns None if no tool calls are present.
+    Returns:
+        Ok(list) - tool calls found
+        Ok(None) - no tool calls present (not an error)
+        Err(LLMError) - malformed response data
+
+    Note:
+        Uses SafeAccessor for unified SDK/dict access pattern.
+
     """
-    try:
-        choices = response.choices
-    except Exception:
-        choices = response.get("choices") if isinstance(response, dict) else None
+    accessor = SafeAccessor(response)
 
-    if not choices:
-        return None
+    choices = accessor.get("choices")
+    if not choices or not isinstance(choices, list):
+        return Ok(None)
 
-    first = choices[0]
-
-    # Get message from choice
-    message = None
-    try:
-        message = first.message
-    except Exception:
-        if isinstance(first, dict):
-            message = first.get("message")
-
+    first_acc = SafeAccessor(choices[0])
+    message = first_acc.get("message")
     if message is None:
-        return None
+        return Ok(None)
 
-    # Get tool_calls from message
-    tool_calls_raw = None
-    try:
-        tool_calls_raw = message.tool_calls
-    except Exception:
-        if isinstance(message, dict):
-            tool_calls_raw = message.get("tool_calls")
-
-    if not tool_calls_raw:
-        return None
+    msg_acc = SafeAccessor(message)
+    tool_calls_raw = msg_acc.get("tool_calls")
+    if not tool_calls_raw or not isinstance(tool_calls_raw, list):
+        return Ok(None)
 
     result: list[ToolCallRequest] = []
     for tc in tool_calls_raw:
-        try:
-            # SDK model style
-            tc_id = tc.id
-            func = tc.function
-            name = func.name
-            args_str = func.arguments
-        except Exception:
-            # Dict style
-            if isinstance(tc, dict):
-                tc_id = tc.get("id", "")
-                func = tc.get("function", {})
-                name = func.get("name", "") if isinstance(func, dict) else ""
-                args_str = func.get("arguments", "{}") if isinstance(func, dict) else "{}"
-            else:
-                continue
+        tc_acc = SafeAccessor(tc)
+        tc_id = tc_acc.get_str_or("id", "")
 
-        # Parse arguments JSON
-        try:
-            arguments = json.loads(args_str) if isinstance(args_str, str) else args_str
-        except json.JSONDecodeError:
-            arguments = {}
+        func = tc_acc.get("function")
+        if func is None:
+            continue
+
+        func_acc = SafeAccessor(func)
+        name = func_acc.get_str_or("name", "")
+        args_str = func_acc.get_str_or("arguments", "")
+
+        # Parse arguments JSON with Result pattern
+        arguments: dict[str, object] = {}
+        if args_str:
+            try:
+                parsed = json.loads(args_str)
+            except json.JSONDecodeError as e:
+                return Err(LLMError(f"Invalid JSON in tool call arguments: {e}"))
+            if not isinstance(parsed, dict):
+                return Err(
+                    LLMError(f"Tool call arguments must be dict, got {type(parsed).__name__}")
+                )
+            arguments = parsed
 
         result.append({"id": tc_id, "name": name, "arguments": arguments})
 
-    return result if result else None
+    return Ok(result if result else None)
 
 
 def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | None:
-    """Extract tool calls from an Anthropic response.
+    """
+    Extract tool calls from an Anthropic response.
 
     Anthropic returns tool use in content blocks:
     response.content[].{type: "tool_use", id, name, input}
@@ -415,82 +468,72 @@ def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | No
     return result if result else None
 
 
-def extract_tool_calls_gemini(response: Any, /) -> list[ToolCallRequest] | None:
-    """Extract tool calls from a Google Gemini response.
+def extract_tool_calls_gemini(response: Any, /) -> Ok[list[ToolCallRequest] | None] | Err[LLMError]:
+    """
+    Extract tool calls from a Google Gemini response.
 
     Gemini returns function calls in:
     response.candidates[0].content.parts[].function_call.{name, args}
 
-    Returns None if no tool calls are present.
+    Returns:
+        Ok(list) - tool calls found
+        Ok(None) - no tool calls present (not an error)
+        Err(LLMError) - malformed response data
+
+    Note:
+        Uses SafeAccessor for unified SDK/dict access pattern.
+
     """
-    candidates = None
-    try:
-        candidates = response.candidates
-    except Exception:
-        if isinstance(response, dict):
-            candidates = response.get("candidates")
+    accessor = SafeAccessor(response)
 
-    if not candidates:
-        return None
+    candidates = accessor.get("candidates")
+    if not candidates or not isinstance(candidates, list):
+        return Ok(None)
 
-    first = candidates[0]
-
-    # Get content from candidate
-    content = None
-    try:
-        content = first.content
-    except Exception:
-        if isinstance(first, dict):
-            content = first.get("content")
-
+    first_acc = SafeAccessor(candidates[0])
+    content = first_acc.get("content")
     if content is None:
-        return None
+        return Ok(None)
 
-    # Get parts from content
-    parts = None
-    try:
-        parts = content.parts
-    except Exception:
-        if isinstance(content, dict):
-            parts = content.get("parts")
-
-    if not parts:
-        return None
+    content_acc = SafeAccessor(content)
+    parts = content_acc.get("parts")
+    if not parts or not isinstance(parts, list):
+        return Ok(None)
 
     result: list[ToolCallRequest] = []
     for part in parts:
-        function_call = None
-        try:
-            function_call = part.function_call
-        except Exception:
-            if isinstance(part, dict):
-                function_call = part.get("function_call") or part.get("functionCall")
+        part_acc = SafeAccessor(part)
 
+        # Try both naming conventions (function_call and functionCall)
+        function_call = part_acc.get("function_call") or part_acc.get("functionCall")
         if function_call is None:
             continue
 
-        try:
-            # SDK model style
-            name = function_call.name
-            args = function_call.args
-        except Exception:
-            # Dict style
-            if isinstance(function_call, dict):
-                name = function_call.get("name", "")
-                args = function_call.get("args", {})
-            else:
-                continue
+        fc_acc = SafeAccessor(function_call)
+        name = fc_acc.get_str_or("name", "")
+
+        # Gemini args: None/missing = no args, non-dict = error
+        args_raw = fc_acc.get("args")
+        if args_raw is None:
+            arguments: dict[str, object] = {}
+        elif isinstance(args_raw, dict):
+            arguments = args_raw
+        else:
+            return Err(
+                LLMError(f"Gemini function call args must be dict, got {type(args_raw).__name__}")
+            )
 
         # Gemini doesn't provide IDs, so we generate process-unique ones
         tc_id = _next_gemini_call_id()
 
-        result.append({"id": tc_id, "name": name, "arguments": args})
+        result.append({"id": tc_id, "name": name, "arguments": arguments})
 
-    return result if result else None
+    return Ok(result if result else None)
 
 
 def extract_finish_reason_openai(response: Any, /) -> str | None:
-    """Extract finish_reason from an OpenAI-style response.
+    """
+    Extract finish_reason from an OpenAI-style response.
 
     Returns: "stop", "tool_calls", "length", etc. or None if not available.
     """
@@ -514,7 +557,8 @@ def extract_finish_reason_openai(response: Any, /) -> str | None:
 
 
 def extract_finish_reason_anthropic(response: Any, /) -> str | None:
-    """Extract stop_reason from an Anthropic response and normalize to OpenAI-style.
+    """
+    Extract stop_reason from an Anthropic response and normalize to OpenAI-style.
 
     Anthropic uses "end_turn", "tool_use", "max_tokens" etc.
     We normalize to "stop", "tool_calls", "length" for consistency.
@@ -540,7 +584,8 @@ def extract_finish_reason_anthropic(response: Any, /) -> str | None:
 
 
 def extract_finish_reason_gemini(response: Any, /) -> str | None:
-    """Extract finish_reason from a Gemini response and normalize to OpenAI-style.
+    """
+    Extract finish_reason from a Gemini response and normalize to OpenAI-style.
 
     Gemini uses STOP, MAX_TOKENS, SAFETY, etc.
     We normalize to "stop", "length", etc. for consistency.
@@ -583,7 +628,8 @@ def extract_finish_reason_gemini(response: Any, /) -> str | None:
 
 
 def extract_openai_style_token_usage(response: Any, /) -> tuple[int, int]:
-    """Best-effort token extraction from `response.usage`.
+    """
+    Best-effort token extraction from `response.usage`.
 
     Supports both the classic (prompt_tokens/completion_tokens) and newer
     (input_tokens/output_tokens) key names.
@@ -619,7 +665,8 @@ def extract_openai_style_token_usage(response: Any, /) -> tuple[int, int]:
 
 @dataclass
 class UsageTracker:
-    """Shared usage accounting helper for provider adapters.
+    """
+    Shared usage accounting helper for provider adapters.
 
     - Tracks totals per model
     - Tracks last-call usage as a single-entry summary (legacy-compatible)

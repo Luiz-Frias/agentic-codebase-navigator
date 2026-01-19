@@ -12,7 +12,8 @@ from tests.fakes_ports import CollectingLogger
 
 
 class _OrchestratorThenHangingAsyncLLM(LLMPort):
-    """Boundary helper:
+    """
+    Boundary helper:
     - sync `complete()` returns code that calls llm_query_batched(...)
     - async `acomplete()` never returns (broker must time out/cancel)
     """

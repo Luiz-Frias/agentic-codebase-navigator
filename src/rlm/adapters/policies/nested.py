@@ -1,4 +1,5 @@
-"""Default nested call policy implementation.
+"""
+Default nested call policy implementation.
 
 Provides simple LLM call behavior without sub-orchestrator spawning.
 External apps can implement NestedCallPolicy to enable recursive
@@ -14,7 +15,8 @@ from rlm.domain.agent_ports import NestedConfig
 
 @dataclass
 class SimpleNestedCallPolicy:
-    """Simple nested call policy that always uses direct LLM calls.
+    """
+    Simple nested call policy that always uses direct LLM calls.
 
     This is the default behavior when no custom NestedCallPolicy is provided.
     Nested llm_query() calls from generated code are handled as simple
@@ -39,7 +41,8 @@ class SimpleNestedCallPolicy:
     """
 
     def should_orchestrate(self, _prompt: str, _depth: int) -> bool:
-        """Always returns False - nested calls use simple LLM completion.
+        """
+        Always returns False - nested calls use simple LLM completion.
 
         Args:
             _prompt: The prompt being passed (unused in default).
@@ -53,7 +56,8 @@ class SimpleNestedCallPolicy:
         return False
 
     def get_nested_config(self) -> NestedConfig:
-        """Return empty config since orchestration is never triggered.
+        """
+        Return empty config since orchestration is never triggered.
 
         This method is only called when should_orchestrate() returns True,
         which never happens for the default policy. Returns empty dict

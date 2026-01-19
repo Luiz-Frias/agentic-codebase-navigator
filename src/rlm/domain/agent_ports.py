@@ -1,4 +1,5 @@
-"""Agent capability ports (Phase 1 - Core, Phase 2.7 - Extension Protocols).
+"""
+Agent capability ports (Phase 1 - Core, Phase 2.7 - Extension Protocols).
 
 Extension points for tool calling, structured output, and agent shapes.
 Follows existing hexagonal pattern from ports.py and goal2_ports.py.
@@ -22,7 +23,8 @@ if TYPE_CHECKING:
 
 
 class ToolDefinition(TypedDict):
-    """Schema for a callable tool.
+    """
+    Schema for a callable tool.
 
     This follows the OpenAI function calling schema format, which is the
     de facto standard for LLM tool definitions.
@@ -34,30 +36,33 @@ class ToolDefinition(TypedDict):
 
 
 class ToolCallRequest(TypedDict):
-    """Request from LLM to invoke a tool.
+    """
+    Request from LLM to invoke a tool.
 
     Parsed from the LLM's response when using tool calling mode.
     """
 
     id: str  # Unique ID for this tool call (for correlation)
     name: str  # Tool name to invoke
-    arguments: dict[str, Any]  # Parsed arguments
+    arguments: dict[str, object]  # Parsed arguments (JSON-compatible values)
 
 
 class ToolCallResult(TypedDict):
-    """Result of executing a tool.
+    """
+    Result of executing a tool.
 
     Returned to the LLM as context for the next iteration.
     """
 
     id: str  # Correlation ID from the request
     name: str  # Tool that was called
-    result: Any  # Return value (will be JSON serialized)
+    result: object  # Return value (will be JSON serialized)
     error: str | None  # Error message if execution failed
 
 
 class ToolMessage(TypedDict):
-    """Message format for tool results in conversation history.
+    """
+    Message format for tool results in conversation history.
 
     This follows the OpenAI chat completion message format for tool results,
     which is used to inject tool execution results back into the conversation.
@@ -77,7 +82,8 @@ class ToolMessage(TypedDict):
 
 
 class ToolPort(Protocol):
-    """Port for a single tool/function.
+    """
+    Port for a single tool/function.
 
     Implementations wrap Python callables and provide schema introspection
     for LLM tool calling. The definition property generates the JSON schema
@@ -85,44 +91,47 @@ class ToolPort(Protocol):
     """
 
     @property
-    def definition(self) -> ToolDefinition:
+    def definition(self) -> ToolDefinition:  # pyright: ignore[reportReturnType]
         """Return the tool's schema for LLM consumption."""
 
-    def execute(self, **kwargs: Any) -> Any:
+    def execute(self, **kwargs: object) -> object:  # pyright: ignore[reportReturnType]
         """Execute the tool synchronously with the given arguments."""
 
-    async def aexecute(self, **kwargs: Any) -> Any:
+    async def aexecute(self, **kwargs: object) -> object:  # pyright: ignore[reportReturnType]
         """Execute the tool asynchronously with the given arguments."""
 
 
 class ToolRegistryPort(Protocol):
-    """Port for managing available tools.
+    """
+    Port for managing available tools.
 
     The registry maintains a collection of tools that can be offered to the
     LLM during a run. Tools are looked up by name when the LLM requests
     a tool call.
     """
 
-    def register(self, tool: ToolPort, /) -> None:
+    def register(self, tool: ToolPort, /) -> None:  # pyright: ignore[reportReturnType]
         """Register a tool in the registry."""
 
-    def get(self, name: str, /) -> ToolPort | None:
+    def get(self, name: str, /) -> ToolPort | None:  # pyright: ignore[reportReturnType]
         """Look up a tool by name. Returns None if not found."""
 
-    def list_definitions(self) -> list[ToolDefinition]:
+    def list_definitions(self) -> list[ToolDefinition]:  # pyright: ignore[reportReturnType]
         """Return schemas for all registered tools (for LLM context)."""
 
 
 class StructuredOutputPort[T](Protocol):
-    """Port for validating/parsing structured LLM output.
+    """
+    Port for validating/parsing structured LLM output.
 
     This enables type-safe extraction of structured data from LLM responses,
     similar to pydantic-ai's output_type functionality. The implementation
     uses Pydantic for validation.
     """
 
-    def validate(self, response: str, output_type: type[T], /) -> T:
-        """Validate and parse an LLM response into the target type.
+    def validate(self, response: str, output_type: type[T], /) -> T:  # pyright: ignore[reportReturnType]
+        """
+        Validate and parse an LLM response into the target type.
 
         Args:
             response: Raw LLM response (typically JSON string)
@@ -136,8 +145,9 @@ class StructuredOutputPort[T](Protocol):
 
         """
 
-    def get_schema(self, output_type: type[T], /) -> dict[str, Any]:
-        """Get the JSON schema for an output type.
+    def get_schema(self, output_type: type[T], /) -> dict[str, Any]:  # pyright: ignore[reportReturnType]
+        """
+        Get the JSON schema for an output type.
 
         This schema can be provided to the LLM to guide its output format.
         """
@@ -159,7 +169,8 @@ AgentModeName = Literal["code", "tools"]
 
 
 class NestedConfig(TypedDict, total=False):
-    """Configuration for nested orchestrator spawning.
+    """
+    Configuration for nested orchestrator spawning.
 
     Returned by NestedCallPolicy.get_nested_config() to configure how
     a nested orchestrator should behave.
@@ -182,7 +193,8 @@ class NestedConfig(TypedDict, total=False):
 
 @runtime_checkable
 class StoppingPolicy(Protocol):
-    """Protocol for controlling when orchestrator iteration loops terminate.
+    """
+    Protocol for controlling when orchestrator iteration loops terminate.
 
     External apps can implement this to inject custom stopping criteria,
     such as EIG-gated stopping or entropy-based termination.
@@ -209,8 +221,9 @@ class StoppingPolicy(Protocol):
 
     """
 
-    def should_stop(self, context: dict[str, Any]) -> bool:
-        """Return True to stop the iteration loop early.
+    def should_stop(self, context: dict[str, Any]) -> bool:  # pyright: ignore[reportReturnType]
+        """
+        Return True to stop the iteration loop early.
 
         Called at the start of each iteration, before the LLM call.
         The context dict contains orchestrator state that external apps
@@ -229,12 +242,13 @@ class StoppingPolicy(Protocol):
 
         """
 
-    def on_iteration_complete(
+    def on_iteration_complete(  # pyright: ignore[reportReturnType]
         self,
         context: dict[str, Any],
         result: ChatCompletion,
     ) -> None:
-        """Called after each iteration completes.
+        """
+        Called after each iteration completes.
 
         Use this to track state, update beliefs, compute metrics, etc.
         The context dict is mutable - modifications persist across iterations.
@@ -248,7 +262,8 @@ class StoppingPolicy(Protocol):
 
 @runtime_checkable
 class ContextCompressor(Protocol):
-    """Protocol for compressing nested call returns before bubbling up.
+    """
+    Protocol for compressing nested call returns before bubbling up.
 
     When a nested orchestrator completes, its result may be too large
     to fit in the parent's context budget. Implementations can summarize,
@@ -273,8 +288,9 @@ class ContextCompressor(Protocol):
 
     """
 
-    def compress(self, result: str, max_tokens: int | None = None) -> str:
-        """Compress a nested call result before returning to parent.
+    def compress(self, result: str, max_tokens: int | None = None) -> str:  # pyright: ignore[reportReturnType]
+        """
+        Compress a nested call result before returning to parent.
 
         Args:
             result: The full result string from a nested orchestrator.
@@ -289,7 +305,8 @@ class ContextCompressor(Protocol):
 
 @runtime_checkable
 class NestedCallPolicy(Protocol):
-    """Protocol for determining when nested llm_query() calls should
+    """
+    Protocol for determining when nested llm_query() calls should
     spawn sub-orchestrators vs. simple LLM calls.
 
     In RLM's code execution mode, generated code can call `llm_query()`.
@@ -317,8 +334,9 @@ class NestedCallPolicy(Protocol):
 
     """
 
-    def should_orchestrate(self, prompt: str, depth: int) -> bool:
-        """Return True to spawn a nested orchestrator for this call.
+    def should_orchestrate(self, prompt: str, depth: int) -> bool:  # pyright: ignore[reportReturnType]
+        """
+        Return True to spawn a nested orchestrator for this call.
 
         Args:
             prompt: The prompt being passed to the nested call.
@@ -329,8 +347,9 @@ class NestedCallPolicy(Protocol):
 
         """
 
-    def get_nested_config(self) -> NestedConfig:
-        """Return configuration for nested orchestrator.
+    def get_nested_config(self) -> NestedConfig:  # pyright: ignore[reportReturnType]
+        """
+        Return configuration for nested orchestrator.
 
         Only called when should_orchestrate() returns True.
         The returned config determines how the nested orchestrator behaves.

@@ -1,4 +1,5 @@
-"""Infrastructure layer (hexagonal).
+"""
+Infrastructure layer (hexagonal).
 
 Cross-cutting technical utilities (protocols, filesystem/time helpers, etc.).
 Must not import adapters.

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from rlm.api.registries import (
@@ -14,6 +13,8 @@ from rlm.api.registries import (
 from rlm.api.rlm import RLM
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rlm.application.config import AgentModeName, EnvironmentName, RLMConfig
     from rlm.application.use_cases.run_completion import EnvironmentFactory
     from rlm.domain.agent_ports import ToolPort
@@ -37,7 +38,8 @@ def create_rlm(
     tools: list[ToolPort | Callable[..., Any]] | None = None,
     agent_mode: AgentModeName = "code",
 ) -> RLM:
-    """Convenience factory for the public `RLM` facade.
+    """
+    Convenience factory for the public `RLM` facade.
 
     Args:
         llm: Primary LLM adapter.
@@ -85,7 +87,8 @@ def create_rlm_from_config(
     # Runtime tool injection (tools cannot be serialized to config)
     tools: list[ToolPort | Callable[..., Any]] | None = None,
 ) -> RLM:
-    """Construct an `RLM` from config.
+    """
+    Construct an `RLM` from config.
 
     Args:
         config: RLM configuration object.

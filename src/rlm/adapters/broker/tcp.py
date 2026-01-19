@@ -3,12 +3,9 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import time
-from collections.abc import Coroutine
 from socketserver import StreamRequestHandler, ThreadingTCPServer
 from threading import Event, Lock, Thread
-from typing import Any, Final, TypeVar
-
-_T = TypeVar("_T")
+from typing import TYPE_CHECKING, Any, Final, TypeVar
 
 from rlm.adapters.base import BaseBrokerAdapter
 from rlm.domain.errors import LLMError, ValidationError
@@ -28,7 +25,6 @@ from rlm.domain.policies.timeouts import (
     BrokerTimeouts,
     CancellationPolicy,
 )
-from rlm.domain.ports import LLMPort
 from rlm.infrastructure.comms.codec import (
     DEFAULT_MAX_MESSAGE_BYTES,
     recv_frame,
@@ -38,9 +34,18 @@ from rlm.infrastructure.comms.messages import WireRequest, WireResponse, WireRes
 from rlm.infrastructure.comms.protocol import try_parse_request
 from rlm.infrastructure.logging import warn_cleanup_failure
 
+if TYPE_CHECKING:
+    from collections.abc import Coroutine, Sequence
+
+    from rlm.domain.ports import LLMPort
+    from rlm.domain.types import Prompt
+
+_T = TypeVar("_T")
+
 
 def _safe_error_message(exc: BaseException, /) -> str:
-    """Convert internal exceptions to client-safe error strings.
+    """
+    Convert internal exceptions to client-safe error strings.
 
     Important: do not leak stack traces or repr() of large/sensitive payloads.
     """
@@ -60,7 +65,8 @@ def _safe_error_message(exc: BaseException, /) -> str:
 
 
 class _AsyncLoopThread:
-    """Single shared asyncio loop used for batched request execution.
+    """
+    Single shared asyncio loop used for batched request execution.
 
     This avoids calling `asyncio.run()` inside `socketserver` handler threads.
     """
@@ -181,7 +187,8 @@ class _TcpBrokerRequestHandler(StreamRequestHandler):
 
 
 class TcpBrokerAdapter(BaseBrokerAdapter):
-    """A TCP broker that:
+    """
+    A TCP broker that:
     - exposes the infra wire protocol over a length-prefixed JSON socket server
     - routes requests to registered `LLMPort` implementations by model name
     - supports batched requests via an asyncio TaskGroup (runs on a dedicated loop thread)
@@ -332,7 +339,8 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         return self._llms[resolved]
 
     def _record_usage(self, usage: UsageSummary, /) -> None:
-        """Merge a per-call usage summary into the broker's totals.
+        """
+        Merge a per-call usage summary into the broker's totals.
 
         This intentionally tracks *only* calls routed through this broker instance,
         independent of any internal totals maintained by LLM adapters.
@@ -376,9 +384,8 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                 )
 
             llm: LLMPort = self._select_llm(request.model)
-            prompts: list[str | dict[str, Any] | list[Any]] = (
-                request.prompts
-            )  # Capture for closure type narrowing
+            # Capture for closure type narrowing - request.prompts is already validated
+            prompts: Sequence[Prompt] = request.prompts  # type: ignore[assignment]  # Wire protocol validates
 
             async def _run() -> list[WireResult]:
                 out: list[ChatCompletion | Exception] = await _acomplete_prompts_batched(
@@ -420,17 +427,18 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
 
 async def _acomplete_prompts_batched(
     llm: LLMPort,
-    prompts: list[str | dict[str, Any] | list[Any]],
+    prompts: Sequence[Prompt],
     model: str | None,
 ) -> list[ChatCompletion | Exception]:
-    """Run multiple `llm.acomplete(...)` calls concurrently and preserve ordering.
+    """
+    Run multiple `llm.acomplete(...)` calls concurrently and preserve ordering.
 
     This is used by both the direct `complete_batched` API and the wire-protocol
     handler to keep concurrency logic consistent.
     """
     out: list[ChatCompletion | Exception] = [Exception("uninitialized")] * len(prompts)
 
-    async def _one(i: int, prompt: str | dict[str, Any] | list[Any]) -> None:
+    async def _one(i: int, prompt: Prompt) -> None:
         try:
             out[i] = await llm.acomplete(LLMRequest(prompt=prompt, model=model))
         except Exception as exc:

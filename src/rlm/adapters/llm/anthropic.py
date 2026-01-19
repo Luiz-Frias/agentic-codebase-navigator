@@ -25,7 +25,8 @@ if TYPE_CHECKING:
 
 
 def _require_anthropic() -> Any:
-    """Lazily import the Anthropic SDK.
+    """
+    Lazily import the Anthropic SDK.
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-anthropic]`.
     """
@@ -73,7 +74,8 @@ def _openai_tool_calls_to_anthropic_blocks(
 
 
 def _messages_and_system(prompt: Prompt, /) -> tuple[list[dict[str, Any]], str | None]:
-    """Convert a Prompt into Anthropic `messages` and optional `system`.
+    """
+    Convert a Prompt into Anthropic `messages` and optional `system`.
 
     Anthropic uses a dedicated `system` parameter; OpenAI-style "system" messages
     are stripped and mapped into that field.

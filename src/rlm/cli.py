@@ -33,7 +33,8 @@ EnvironmentType = Literal["local", "docker", "modal", "prime"]
 
 
 def _extract_completion_args(ns: argparse.Namespace) -> CompletionArgs:
-    """Extract and validate completion args from Namespace with explicit types.
+    """
+    Extract and validate completion args from Namespace with explicit types.
 
     Uses cast() for type-safe extraction from argparse.Namespace which
     returns dict[str, Any] via vars(). The casts are safe because argparse

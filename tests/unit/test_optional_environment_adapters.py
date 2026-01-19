@@ -15,7 +15,8 @@ from tests.fakes_ports import QueueLLM
 def test_default_environment_registry_does_not_import_modal_when_building_local(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Optional env adapters must not be imported unless selected.
+    """
+    Optional env adapters must not be imported unless selected.
 
     In particular: selecting the local env should not import the optional `modal` package.
     """
@@ -35,20 +36,12 @@ def test_default_environment_registry_does_not_import_modal_when_building_local(
 
 
 @pytest.mark.unit
-def test_selecting_modal_without_dependency_yields_helpful_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Selecting modal without optional deps should fail fast with a helpful message."""
-    orig_import = builtins.__import__
+def test_selecting_modal_yields_helpful_not_implemented_error() -> None:
+    """Selecting modal environment should fail with a helpful 'not implemented' message.
 
-    def _missing_modal(name, *args, **kwargs):  # type: ignore[no-untyped-def]
-        if name == "modal" or str(name).startswith("modal."):
-            raise ImportError("No module named 'modal'")
-        return orig_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", _missing_modal)
-
-    # LLM won't be used because env construction fails first.
+    Note: modal was originally planned as an optional dependency. In Phase 05,
+    it's marked as "not implemented yet" alongside other planned environments.
+    """
     rlm = create_rlm(
         QueueLLM(model_name="dummy", responses=[]),
         environment="modal",
@@ -59,9 +52,9 @@ def test_selecting_modal_without_dependency_yields_helpful_error(
 
     cause = excinfo.value.__cause__
     assert cause is not None
-    msg = str(cause)
-    assert "optional dependency" in msg.lower()
-    assert "pip install modal" in msg.lower()
+    msg = str(cause).lower()
+    assert "modal" in msg
+    assert "not implemented" in msg
 
 
 @pytest.mark.unit

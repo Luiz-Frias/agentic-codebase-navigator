@@ -1,4 +1,5 @@
-"""LLM provider adapters.
+"""
+LLM provider adapters.
 
 Phase 4 starts by introducing a deterministic, dependency-free mock adapter that
 implements the `LLMPort` contract and can be used by tests and examples.

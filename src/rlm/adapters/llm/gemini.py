@@ -25,7 +25,8 @@ if TYPE_CHECKING:
 
 
 def _require_google_genai() -> Any:
-    """Lazily import the Google GenAI (Gemini) SDK.
+    """
+    Lazily import the Google GenAI (Gemini) SDK.
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-gemini]`.
     """
@@ -267,8 +268,8 @@ class GeminiAdapter(BaseLLMAdapter):
             raise LLMError(safe_provider_error_message("Gemini", e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_gemini(resp)
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_gemini(resp).unwrap()
         finish_reason = extract_finish_reason_gemini(resp)
 
         # Extract text response (may be empty if tool_calls present)

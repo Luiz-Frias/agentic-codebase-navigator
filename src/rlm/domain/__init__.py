@@ -1,4 +1,5 @@
-"""Domain layer (hexagonal core).
+"""
+Domain layer (hexagonal core).
 
 Pure business logic and ports (no adapters, no infrastructure, no third-party deps).
 """
@@ -23,22 +24,19 @@ from rlm.domain.errors import (
 from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 
 __all__ = [
-    # Errors
     "BrokerError",
-    "ExecutionError",
-    "LLMError",
-    "RLMError",
-    "ValidationError",
-    # Core Ports
     "BrokerPort",
     "EnvironmentPort",
+    "ExecutionError",
+    "LLMError",
     "LLMPort",
     "LoggerPort",
-    # Agent Ports
+    "RLMError",
     "StructuredOutputPort",
     "ToolCallRequest",
     "ToolCallResult",
     "ToolDefinition",
     "ToolPort",
     "ToolRegistryPort",
+    "ValidationError",
 ]

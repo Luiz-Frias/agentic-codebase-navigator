@@ -27,7 +27,8 @@ def _docker_available() -> bool:
 
 
 def _live_llm_enabled() -> bool:
-    """Opt-in gate for tests that hit real provider APIs.
+    """
+    Opt-in gate for tests that hit real provider APIs.
 
     These tests are skipped by default to keep CI hermetic and avoid accidental
     spend. Enable with:

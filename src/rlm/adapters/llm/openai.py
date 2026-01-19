@@ -25,7 +25,8 @@ if TYPE_CHECKING:
 
 
 def _require_openai() -> ModuleType:  # type: ignore[reportAny]  # OpenAI module has no stubs
-    """Lazily import the OpenAI SDK.
+    """
+    Lazily import the OpenAI SDK.
 
     This keeps the default install lightweight and avoids importing optional
     dependencies unless the adapter is actually used.
@@ -41,7 +42,8 @@ def _require_openai() -> ModuleType:  # type: ignore[reportAny]  # OpenAI module
 
 
 def _safe_openai_error_message(exc: BaseException, /) -> str:
-    """Convert OpenAI SDK exceptions to safe, user-facing messages.
+    """
+    Convert OpenAI SDK exceptions to safe, user-facing messages.
 
     We intentionally avoid leaking stack traces or provider response bodies.
     """
@@ -64,7 +66,8 @@ def _safe_openai_error_message(exc: BaseException, /) -> str:
 
 @dataclass
 class OpenAIAdapter(BaseLLMAdapter):
-    """Adapter skeleton: OpenAI SDK -> domain `LLMPort`.
+    """
+    Adapter skeleton: OpenAI SDK -> domain `LLMPort`.
 
     Phase 4 will implement real request/response mapping and usage extraction.
     This class exists as a lazy-import boundary and a typed configuration surface.
@@ -114,8 +117,8 @@ class OpenAIAdapter(BaseLLMAdapter):
             raise LLMError(_safe_openai_error_message(e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_openai(resp)  # type: ignore[reportAny]  # Extracts from OpenAI response
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_openai(resp).unwrap()  # type: ignore[reportAny]  # Extracts from OpenAI response
         finish_reason = extract_finish_reason_openai(resp)  # type: ignore[reportAny]  # Extracts from OpenAI response
 
         # Extract text response (may be empty if tool_calls present)
@@ -168,8 +171,8 @@ class OpenAIAdapter(BaseLLMAdapter):
             raise LLMError(_safe_openai_error_message(e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_openai(resp)  # type: ignore[reportAny]  # Extracts from OpenAI response
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_openai(resp).unwrap()  # type: ignore[reportAny]  # Extracts from OpenAI response
         finish_reason = extract_finish_reason_openai(resp)  # type: ignore[reportAny]  # Extracts from OpenAI response
 
         # Extract text response (may be empty if tool_calls present)
@@ -247,7 +250,8 @@ class OpenAIAdapter(BaseLLMAdapter):
 
 
 def build_openai_adapter(*, model: str, api_key: str | None = None, **kwargs: Any) -> OpenAIAdapter:
-    """Small builder helper for registries/composition roots.
+    """
+    Small builder helper for registries/composition roots.
 
     Keeps adapter construction logic in one place and makes future defaults
     explicit (OCP-friendly).

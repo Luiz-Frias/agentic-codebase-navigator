@@ -13,7 +13,8 @@ def _scan_forbidden_imports(
     forbidden_rlm_children: tuple[str, ...] = (),
     allowlist_files: set[Path] | None = None,
 ) -> list[str]:
-    """Return a list of "file: import ..." strings for any forbidden imports under `root`.
+    """
+    Return a list of "file: import ..." strings for any forbidden imports under `root`.
 
     Notes:
     - We scan both `import x.y` and `from x import y` forms.

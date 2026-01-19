@@ -11,7 +11,8 @@ from tests.fakes_ports import CollectingLogger, QueueLLM
 @pytest.mark.e2e
 @pytest.mark.docker
 def test_docker_env_code_can_call_llm_query_and_result_is_returned_via_final_var() -> None:
-    """Integration: domain orchestrator + docker environment + broker.
+    """
+    Integration: domain orchestrator + docker environment + broker.
 
     This is best-effort and should skip cleanly if Docker isn't available or
     container startup/pulls are blocked in the environment running tests.

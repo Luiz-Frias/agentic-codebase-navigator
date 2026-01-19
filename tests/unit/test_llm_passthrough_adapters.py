@@ -1,4 +1,5 @@
-"""Unit tests for passthrough LLM adapters (Azure, LiteLLM, Portkey) tool calling support.
+"""
+Unit tests for passthrough LLM adapters (Azure, LiteLLM, Portkey) tool calling support.
 
 These adapters use OpenAI-compatible formats for tools.
 """

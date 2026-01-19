@@ -1,4 +1,5 @@
-"""Tool adapters for agent capabilities.
+"""
+Tool adapters for agent capabilities.
 
 This module provides concrete implementations of ToolPort and ToolRegistryPort
 for use with RLM's tool calling mode.

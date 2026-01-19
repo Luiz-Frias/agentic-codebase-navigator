@@ -8,7 +8,8 @@ from tests.fakes_ports import CollectingLogger, QueueLLM
 
 @pytest.mark.e2e
 def test_local_env_code_can_call_llm_query_and_result_is_returned_via_final_var() -> None:
-    """Integration: domain orchestrator + local environment + broker.
+    """
+    Integration: domain orchestrator + local environment + broker.
 
     The LLM produces a code block that calls `llm_query()`, and then returns the
     nested call result via `FINAL_VAR(...)`.

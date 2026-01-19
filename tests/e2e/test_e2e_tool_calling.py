@@ -1,4 +1,5 @@
-"""E2E tests for RLM tool calling mode.
+"""
+E2E tests for RLM tool calling mode.
 
 Tests the full stack using config-based instantiation:
 create_rlm_from_config() → RLM facade → orchestrator → MockLLM
@@ -27,7 +28,8 @@ def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolC
 
 
 def add(a: float, b: float) -> float:
-    """Add two numbers.
+    """
+    Add two numbers.
 
     Args:
         a: First number
@@ -41,7 +43,8 @@ def add(a: float, b: float) -> float:
 
 
 def multiply(a: float, b: float) -> float:
-    """Multiply two numbers.
+    """
+    Multiply two numbers.
 
     Args:
         a: First number
@@ -55,7 +58,8 @@ def multiply(a: float, b: float) -> float:
 
 
 def divide(a: float, b: float) -> float:
-    """Divide two numbers.
+    """
+    Divide two numbers.
 
     Args:
         a: Dividend
@@ -74,7 +78,8 @@ def divide(a: float, b: float) -> float:
 
 
 def get_weather(city: str, unit: str = "celsius") -> dict[str, Any]:
-    """Get weather for a city.
+    """
+    Get weather for a city.
 
     Args:
         city: City name

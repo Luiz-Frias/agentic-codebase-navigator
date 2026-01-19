@@ -23,7 +23,8 @@ from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
 
 
 def _require_portkey() -> Any:
-    """Lazily import the Portkey SDK.
+    """
+    Lazily import the Portkey SDK.
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-portkey]`.
     """
@@ -85,8 +86,8 @@ class PortkeyAdapter(BaseLLMAdapter):
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_openai(resp)
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_openai(resp).unwrap()
         finish_reason = extract_finish_reason_openai(resp)
 
         # Extract text response (may be empty if tool_calls present)
@@ -138,8 +139,8 @@ class PortkeyAdapter(BaseLLMAdapter):
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_openai(resp)
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_openai(resp).unwrap()
         finish_reason = extract_finish_reason_openai(resp)
 
         # Extract text response (may be empty if tool_calls present)

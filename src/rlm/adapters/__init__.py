@@ -1,4 +1,5 @@
-"""Adapters layer (hexagonal).
+"""
+Adapters layer (hexagonal).
 
 Concrete implementations of ports for external systems (LLM providers, envs, logging).
 """

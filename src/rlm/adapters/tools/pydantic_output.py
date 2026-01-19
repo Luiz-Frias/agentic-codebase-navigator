@@ -1,4 +1,5 @@
-"""Pydantic-based structured output adapter.
+"""
+Pydantic-based structured output adapter.
 
 Validates and parses LLM responses into typed Python objects using Pydantic.
 """
@@ -15,7 +16,8 @@ from rlm.domain.errors import ValidationError
 
 
 def _extract_json_from_response(response: str) -> str:
-    """Extract JSON from an LLM response.
+    """
+    Extract JSON from an LLM response.
 
     Handles responses that contain JSON in code blocks or mixed with text.
     """
@@ -60,8 +62,10 @@ def _type_to_json_schema(python_type: type) -> dict[str, Any]:
         item_type = cast("type", args[0])
         return {"type": "array", "items": _type_to_json_schema(item_type)}
 
-    if origin is dict and len(args) >= 2:
-        value_type = cast("type", args[1])
+    if origin is dict and len(args) >= 2:  # noqa: PLR2004
+        # args is tuple[KeyType, ValueType] for dict - extract value type
+        args_list = list(args)
+        value_type = cast("type", args_list[1])
         return {
             "type": "object",
             "additionalProperties": _type_to_json_schema(value_type),
@@ -113,7 +117,8 @@ def _dataclass_to_schema(dc_type: type) -> dict[str, Any]:
 
 
 class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
-    """Validates LLM responses against Pydantic models or dataclasses.
+    """
+    Validates LLM responses against Pydantic models or dataclasses.
 
     Supports:
     - Pydantic BaseModel subclasses
@@ -139,7 +144,8 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
     """
 
     def validate(self, response: str, output_type: type[T], /) -> T:
-        """Validate and parse an LLM response into the target type.
+        """
+        Validate and parse an LLM response into the target type.
 
         Args:
             response: Raw LLM response (typically contains JSON)
@@ -161,10 +167,10 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
             raise ValidationError(f"Failed to parse JSON from response: {e}") from e
 
         # Handle Pydantic models (duck typing for model_validate)
-        if hasattr(output_type, "model_validate"):
+        model_validate = getattr(output_type, "model_validate", None)
+        if model_validate is not None:
             try:
-                model_validate_method = output_type.model_validate
-                validated_result = model_validate_method(data)
+                validated_result = model_validate(data)
                 return cast("T", validated_result)
             except Exception as e:
                 raise ValidationError(f"Pydantic validation failed: {e}") from e
@@ -174,16 +180,14 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
             if not isinstance(output_type, type):
                 raise ValidationError("Expected a dataclass type, not an instance")
             try:
-                dataclass_instance = output_type(**data)
-                return cast("T", dataclass_instance)
+                return output_type(**data)  # type: ignore[return-value]
             except Exception as e:
                 raise ValidationError(f"Dataclass instantiation failed: {e}") from e
 
         # Handle simple types
         if output_type in (str, int, float, bool):
             try:
-                converted_value = output_type(data)  # type: ignore[call-arg]
-                return cast("T", converted_value)
+                return output_type(data)  # type: ignore[call-arg,return-value]
             except Exception as e:
                 raise ValidationError(f"Type conversion failed: {e}") from e
 
@@ -194,7 +198,8 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
         raise ValidationError(f"Cannot validate response to type {output_type.__name__}")
 
     def get_schema(self, output_type: type[T], /) -> dict[str, Any]:
-        """Get the JSON schema for an output type.
+        """
+        Get the JSON schema for an output type.
 
         This schema can be included in the system prompt to guide LLM output.
         """

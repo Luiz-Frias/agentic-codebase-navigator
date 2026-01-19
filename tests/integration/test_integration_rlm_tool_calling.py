@@ -1,4 +1,5 @@
-"""Integration tests for RLM tool calling mode.
+"""
+Integration tests for RLM tool calling mode.
 
 Tests the full stack: RLM facade → run_completion use case → orchestrator → MockLLM
 """
@@ -20,7 +21,8 @@ def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolC
 
 
 def get_weather(city: str, unit: str = "celsius") -> str:
-    """Get the current weather for a city.
+    """
+    Get the current weather for a city.
 
     Args:
         city: The city name
@@ -36,7 +38,8 @@ def get_weather(city: str, unit: str = "celsius") -> str:
 
 
 def calculate(operation: str, a: float, b: float) -> float:
-    """Perform a mathematical operation.
+    """
+    Perform a mathematical operation.
 
     Args:
         operation: The operation (add, subtract, multiply, divide)

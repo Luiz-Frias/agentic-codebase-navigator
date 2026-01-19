@@ -1,4 +1,5 @@
-"""Infrastructure logging for RLM internals.
+"""
+Infrastructure logging for RLM internals.
 
 This module provides observability into infrastructure-level events (cleanup failures,
 resource lifecycle issues) separate from domain-level logging (LoggerPort for iterations,
@@ -86,7 +87,8 @@ def warn_cleanup_failure(
     *,
     context: dict[str, object] | None = None,
 ) -> None:
-    """Log a cleanup boundary failure with full exception context.
+    """
+    Log a cleanup boundary failure with full exception context.
 
     This function is designed for best-effort cleanup code where exceptions
     must be suppressed but visibility is still needed for debugging and
@@ -120,7 +122,8 @@ def warn_cleanup_failure(
 
 
 def get_infrastructure_logger() -> loguru.Logger:
-    """Get the infrastructure logger for advanced use cases.
+    """
+    Get the infrastructure logger for advanced use cases.
 
     Most code should use warn_cleanup_failure() directly. This function
     is provided for cases where more control is needed.

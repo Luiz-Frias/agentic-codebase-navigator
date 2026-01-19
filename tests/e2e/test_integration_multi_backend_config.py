@@ -8,7 +8,8 @@ from rlm.application.config import EnvironmentConfig, LLMConfig, RLMConfig
 
 @pytest.mark.e2e
 def test_create_rlm_from_config_registers_other_llms_and_env_can_route_by_model() -> None:
-    """Integration: config -> registries -> RLM facade -> broker -> local env.
+    """
+    Integration: config -> registries -> RLM facade -> broker -> local env.
 
     Root LLM emits a code block that calls `llm_query(..., model=<other>)`. The
     nested call should route to the configured `other_llms` entry.

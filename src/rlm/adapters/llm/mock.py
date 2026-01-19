@@ -13,14 +13,15 @@ from rlm.domain.models import (
     ModelUsageSummary,
     UsageSummary,
 )
-from rlm.domain.types import Prompt
 
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolCallRequest
+    from rlm.domain.types import Prompt
 
 
 def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
-    """Deterministically stringify a prompt for mock responses.
+    """
+    Deterministically stringify a prompt for mock responses.
 
     Avoids depending on provider-specific message formats while keeping behavior
     stable across test runs.
@@ -41,10 +42,7 @@ def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
                     text = repr(prompt)
         case dict():
             # Common legacy shape: {"prompt": "..."} or {"messages": [...]}
-            if "prompt" in prompt:
-                text = str(prompt.get("prompt"))
-            else:
-                text = repr(prompt)
+            text = str(prompt.get("prompt")) if "prompt" in prompt else repr(prompt)
         case _:
             text = repr(prompt)
 
@@ -53,7 +51,8 @@ def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
 
 
 def _estimate_input_tokens(prompt: Prompt, /) -> int:
-    """A tiny, deterministic token estimate for tests.
+    """
+    A tiny, deterministic token estimate for tests.
 
     We intentionally avoid any external tokenizer dependency.
     """
@@ -68,7 +67,8 @@ def _estimate_output_tokens(text: str, /) -> int:
 
 @dataclass
 class MockLLMAdapter(BaseLLMAdapter):
-    """Deterministic, dependency-free `LLMPort` implementation for tests/examples.
+    """
+    Deterministic, dependency-free `LLMPort` implementation for tests/examples.
 
     Behavior:
     - If `script` is provided, each call pops one item:
@@ -212,7 +212,8 @@ class MockLLMAdapter(BaseLLMAdapter):
     # ---------------------------------------------------------------------
 
     def _next_script_item(self, prompt: Prompt, /) -> str | dict[str, Any]:
-        """Get the next scripted response item.
+        """
+        Get the next scripted response item.
 
         Returns:
             - str: plain text response

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from rlm.domain.errors import BrokerError
+from rlm.domain.errors import BrokerError, ValidationError
+from rlm.domain.models.type_mapping import TypeMapper
 from rlm.domain.policies.timeouts import DEFAULT_BROKER_CLIENT_TIMEOUT_S
 from rlm.infrastructure.comms.codec import DEFAULT_MAX_MESSAGE_BYTES, request_response
 from rlm.infrastructure.comms.messages import WireRequest, WireResponse, WireResult
@@ -13,30 +14,42 @@ if TYPE_CHECKING:
     from rlm.domain.types import Prompt
 
 
+# =============================================================================
+# Exception → Safe Error Message Mapping (using domain TypeMapper)
+# =============================================================================
+#
+# TypeMapper provides declarative type dispatch, replacing a long match/case
+# with a registered handler per exception type. The default fallback handles
+# unknown exceptions safely.
+#
+_exception_message_mapper: TypeMapper[BaseException, str] = (
+    TypeMapper[BaseException, str]()
+    .register(json.JSONDecodeError, lambda _: "Invalid JSON payload")
+    .register(TimeoutError, lambda _: "Request timed out")
+    .register(ConnectionError, lambda _: "Connection error")
+    .register(OSError, lambda _: "Connection error")  # socket-level failures
+    .register(ValidationError, str)  # domain validation errors; keep message
+    .register(ValueError, str)  # legacy validation; keep message
+    .register(TypeError, str)  # legacy validation; keep message
+    .default(lambda _: "Internal broker error")
+)
+
+
 def _safe_error_message(exc: BaseException, /) -> str:
-    """Convert internal exceptions into a client-safe error string.
+    """
+    Convert internal exceptions into a client-safe error string.
 
     Important: do not leak stack traces or repr() of large/sensitive payloads.
+    Uses TypeMapper for declarative exception → message dispatch.
     """
-    match exc:
-        case json.JSONDecodeError():
-            return "Invalid JSON payload"
-        case TimeoutError():
-            return "Request timed out"
-        case ConnectionError():
-            return "Connection error"
-        case OSError():
-            # Includes socket-level failures not covered by the more specific cases above.
-            return "Connection error"
-        case ValueError() | TypeError():
-            # These are expected validation errors; keep the message.
-            return str(exc)
-        case _:
-            return "Internal broker error"
+    return _exception_message_mapper.map(exc)
 
 
-def try_parse_request(message: dict[str, Any], /) -> tuple[WireRequest | None, WireResponse | None]:
-    """Parse a decoded JSON request into a WireRequest, or produce a safe WireResponse error.
+def try_parse_request(
+    message: dict[str, object], /
+) -> tuple[WireRequest | None, WireResponse | None]:
+    """
+    Parse a decoded JSON request into a WireRequest, or produce a safe WireResponse error.
 
     This is intended for broker servers to avoid crashing on malformed client payloads.
     """
@@ -48,7 +61,7 @@ def try_parse_request(message: dict[str, Any], /) -> tuple[WireRequest | None, W
         return None, WireResponse(correlation_id=cid, error=_safe_error_message(exc), results=None)
 
 
-def parse_response(message: dict[str, Any], /) -> WireResponse:
+def parse_response(message: dict[str, object], /) -> WireResponse:
     """Parse a decoded JSON response into a WireResponse (strict)."""
     return WireResponse.from_dict(message)
 
@@ -61,7 +74,8 @@ def send_request(
     timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> WireResponse:
-    """Client helper: send a WireRequest and parse the WireResponse.
+    """
+    Client helper: send a WireRequest and parse the WireResponse.
 
     Raises:
         BrokerError: if the server responds with a request-level error.
@@ -96,7 +110,8 @@ def request_completion(
     timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> ChatCompletion:
-    """Convenience client: request a single completion and return the ChatCompletion.
+    """
+    Convenience client: request a single completion and return the ChatCompletion.
 
     Raises:
         BrokerError: for request-level errors or per-item errors.
@@ -130,7 +145,8 @@ def request_completions_batched(
     timeout_s: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> list[WireResult]:
-    """Convenience client: request a batched completion.
+    """
+    Convenience client: request a batched completion.
 
     Returns:
         A per-prompt list of WireResult, preserving ordering.

@@ -1,4 +1,5 @@
-"""Public API layer (hexagonal entrypoints).
+"""
+Public API layer (hexagonal entrypoints).
 
 This will expose the stable user-facing surface (Python API, optional CLI).
 """

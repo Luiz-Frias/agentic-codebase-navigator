@@ -17,7 +17,8 @@ from rlm.infrastructure.comms.protocol import request_completions_batched
 
 @dataclass
 class _BarrierAsyncLLM(LLMPort):
-    """Async LLM that deadlocks if called sequentially in a batched context.
+    """
+    Async LLM that deadlocks if called sequentially in a batched context.
 
     Each `acomplete()` waits until all expected calls have started; this forces the
     broker to use real concurrency for batched requests.

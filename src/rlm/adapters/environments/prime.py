@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rlm.adapters.base import BaseEnvironmentAdapter
-from rlm.domain.models import ReplResult
-from rlm.domain.types import ContextPayload
+
+if TYPE_CHECKING:
+    from rlm.domain.models import ReplResult
+    from rlm.domain.types import ContextPayload
 
 
 class PrimeEnvironmentAdapter(BaseEnvironmentAdapter):
-    """Placeholder adapter for the (future) "prime" environment.
+    """
+    Placeholder adapter for the (future) "prime" environment.
 
     Phase 05:
     - We register a concrete adapter so configuration/selection can be validated.

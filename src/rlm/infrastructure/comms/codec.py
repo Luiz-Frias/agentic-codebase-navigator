@@ -8,7 +8,8 @@ from typing import Any
 from rlm.domain.policies.timeouts import DEFAULT_BROKER_CLIENT_TIMEOUT_S
 
 DEFAULT_MAX_MESSAGE_BYTES = 10_000_000  # 10MB safety cap
-_FRAME_LEN_STRUCT = struct.Struct(">I")
+_FRAME_LEN_STRUCT = struct.Struct(">I")  # 4-byte big-endian unsigned int
+_FRAME_LEN_SIZE = _FRAME_LEN_STRUCT.size  # 4 bytes
 _JSON_ENCODER = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
 
 
@@ -35,7 +36,8 @@ def recv_frame(
     *,
     max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> dict[str, Any] | None:
-    """Receive a single length-prefixed JSON object from a socket.
+    """
+    Receive a single length-prefixed JSON object from a socket.
 
     Returns:
         - dict: parsed JSON object
@@ -43,8 +45,8 @@ def recv_frame(
 
     """
     raw_len = bytearray()
-    while len(raw_len) < 4:
-        chunk = sock.recv(4 - len(raw_len))
+    while len(raw_len) < _FRAME_LEN_SIZE:
+        chunk = sock.recv(_FRAME_LEN_SIZE - len(raw_len))
         if not chunk:
             # Connection closed before we received a full length prefix.
             return None

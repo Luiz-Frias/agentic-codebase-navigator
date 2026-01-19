@@ -9,7 +9,8 @@ from rlm.infrastructure.comms.codec import recv_frame
 
 
 class _FragmentingSocket:
-    """Minimal socket-like object that returns data in pre-chunked fragments.
+    """
+    Minimal socket-like object that returns data in pre-chunked fragments.
 
     This deterministically simulates TCP fragmentation where `recv(n)` may return
     fewer than `n` bytes, including for the 4-byte length prefix.

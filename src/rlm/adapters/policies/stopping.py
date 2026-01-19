@@ -1,4 +1,5 @@
-"""Default stopping policy implementation.
+"""
+Default stopping policy implementation.
 
 Provides basic max_iterations enforcement without custom stopping criteria.
 External apps can implement StoppingPolicy to add EIG-gated stopping,
@@ -16,7 +17,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class DefaultStoppingPolicy:
-    """Default stopping policy that enforces max_iterations limit.
+    """
+    Default stopping policy that enforces max_iterations limit.
 
     This is the default behavior when no custom StoppingPolicy is provided.
     It simply checks if the current iteration exceeds max_iterations.
@@ -38,7 +40,8 @@ class DefaultStoppingPolicy:
     """
 
     def should_stop(self, context: dict[str, Any]) -> bool:
-        """Return True if iteration >= max_iterations.
+        """
+        Return True if iteration >= max_iterations.
 
         Args:
             context: Orchestrator state dict with 'iteration' and 'max_iterations' keys.
@@ -56,7 +59,8 @@ class DefaultStoppingPolicy:
         _context: dict[str, Any],
         _result: ChatCompletion,
     ) -> None:
-        """No-op callback for default policy.
+        """
+        No-op callback for default policy.
 
         Custom implementations can use this to track state, update beliefs,
         compute metrics, etc. The default policy doesn't need any state.

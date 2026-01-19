@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from rlm.adapters.broker.tcp import TcpBrokerAdapter
@@ -16,6 +15,8 @@ from rlm.application.use_cases.run_completion import (
 from rlm.domain.errors import ValidationError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rlm.application.config import EnvironmentName
     from rlm.application.use_cases.run_completion import EnvironmentFactory
     from rlm.domain.agent_ports import (
@@ -35,7 +36,8 @@ __all__ = ["RLM"]
 
 
 class RLM:
-    """Public RLM facade (Phase 1).
+    """
+    Public RLM facade (Phase 1).
 
     This facade is intentionally small while we migrate from the upstream legacy
     implementation. In Phase 2 it delegates to the domain orchestrator via the
@@ -228,7 +230,8 @@ class RLM:
 
 
 def _default_tcp_broker_factory(llm: LLMPort, /) -> BrokerPort:
-    """Default broker: TCP broker speaking the infra wire protocol.
+    """
+    Default broker: TCP broker speaking the infra wire protocol.
 
     This is used so environments can call `llm_query()` during code execution.
     """

@@ -287,7 +287,7 @@ def test_extract_tool_calls_openai_from_dict() -> None:
         ],
     }
 
-    result = extract_tool_calls_openai(response)
+    result = extract_tool_calls_openai(response).unwrap()
 
     assert result is not None
     assert len(result) == 1
@@ -298,12 +298,12 @@ def test_extract_tool_calls_openai_from_dict() -> None:
 
 @pytest.mark.unit
 def test_extract_tool_calls_openai_returns_none_when_no_tools() -> None:
-    """extract_tool_calls_openai should return None when no tool calls."""
+    """extract_tool_calls_openai should return Ok(None) when no tool calls."""
     response = {"choices": [{"message": {"content": "Hello!"}}]}
-    assert extract_tool_calls_openai(response) is None
+    assert extract_tool_calls_openai(response).unwrap() is None
 
     response2 = {"choices": [{"message": {"tool_calls": []}}]}
-    assert extract_tool_calls_openai(response2) is None
+    assert extract_tool_calls_openai(response2).unwrap() is None
 
 
 @pytest.mark.unit
@@ -351,7 +351,7 @@ def test_extract_tool_calls_gemini_from_dict() -> None:
         ],
     }
 
-    result = extract_tool_calls_gemini(response)
+    result = extract_tool_calls_gemini(response).unwrap()
 
     assert result is not None
     assert len(result) == 1

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from rlm.domain.errors import ValidationError
 from rlm.domain.models import ChatCompletion
 from rlm.domain.models.usage import UsageSummary
 from rlm.infrastructure.comms.messages import WireRequest, WireResponse, WireResult
@@ -26,25 +27,26 @@ def test_wire_request_prompt_variants_and_is_batched() -> None:
 
 @pytest.mark.unit
 def test_wire_request_validations() -> None:
-    with pytest.raises(TypeError, match="correlation_id must be a string"):
+    # All validation errors now use domain ValidationError (unified error type)
+    with pytest.raises(ValidationError, match="correlation_id must be a string"):
         WireRequest.from_dict({"prompt": "hi", "correlation_id": 1})
 
-    with pytest.raises(TypeError, match="model must be a string"):
+    with pytest.raises(ValidationError, match="model must be a string"):
         WireRequest.from_dict({"prompt": "hi", "model": 1})
 
-    with pytest.raises(ValueError, match="only one of 'prompt' or 'prompts'"):
+    with pytest.raises(ValidationError, match="only one of 'prompt' or 'prompts'"):
         WireRequest.from_dict({"prompt": "hi", "prompts": ["x"]})
 
-    with pytest.raises(TypeError, match="prompt must be a valid Prompt"):
+    with pytest.raises(ValidationError, match="prompt must be a valid Prompt"):
         WireRequest.from_dict({"prompt": 123})  # type: ignore[arg-type]
 
-    with pytest.raises(TypeError, match="prompts must be a list"):
+    with pytest.raises(ValidationError, match="prompts must be a list"):
         WireRequest.from_dict({"prompts": "nope"})  # type: ignore[arg-type]
 
-    with pytest.raises(ValueError, match="must not be empty"):
+    with pytest.raises(ValidationError, match="must not be empty"):
         WireRequest.from_dict({"prompts": []})
 
-    with pytest.raises(TypeError, match=r"prompts\[0\] must be a valid Prompt"):
+    with pytest.raises(ValidationError, match="each item must be a valid Prompt"):
         WireRequest.from_dict({"prompts": [123]})  # type: ignore[list-item]
 
 
@@ -53,19 +55,20 @@ def test_wire_result_success_property_and_validations() -> None:
     assert WireResult(error=None, chat_completion=None).success is True
     assert WireResult(error="x", chat_completion=None).success is False
 
-    with pytest.raises(ValueError, match="Unknown keys"):
+    # All validation errors now use domain ValidationError (unified error type)
+    with pytest.raises(ValidationError, match="Unknown keys"):
         WireResult.from_dict({"nope": 1})
 
-    with pytest.raises(TypeError, match="error must be a string"):
+    with pytest.raises(ValidationError, match="error must be a string"):
         WireResult.from_dict({"error": 1})
 
-    with pytest.raises(ValueError, match="either 'error' or 'chat_completion'"):
+    with pytest.raises(ValidationError, match="either 'error' or 'chat_completion'"):
         WireResult.from_dict({"error": None, "chat_completion": None})
 
-    with pytest.raises(ValueError, match="cannot include both"):
+    with pytest.raises(ValidationError, match="cannot include both"):
         WireResult.from_dict({"error": "x", "chat_completion": {"root_model": "m"}})
 
-    with pytest.raises(TypeError, match="chat_completion must be a dict"):
+    with pytest.raises(ValidationError, match="chat_completion must be a dict"):
         WireResult.from_dict({"chat_completion": "nope"})  # type: ignore[arg-type]
 
     cc = ChatCompletion(
@@ -85,17 +88,18 @@ def test_wire_response_success_property_and_validations() -> None:
     assert WireResponse(error=None, results=None).success is True
     assert WireResponse(error="x", results=None).success is False
 
-    with pytest.raises(ValueError, match="Unknown keys"):
+    # All validation errors now use domain ValidationError (unified error type)
+    with pytest.raises(ValidationError, match="Unknown keys"):
         WireResponse.from_dict({"nope": 1})
 
-    with pytest.raises(TypeError, match="correlation_id must be a string"):
+    with pytest.raises(ValidationError, match="correlation_id must be a string"):
         WireResponse.from_dict({"correlation_id": 1, "error": "x"})
 
-    with pytest.raises(TypeError, match="error must be a string"):
+    with pytest.raises(ValidationError, match="error must be a string"):
         WireResponse.from_dict({"error": 1})
 
-    with pytest.raises(ValueError, match="cannot include both"):
+    with pytest.raises(ValidationError, match="cannot include both"):
         WireResponse.from_dict({"error": "x", "results": []})
 
-    with pytest.raises(TypeError, match="results must be a list"):
+    with pytest.raises(ValidationError, match="results must be a list"):
         WireResponse.from_dict({"results": "nope"})  # type: ignore[arg-type]

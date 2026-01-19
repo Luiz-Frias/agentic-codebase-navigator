@@ -8,12 +8,9 @@ from typing import TYPE_CHECKING, Protocol, overload
 
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion, RunMetadata
-from rlm.domain.models.llm_request import ToolChoice
 from rlm.domain.models.usage import merge_usage_summaries
-from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
 from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
 from rlm.domain.services.rlm_orchestrator import AgentMode, RLMOrchestrator
-from rlm.domain.types import Prompt
 
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import (
@@ -22,10 +19,14 @@ if TYPE_CHECKING:
         StoppingPolicy,
         ToolRegistryPort,
     )
+    from rlm.domain.models.llm_request import ToolChoice
+    from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
+    from rlm.domain.types import Prompt
 
 
 class EnvironmentFactory(Protocol):
-    """Builds an EnvironmentPort for a single run.
+    """
+    Builds an EnvironmentPort for a single run.
 
     The factory is responsible for binding any broker address into the environment
     implementation (e.g., legacy LocalREPL/DockerREPL need an LMHandler address for
@@ -50,6 +51,32 @@ class EnvironmentFactory(Protocol):
     def build(self, *args: object) -> EnvironmentPort: ...
 
 
+# Factory signature shapes for backwards-compatible environment building.
+# These represent the expected number of positional parameters for different factory versions:
+# - FULL_SIGNATURE (3): build(broker, broker_address, correlation_id)
+# - PARTIAL_SIGNATURE (2): build(broker, broker_address)
+# - MINIMAL_SIGNATURE (1): build(broker_address)
+_FULL_SIGNATURE_PARAMS = 3
+_PARTIAL_SIGNATURE_PARAMS = 2
+
+
+def _try_build_with_fallback(
+    factory: EnvironmentFactory,
+    broker: BrokerPort,
+    broker_address: tuple[str, int],
+    correlation_id: str | None,
+) -> EnvironmentPort:
+    """Try factory call shapes in order from richest to minimal."""
+    try:
+        return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
+    except TypeError:
+        pass
+    try:
+        return factory.build(broker, broker_address)  # type: ignore[misc]
+    except TypeError:
+        return factory.build(broker_address)  # type: ignore[misc]
+
+
 def _build_environment(
     factory: EnvironmentFactory,
     broker: BrokerPort,
@@ -57,11 +84,13 @@ def _build_environment(
     correlation_id: str | None,
     /,
 ) -> EnvironmentPort:
-    """Call `EnvironmentFactory.build()` in a backwards-compatible way.
+    """
+    Call `EnvironmentFactory.build()` in a backwards-compatible way.
 
     During the migration, some factories expose:
     - `build(broker_address)`
     - `build(broker, broker_address)`
+    - `build(broker, broker_address, correlation_id)`
 
     We select the call shape via signature introspection so we don't accidentally
     swallow `TypeError` raised *inside* the factory.
@@ -69,38 +98,41 @@ def _build_environment(
     try:
         sig = inspect.signature(factory.build)
     except (TypeError, ValueError):
-        # Fallback: try the richest call shape first.
-        try:
-            return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
-        except TypeError:
-            try:
-                return factory.build(broker, broker_address)  # type: ignore[misc]
-            except TypeError:
-                return factory.build(broker_address)  # type: ignore[misc]
+        # Fallback: try call shapes in order from richest to minimal.
+        return _try_build_with_fallback(factory, broker, broker_address, correlation_id)
 
     params = list(sig.parameters.values())
     has_var_positional = any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in params)
-    required_positional = [
-        p
-        for p in params
-        if p.default is inspect.Parameter.empty
-        and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-    ]
 
-    # If the factory is varargs-based (our default migration factory is), prefer
-    # passing correlation_id as an additional arg for end-to-end tracing.
-    if has_var_positional:
+    # inspect.Parameter.default is typed as Any by stdlib - use helper to avoid Any propagation
+    empty_sentinel: object = inspect.Parameter.empty
+
+    def _has_no_default(p: inspect.Parameter) -> bool:
+        default_val: object = p.default  # pyright: ignore[reportAny] - stdlib boundary
+        return default_val is empty_sentinel
+
+    required_count = sum(
+        1
+        for p in params
+        if _has_no_default(p)
+        and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    )
+
+    # Select call shape based on signature analysis.
+    # Varargs or 3+ params: use full signature with correlation_id for tracing.
+    # 2 params: use broker + address.
+    # Otherwise: minimal with just address.
+    if has_var_positional or required_count >= _FULL_SIGNATURE_PARAMS:
         return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
-    if len(required_positional) >= 3:
-        return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
-    if len(required_positional) >= 2:
+    if required_count >= _PARTIAL_SIGNATURE_PARAMS:
         return factory.build(broker, broker_address)  # type: ignore[misc]
     return factory.build(broker_address)  # type: ignore[misc]
 
 
 @dataclass(frozen=True, slots=True)
 class RunCompletionDeps:
-    """Dependencies for running a completion.
+    """
+    Dependencies for running a completion.
 
     Notes:
     - `broker` is started/stopped per run.
@@ -145,11 +177,13 @@ class RunCompletionRequest:
 def _infer_environment_type(env: EnvironmentPort, /) -> str:
     # Best-effort environment type inference without importing adapters/legacy.
     env_type: str = "unknown"
-    declared = getattr(env, "environment_type", None)
+    # getattr returns Any at SDK boundary - narrow with isinstance before use
+    declared: object = getattr(env, "environment_type", None)
     if isinstance(declared, str) and declared.strip():
         env_type = declared
     else:
-        inner = getattr(env, "_env", None)
+        inner: object = getattr(env, "_env", None)
+        # Narrow inner to get its type name safely
         inner_name = type(inner).__name__ if inner is not None else type(env).__name__
         if "DockerREPL" in inner_name:
             env_type = "docker"
@@ -159,7 +193,8 @@ def _infer_environment_type(env: EnvironmentPort, /) -> str:
 
 
 def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) -> ChatCompletion:
-    """Use case: run an RLM completion using the domain orchestrator.
+    """
+    Use case: run an RLM completion using the domain orchestrator.
 
     This function:
     - starts the broker (for env `llm_query()` subcalls)
@@ -250,7 +285,8 @@ async def arun_completion(
     *,
     deps: RunCompletionDeps,
 ) -> ChatCompletion:
-    """Async use case: run an RLM completion using the domain orchestrator.
+    """
+    Async use case: run an RLM completion using the domain orchestrator.
 
     Notes:
     - `BrokerPort` / `EnvironmentPort` are sync; we execute their blocking methods via

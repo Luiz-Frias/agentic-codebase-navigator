@@ -14,7 +14,8 @@ from rlm.api import create_rlm
 def test_jsonl_logger_emits_schema_versioned_metadata_and_iteration(
     tmp_path: Path,
 ) -> None:
-    """Boundary: public API -> use case -> logger emits schema-versioned JSONL lines.
+    """
+    Boundary: public API -> use case -> logger emits schema-versioned JSONL lines.
 
     This validates the *artifact contract* a PyPI/uv consumer relies on.
     """

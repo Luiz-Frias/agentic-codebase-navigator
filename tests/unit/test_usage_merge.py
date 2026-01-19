@@ -64,7 +64,8 @@ def test_merge_usage_summaries_empty_iterable_returns_empty_summary() -> None:
 def test_merge_usage_summaries_constructs_at_most_one_total_per_distinct_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Performance guardrail (algorithmic):
+    """
+    Performance guardrail (algorithmic):
 
     `merge_usage_summaries()` should be linear in the number of distinct model keys
     (not in the number of input summaries).
@@ -104,7 +105,8 @@ def test_merge_usage_summaries_constructs_at_most_one_total_per_distinct_model(
 def test_merge_usage_summaries_construction_count_scales_with_distinct_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Performance guardrail (algorithmic):
+    """
+    Performance guardrail (algorithmic):
 
     When all models are distinct, the merge should construct one total per model,
     not O(n^2) totals via repeated deep-copy merges.

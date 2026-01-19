@@ -81,7 +81,8 @@ def test_docker_exec_script_passes_correlation_id_to_proxy_requests() -> None:
 
 @pytest.mark.unit
 def test_docker_exec_script_llm_query_preserves_empty_string_response() -> None:
-    """Regression: `llm_query()` must not treat an empty-string LLM response as an error.
+    """
+    Regression: `llm_query()` must not treat an empty-string LLM response as an error.
 
     The container-side script should explicitly branch on `error` rather than
     using `d.get("response") or ...`, because `""` is falsy.

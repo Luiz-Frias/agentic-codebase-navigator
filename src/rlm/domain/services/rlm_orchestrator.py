@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import time
-from dataclasses import asdict, dataclass, is_dataclass
-from datetime import date, datetime
-from decimal import Decimal
-from enum import Enum
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from rlm.domain.agent_ports import (
@@ -21,26 +17,32 @@ from rlm.domain.agent_ports import (
 )
 from rlm.domain.errors import ToolNotFoundError
 from rlm.domain.models.completion import ChatCompletion
-from rlm.domain.models.iteration import CodeBlock, Iteration
 from rlm.domain.models.llm_request import LLMRequest, ToolChoice
-from rlm.domain.models.query_metadata import QueryMetadata
-from rlm.domain.models.usage import ModelUsageSummary, UsageSummary
-from rlm.domain.ports import EnvironmentPort, LLMPort, LoggerPort
-from rlm.domain.services.parsing import (
-    afind_final_answer,
-    find_code_blocks,
-    find_final_answer,
-    format_iteration,
+from rlm.domain.models.orchestration_types import (
+    CodeModeContext,
+    CodeModeState,
+    ToolsModeContext,
+    ToolsModeState,
 )
+from rlm.domain.models.usage import ModelUsageSummary, UsageSummary
+from rlm.domain.services.code_mode_event_source import (
+    AsyncCodeModeEventSource,
+    CodeModeEventSource,
+)
+from rlm.domain.services.code_mode_machine import build_code_mode_machine
 from rlm.domain.services.prompts import (
     RLM_SYSTEM_PROMPT,
-    build_rlm_system_prompt,
-    build_user_prompt,
 )
-from rlm.domain.types import Prompt
+from rlm.domain.services.tools_mode_event_source import (
+    AsyncToolsModeEventSource,
+    ToolsModeEventSource,
+)
+from rlm.domain.services.tools_mode_machine import build_tools_mode_machine
 
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolDefinition, ToolRegistryPort
+    from rlm.domain.ports import EnvironmentPort, LLMPort, LoggerPort
+    from rlm.domain.types import Prompt
 
 # Backward compatibility alias
 AgentMode = AgentModeName
@@ -67,7 +69,8 @@ def _add_usage_totals(
 
 
 def _clone_usage_totals(totals: dict[str, ModelUsageSummary], /) -> UsageSummary:
-    """Snapshot totals into a standalone UsageSummary.
+    """
+    Snapshot totals into a standalone UsageSummary.
 
     Notes:
     - Clones ModelUsageSummary objects to avoid aliasing (callers may mutate).
@@ -86,36 +89,14 @@ def _clone_usage_totals(totals: dict[str, ModelUsageSummary], /) -> UsageSummary
     )
 
 
-def _tool_json_default(value: Any, /) -> Any:
-    """Coerce tool results into JSON-friendly structures or raise TypeError."""
-    if is_dataclass(value) and not isinstance(value, type):
-        return asdict(value)
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, set):
-        return list(value)
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
-    if isinstance(value, Decimal):
-        return str(value)
-    if isinstance(value, (bytes, bytearray, memoryview)):
-        encoded = base64.b64encode(bytes(value)).decode("ascii")
-        return {"__bytes__": encoded}
-    model_dump = getattr(value, "model_dump", None)
-    if callable(model_dump):
-        return model_dump()
-    to_dict = getattr(value, "to_dict", None)
-    if callable(to_dict):
-        return to_dict()
-    as_dict = getattr(value, "dict", None)
-    if callable(as_dict):
-        return as_dict()
-    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+# Alias for backwards compatibility - implementation moved to tool_serialization.py
+from rlm.domain.services.tool_serialization import tool_json_default as _tool_json_default
 
 
 @dataclass(slots=True, frozen=True)
 class RLMOrchestrator:
-    """Pure domain orchestrator (Phase 2).
+    """
+    Pure domain orchestrator (Phase 2).
 
     This implements the legacy iteration loop semantics using only domain ports.
     Environment/broker lifecycle is handled outside (composition root).
@@ -174,7 +155,8 @@ class RLMOrchestrator:
         history: list[dict[str, Any]] | None = None,
         last_result: ChatCompletion | None = None,
     ) -> dict[str, Any]:
-        """Build context dict for policy callbacks.
+        """
+        Build context dict for policy callbacks.
 
         This context is passed to StoppingPolicy methods and can be extended
         by external apps to track custom state (beliefs, EIG, etc.).
@@ -189,7 +171,8 @@ class RLMOrchestrator:
         }
 
     def _should_stop(self, context: dict[str, Any]) -> bool:
-        """Check if the iteration loop should stop early.
+        """
+        Check if the iteration loop should stop early.
 
         Uses the injected StoppingPolicy if available, otherwise returns False.
         """
@@ -198,7 +181,8 @@ class RLMOrchestrator:
         return self.stopping_policy.should_stop(context)
 
     def _on_iteration_complete(self, context: dict[str, Any], result: ChatCompletion) -> None:
-        """Notify policy that an iteration completed.
+        """
+        Notify policy that an iteration completed.
 
         Allows external apps to track state, update beliefs, etc.
         """
@@ -206,7 +190,8 @@ class RLMOrchestrator:
             self.stopping_policy.on_iteration_complete(context, result)
 
     def _compress_result(self, result: str, max_tokens: int | None = None) -> str:
-        """Compress a nested call result before returning to parent.
+        """
+        Compress a nested call result before returning to parent.
 
         Uses the injected ContextCompressor if available, otherwise passthrough.
         """
@@ -215,7 +200,8 @@ class RLMOrchestrator:
         return self.context_compressor.compress(result, max_tokens)
 
     def _should_orchestrate_nested(self, prompt: str, depth: int) -> bool:
-        """Check if a nested call should spawn a sub-orchestrator.
+        """
+        Check if a nested call should spawn a sub-orchestrator.
 
         Uses the injected NestedCallPolicy if available, otherwise returns False.
         """
@@ -251,7 +237,8 @@ class RLMOrchestrator:
                 )
 
     def _execute_tool_call(self, tool_call: ToolCallRequest, /) -> ToolCallResult:
-        """Execute a single tool call and return the result.
+        """
+        Execute a single tool call and return the result.
 
         Args:
             tool_call: The tool call request from the LLM.
@@ -286,7 +273,8 @@ class RLMOrchestrator:
             )
 
     async def _aexecute_tool_call(self, tool_call: ToolCallRequest, /) -> ToolCallResult:
-        """Execute a single tool call asynchronously and return the result.
+        """
+        Execute a single tool call asynchronously and return the result.
 
         Args:
             tool_call: The tool call request from the LLM.
@@ -321,15 +309,14 @@ class RLMOrchestrator:
             )
 
     def _build_tool_result_message(self, result: ToolCallResult, /) -> ToolMessage:
-        """Format a tool execution result as a conversation message.
+        """
+        Format a tool execution result as a conversation message.
 
         The content is JSON-serialized for consistent parsing by the LLM.
         """
-        payload: Any
-        if result["error"] is not None:
-            payload = {"error": result["error"]}
-        else:
-            payload = result["result"]
+        payload: Any = (
+            {"error": result["error"]} if result["error"] is not None else result["result"]
+        )
 
         try:
             content = json.dumps(payload, default=_tool_json_default)
@@ -347,7 +334,8 @@ class RLMOrchestrator:
         tool_calls: list[ToolCallRequest],
         response_text: str = "",
     ) -> dict[str, Any]:
-        """Build an assistant message containing tool calls.
+        """
+        Build an assistant message containing tool calls.
 
         This follows the OpenAI chat format for assistant messages with tool_calls.
         """
@@ -402,6 +390,310 @@ class RLMOrchestrator:
             execution_time=time_end - time_start,
             tool_calls=completion.tool_calls,
             finish_reason=finish_reason or completion.finish_reason,
+        )
+
+    def _tools_mode_completion(
+        self,
+        prompt: Prompt,
+        *,
+        tool_choice: ToolChoice | None = None,
+        depth: int = 0,
+    ) -> ChatCompletion:
+        """
+        Execute tools-mode completion using StateMachine.
+
+        This method replaces the manual iteration loop in _tool_calling_loop()
+        with a declarative state machine approach. The state machine handles:
+        - LLM calls with tool definitions
+        - Tool execution via the registry
+        - Policy-based early stopping
+        - Conversation history management
+
+        Args:
+            prompt: The user's prompt to process.
+            tool_choice: Tool selection constraint for the LLM.
+            depth: Current recursion depth (for nested orchestration).
+
+        Returns:
+            ChatCompletion with the final response and accumulated usage.
+
+        """
+        time_start = time.perf_counter()
+
+        # Build event source with orchestrator dependencies
+        assert self.tool_registry is not None  # Caller ensures this
+
+        # Create summarizer callback that wraps the orchestrator's summarization logic
+        def summarizer(
+            conversation: list[dict[str, Any]],
+            tool_definitions: list[ToolDefinition],
+            usage_totals: dict[str, ModelUsageSummary],
+        ) -> list[dict[str, Any]]:
+            return self._maybe_summarize_tool_conversation(
+                conversation,
+                tool_definitions=tool_definitions,
+                usage_totals=usage_totals,
+            )
+
+        source = ToolsModeEventSource(
+            llm=self.llm,
+            tool_registry=self.tool_registry,
+            stopping_policy=self.stopping_policy,
+            system_prompt=self.system_prompt,
+            summarizer=summarizer,
+        )
+
+        # Build context for state machine
+        ctx = ToolsModeContext(
+            prompt=prompt,
+            max_iterations=self.max_tool_iterations,
+            depth=depth,
+            tool_choice=tool_choice,
+        )
+
+        # Run state machine to completion
+        machine = build_tools_mode_machine()
+        final_state, final_ctx = machine.run(ToolsModeState.INIT, ctx, source)
+
+        # Determine finish reason based on final state and context
+        finish_reason: str | None = None
+        if final_state == ToolsModeState.DONE:
+            # Check if we hit max iterations (iteration counter exceeds limit)
+            if final_ctx.iteration >= final_ctx.max_iterations:
+                finish_reason = "max_iterations"
+            # Check if policy stopped us
+            elif final_ctx.last_response == "[Stopped by custom policy]":
+                finish_reason = "policy_stop"
+            else:
+                # Normal completion - LLM returned final answer without tool calls
+                finish_reason = "stop"
+
+        # Build final ChatCompletion from context
+        time_end = time.perf_counter()
+        return ChatCompletion(
+            root_model=self.llm.model_name,
+            prompt=prompt,
+            response=final_ctx.last_response or "",
+            usage_summary=_clone_usage_totals(final_ctx.usage_totals),
+            execution_time=time_end - time_start,
+            tool_calls=final_ctx.last_completion.tool_calls if final_ctx.last_completion else None,
+            finish_reason=finish_reason,
+        )
+
+    async def _atools_mode_completion(
+        self,
+        prompt: Prompt,
+        *,
+        tool_choice: ToolChoice | None = None,
+        depth: int = 0,
+    ) -> ChatCompletion:
+        """
+        Execute async tools-mode completion using StateMachine.arun().
+
+        This is the async counterpart to _tools_mode_completion().
+
+        Args:
+            prompt: The user's prompt to process.
+            tool_choice: Tool selection constraint for the LLM.
+            depth: Current recursion depth (for nested orchestration).
+
+        Returns:
+            ChatCompletion with the final response and accumulated usage.
+
+        """
+        time_start = time.perf_counter()
+
+        # Build async event source with orchestrator dependencies
+        assert self.tool_registry is not None  # Caller ensures this
+
+        # Create async summarizer callback that wraps the orchestrator's summarization logic
+        async def summarizer(
+            conversation: list[dict[str, Any]],
+            tool_definitions: list[ToolDefinition],
+            usage_totals: dict[str, ModelUsageSummary],
+        ) -> list[dict[str, Any]]:
+            return await self._maybe_asummarize_tool_conversation(
+                conversation,
+                tool_definitions=tool_definitions,
+                usage_totals=usage_totals,
+            )
+
+        source = AsyncToolsModeEventSource(
+            llm=self.llm,
+            tool_registry=self.tool_registry,
+            stopping_policy=self.stopping_policy,
+            system_prompt=self.system_prompt,
+            summarizer=summarizer,
+        )
+
+        # Build context for state machine
+        ctx = ToolsModeContext(
+            prompt=prompt,
+            max_iterations=self.max_tool_iterations,
+            depth=depth,
+            tool_choice=tool_choice,
+        )
+
+        # Run state machine to completion (async)
+        machine = build_tools_mode_machine()
+        final_state, final_ctx = await machine.arun(ToolsModeState.INIT, ctx, source)
+
+        # Determine finish reason based on final state and context
+        finish_reason: str | None = None
+        if final_state == ToolsModeState.DONE:
+            # Check if we hit max iterations (iteration counter exceeds limit)
+            if final_ctx.iteration >= final_ctx.max_iterations:
+                finish_reason = "max_iterations"
+            # Check if policy stopped us
+            elif final_ctx.last_response == "[Stopped by custom policy]":
+                finish_reason = "policy_stop"
+            else:
+                # Normal completion - LLM returned final answer without tool calls
+                finish_reason = "stop"
+
+        # Build final ChatCompletion from context
+        time_end = time.perf_counter()
+        return ChatCompletion(
+            root_model=self.llm.model_name,
+            prompt=prompt,
+            response=final_ctx.last_response or "",
+            usage_summary=_clone_usage_totals(final_ctx.usage_totals),
+            execution_time=time_end - time_start,
+            tool_calls=final_ctx.last_completion.tool_calls if final_ctx.last_completion else None,
+            finish_reason=finish_reason,
+        )
+
+    def _code_mode_completion(
+        self,
+        prompt: Prompt,
+        *,
+        root_prompt: str | None = None,
+        max_iterations: int = 30,
+        max_depth: int = 1,
+        depth: int = 0,
+        correlation_id: str | None = None,
+    ) -> ChatCompletion:
+        """
+        Execute code-mode completion using StateMachine.
+
+        This method replaces the manual iteration loop in completion() with
+        a declarative state machine approach. The state machine handles:
+        - LLM calls with code block detection
+        - Code execution in the environment
+        - Final answer extraction
+        - Max iteration enforcement
+
+        Args:
+            prompt: The user's prompt to process.
+            root_prompt: Optional override for the user prompt text.
+            max_iterations: Maximum number of code execution iterations.
+            max_depth: Maximum recursion depth for nested orchestration.
+            depth: Current recursion depth.
+            correlation_id: Optional correlation ID for logging.
+
+        Returns:
+            ChatCompletion with the final response and accumulated usage.
+
+        """
+        time_start = time.perf_counter()
+
+        # Build event source with orchestrator dependencies
+        source = CodeModeEventSource(
+            llm=self.llm,
+            environment=self.environment,
+            logger=self.logger,
+            system_prompt=self.system_prompt,
+        )
+
+        # Build context for state machine
+        ctx = CodeModeContext(
+            prompt=prompt,
+            root_prompt=root_prompt,
+            max_iterations=max_iterations,
+            max_depth=max_depth,
+            depth=depth,
+            correlation_id=correlation_id,
+        )
+
+        # Run state machine to completion
+        machine = build_code_mode_machine()
+        _final_state, final_ctx = machine.run(CodeModeState.INIT, ctx, source)
+
+        # Build final ChatCompletion from context
+        time_end = time.perf_counter()
+        response = (
+            final_ctx.final_answer if final_ctx.final_answer else (final_ctx.last_response or "")
+        )
+        return ChatCompletion(
+            root_model=self.llm.model_name,
+            prompt=prompt,
+            response=response,
+            usage_summary=_clone_usage_totals(final_ctx.root_usage_totals),
+            execution_time=time_end - time_start,
+        )
+
+    async def _acode_mode_completion(
+        self,
+        prompt: Prompt,
+        *,
+        root_prompt: str | None = None,
+        max_iterations: int = 30,
+        max_depth: int = 1,
+        depth: int = 0,
+        correlation_id: str | None = None,
+    ) -> ChatCompletion:
+        """
+        Execute async code-mode completion using StateMachine.arun().
+
+        This is the async counterpart to _code_mode_completion().
+
+        Args:
+            prompt: The user's prompt to process.
+            root_prompt: Optional override for the user prompt text.
+            max_iterations: Maximum number of code execution iterations.
+            max_depth: Maximum recursion depth for nested orchestration.
+            depth: Current recursion depth.
+            correlation_id: Optional correlation ID for logging.
+
+        Returns:
+            ChatCompletion with the final response and accumulated usage.
+
+        """
+        time_start = time.perf_counter()
+
+        # Build async event source with orchestrator dependencies
+        source = AsyncCodeModeEventSource(
+            llm=self.llm,
+            environment=self.environment,
+            logger=self.logger,
+            system_prompt=self.system_prompt,
+        )
+
+        # Build context for state machine
+        ctx = CodeModeContext(
+            prompt=prompt,
+            root_prompt=root_prompt,
+            max_iterations=max_iterations,
+            max_depth=max_depth,
+            depth=depth,
+            correlation_id=correlation_id,
+        )
+
+        # Run state machine to completion (async)
+        machine = build_code_mode_machine()
+        _final_state, final_ctx = await machine.arun(CodeModeState.INIT, ctx, source)
+
+        # Build final ChatCompletion from context
+        time_end = time.perf_counter()
+        response = (
+            final_ctx.final_answer if final_ctx.final_answer else (final_ctx.last_response or "")
+        )
+        return ChatCompletion(
+            root_model=self.llm.model_name,
+            prompt=prompt,
+            response=response,
+            usage_summary=_clone_usage_totals(final_ctx.root_usage_totals),
+            execution_time=time_end - time_start,
         )
 
     def _context_window_tokens(self) -> int | None:
@@ -571,7 +863,8 @@ class RLMOrchestrator:
         tool_choice: ToolChoice | None,
         depth: int = 0,
     ) -> ChatCompletion:
-        """Execute the multi-turn tool calling loop (sync).
+        """
+        Execute the multi-turn tool calling loop (sync).
 
         The loop continues until:
         - The LLM returns a response without tool_calls (final answer)
@@ -611,7 +904,7 @@ class RLMOrchestrator:
             # Check custom stopping policy
             if self._should_stop(policy_context):
                 # Custom early stop - return current state
-                final_completion = ChatCompletion(
+                return ChatCompletion(
                     root_model=self.llm.model_name,
                     prompt=prompt,
                     response="[Stopped by custom policy]",
@@ -619,7 +912,6 @@ class RLMOrchestrator:
                     execution_time=time.perf_counter() - time_start,
                     finish_reason="policy_stop",
                 )
-                return final_completion
 
             conversation = self._maybe_summarize_tool_conversation(
                 conversation,
@@ -698,7 +990,8 @@ class RLMOrchestrator:
         tool_choice: ToolChoice | None,
         depth: int = 0,
     ) -> ChatCompletion:
-        """Execute the multi-turn tool calling loop (async).
+        """
+        Execute the multi-turn tool calling loop (async).
 
         Same logic as _tool_calling_loop but uses async LLM calls and tool execution.
         Includes StoppingPolicy integration for custom early termination.
@@ -725,7 +1018,7 @@ class RLMOrchestrator:
             # Check custom stopping policy
             if self._should_stop(policy_context):
                 # Custom early stop - return current state
-                final_completion = ChatCompletion(
+                return ChatCompletion(
                     root_model=self.llm.model_name,
                     prompt=prompt,
                     response="[Stopped by custom policy]",
@@ -733,7 +1026,6 @@ class RLMOrchestrator:
                     execution_time=time.perf_counter() - time_start,
                     finish_reason="policy_stop",
                 )
-                return final_completion
 
             conversation = await self._maybe_asummarize_tool_conversation(
                 conversation,
@@ -818,137 +1110,23 @@ class RLMOrchestrator:
         correlation_id: str | None = None,
         tool_choice: ToolChoice | None = None,
     ) -> ChatCompletion:
-        time_start = time.perf_counter()
-
         # Validate agent mode configuration
         if self.agent_mode == "tools":
             self._assert_tool_mode_supported()
-            tool_definitions = self._build_tool_definitions()
-            usage_totals: dict[str, ModelUsageSummary] = {}
-            return self._tool_calling_loop(
+            return self._tools_mode_completion(
                 prompt,
-                tool_definitions=tool_definitions,
-                usage_totals=usage_totals,
                 tool_choice=tool_choice,
+                depth=depth,
             )
 
-        # Accumulate orchestrator (root) usage incrementally to avoid repeatedly
-        # re-merging a growing list (can be quadratic in pathological cases).
-        root_usage_totals: dict[str, ModelUsageSummary] = {}
-
-        # Only compute per-iteration and cumulative usage snapshots when a logger
-        # is present (they are emitted only through logger events).
-        cumulative_usage_totals: dict[str, ModelUsageSummary] | None = (
-            {} if self.logger is not None else None
-        )
-
-        # Fallback: if we're at max depth, treat as a plain LM call.
-        if depth >= max_depth:
-            cc = self.llm.complete(LLMRequest(prompt=prompt))
-            _add_usage_totals(root_usage_totals, cc.usage_summary)
-            final_answer = find_final_answer(cc.response)
-            response = final_answer if final_answer is not None else cc.response
-            time_end = time.perf_counter()
-            return ChatCompletion(
-                root_model=cc.root_model,
-                prompt=prompt,
-                response=response,
-                usage_summary=_clone_usage_totals(root_usage_totals),
-                execution_time=time_end - time_start,
-            )
-
-        # Load the prompt as "context" into the environment (legacy-compatible semantics).
-        self.environment.load_context(prompt)  # type: ignore[arg-type]
-
-        # Build initial message history (system + metadata hint).
-        query_metadata = QueryMetadata.from_context(prompt)
-        message_history: list[dict[str, str]] = build_rlm_system_prompt(
-            self.system_prompt,
-            query_metadata,
-        )
-
-        for i in range(max_iterations):
-            iter_start = time.perf_counter()
-
-            current_prompt: Prompt = message_history + [
-                build_user_prompt(root_prompt=root_prompt, iteration=i),
-            ]
-
-            llm_cc = self.llm.complete(LLMRequest(prompt=current_prompt))
-            _add_usage_totals(root_usage_totals, llm_cc.usage_summary)
-            response = llm_cc.response
-
-            code_block_strs = find_code_blocks(response)
-            code_blocks: list[CodeBlock] = []
-            for code in code_block_strs:
-                repl_result = self.environment.execute_code(code)
-                repl_result.correlation_id = correlation_id
-                code_blocks.append(CodeBlock(code=code, result=repl_result))
-
-            final_answer = find_final_answer(response, environment=self.environment)
-            iteration_time = time.perf_counter() - iter_start
-
-            iteration_usage: UsageSummary | None = None
-            cumulative_usage: UsageSummary | None = None
-            if cumulative_usage_totals is not None:
-                # Usage for this iteration: orchestrator call + any nested `llm_query()`
-                # calls recorded by the environment in REPL results.
-                iteration_totals: dict[str, ModelUsageSummary] = {}
-                _add_usage_totals(iteration_totals, llm_cc.usage_summary)
-                _add_usage_totals(cumulative_usage_totals, llm_cc.usage_summary)
-
-                for cb in code_blocks:
-                    for sub_cc in cb.result.llm_calls:
-                        _add_usage_totals(iteration_totals, sub_cc.usage_summary)
-                        _add_usage_totals(cumulative_usage_totals, sub_cc.usage_summary)
-
-                iteration_usage = _clone_usage_totals(iteration_totals)
-                cumulative_usage = _clone_usage_totals(cumulative_usage_totals)
-
-            iteration = Iteration(
-                correlation_id=correlation_id,
-                prompt=current_prompt,
-                response=response,
-                code_blocks=code_blocks,
-                final_answer=final_answer,
-                iteration_time=iteration_time,
-                iteration_usage_summary=iteration_usage,
-                cumulative_usage_summary=cumulative_usage,
-            )
-
-            if self.logger is not None:
-                self.logger.log_iteration(iteration)
-
-            if final_answer is not None:
-                time_end = time.perf_counter()
-                return ChatCompletion(
-                    root_model=self.llm.model_name,
-                    prompt=prompt,
-                    response=final_answer,
-                    usage_summary=_clone_usage_totals(root_usage_totals),
-                    execution_time=time_end - time_start,
-                )
-
-            # Carry state into the next iteration.
-            message_history.extend(format_iteration(iteration))
-
-        # Out of iterations: ask one final time for an answer.
-        final_prompt: Prompt = message_history + [
-            {
-                "role": "user",
-                "content": "Please provide a final answer to the user's question based on the information provided.",
-            },
-        ]
-        last_cc = self.llm.complete(LLMRequest(prompt=final_prompt))
-        _add_usage_totals(root_usage_totals, last_cc.usage_summary)
-        extracted = find_final_answer(last_cc.response)
-        time_end = time.perf_counter()
-        return ChatCompletion(
-            root_model=self.llm.model_name,
-            prompt=prompt,
-            response=extracted if extracted is not None else last_cc.response,
-            usage_summary=_clone_usage_totals(root_usage_totals),
-            execution_time=time_end - time_start,
+        # Code-mode: use StateMachine-based approach
+        return self._code_mode_completion(
+            prompt,
+            root_prompt=root_prompt,
+            max_iterations=max_iterations,
+            max_depth=max_depth,
+            depth=depth,
+            correlation_id=correlation_id,
         )
 
     async def acompletion(
@@ -962,7 +1140,8 @@ class RLMOrchestrator:
         correlation_id: str | None = None,
         tool_choice: ToolChoice | None = None,
     ) -> ChatCompletion:
-        """Async variant of `completion()`.
+        """
+        Async variant of `completion()`.
 
         Notes:
         - We still execute code blocks sequentially to preserve environment semantics.
@@ -970,129 +1149,21 @@ class RLMOrchestrator:
           while loading context / executing code.
 
         """
-        time_start = time.perf_counter()
-
         # Validate agent mode configuration
         if self.agent_mode == "tools":
             self._assert_tool_mode_supported()
-            tool_definitions = self._build_tool_definitions()
-            usage_totals: dict[str, ModelUsageSummary] = {}
-            return await self._atool_calling_loop(
+            return await self._atools_mode_completion(
                 prompt,
-                tool_definitions=tool_definitions,
-                usage_totals=usage_totals,
                 tool_choice=tool_choice,
+                depth=depth,
             )
 
-        root_usage_totals: dict[str, ModelUsageSummary] = {}
-        cumulative_usage_totals: dict[str, ModelUsageSummary] | None = (
-            {} if self.logger is not None else None
-        )
-
-        if depth >= max_depth:
-            cc = await self.llm.acomplete(LLMRequest(prompt=prompt))
-            _add_usage_totals(root_usage_totals, cc.usage_summary)
-            final_answer = await afind_final_answer(cc.response)
-            response = final_answer if final_answer is not None else cc.response
-            time_end = time.perf_counter()
-            return ChatCompletion(
-                root_model=cc.root_model,
-                prompt=prompt,
-                response=response,
-                usage_summary=_clone_usage_totals(root_usage_totals),
-                execution_time=time_end - time_start,
-            )
-
-        query_metadata = QueryMetadata.from_context(prompt)
-        message_history: list[dict[str, str]] = build_rlm_system_prompt(
-            self.system_prompt,
-            query_metadata,
-        )
-
-        for i in range(max_iterations):
-            iter_start = time.perf_counter()
-            current_prompt: Prompt = message_history + [
-                build_user_prompt(root_prompt=root_prompt, iteration=i),
-            ]
-
-            # On the first iteration, load context and run the LLM call concurrently.
-            if i == 0:
-                async with asyncio.TaskGroup() as tg:
-                    tg.create_task(
-                        asyncio.to_thread(self.environment.load_context, prompt),  # type: ignore[arg-type]
-                    )
-                    llm_task = tg.create_task(self.llm.acomplete(LLMRequest(prompt=current_prompt)))
-                llm_cc = llm_task.result()
-            else:
-                llm_cc = await self.llm.acomplete(LLMRequest(prompt=current_prompt))
-
-            _add_usage_totals(root_usage_totals, llm_cc.usage_summary)
-            response = llm_cc.response
-            code_block_strs = find_code_blocks(response)
-            code_blocks: list[CodeBlock] = []
-
-            for code in code_block_strs:
-                repl_result = await asyncio.to_thread(self.environment.execute_code, code)
-                repl_result.correlation_id = correlation_id
-                code_blocks.append(CodeBlock(code=code, result=repl_result))
-
-            final_answer = await afind_final_answer(response, environment=self.environment)
-            iteration_time = time.perf_counter() - iter_start
-
-            iteration_usage: UsageSummary | None = None
-            cumulative_usage: UsageSummary | None = None
-            if cumulative_usage_totals is not None:
-                iteration_totals: dict[str, ModelUsageSummary] = {}
-                _add_usage_totals(iteration_totals, llm_cc.usage_summary)
-                _add_usage_totals(cumulative_usage_totals, llm_cc.usage_summary)
-
-                for cb in code_blocks:
-                    for sub_cc in cb.result.llm_calls:
-                        _add_usage_totals(iteration_totals, sub_cc.usage_summary)
-                        _add_usage_totals(cumulative_usage_totals, sub_cc.usage_summary)
-
-                iteration_usage = _clone_usage_totals(iteration_totals)
-                cumulative_usage = _clone_usage_totals(cumulative_usage_totals)
-
-            iteration = Iteration(
-                correlation_id=correlation_id,
-                prompt=current_prompt,
-                response=response,
-                code_blocks=code_blocks,
-                final_answer=final_answer,
-                iteration_time=iteration_time,
-                iteration_usage_summary=iteration_usage,
-                cumulative_usage_summary=cumulative_usage,
-            )
-            if self.logger is not None:
-                self.logger.log_iteration(iteration)
-
-            if final_answer is not None:
-                time_end = time.perf_counter()
-                return ChatCompletion(
-                    root_model=self.llm.model_name,
-                    prompt=prompt,
-                    response=final_answer,
-                    usage_summary=_clone_usage_totals(root_usage_totals),
-                    execution_time=time_end - time_start,
-                )
-
-            message_history.extend(format_iteration(iteration))
-
-        final_prompt: Prompt = message_history + [
-            {
-                "role": "user",
-                "content": "Please provide a final answer to the user's question based on the information provided.",
-            },
-        ]
-        last_cc = await self.llm.acomplete(LLMRequest(prompt=final_prompt))
-        _add_usage_totals(root_usage_totals, last_cc.usage_summary)
-        extracted = await afind_final_answer(last_cc.response)
-        time_end = time.perf_counter()
-        return ChatCompletion(
-            root_model=self.llm.model_name,
-            prompt=prompt,
-            response=extracted if extracted is not None else last_cc.response,
-            usage_summary=_clone_usage_totals(root_usage_totals),
-            execution_time=time_end - time_start,
+        # Code-mode: use StateMachine-based approach
+        return await self._acode_mode_completion(
+            prompt,
+            root_prompt=root_prompt,
+            max_iterations=max_iterations,
+            max_depth=max_depth,
+            depth=depth,
+            correlation_id=correlation_id,
         )

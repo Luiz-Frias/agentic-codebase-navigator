@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from rlm.domain.errors import ValidationError
 from rlm.domain.models import (
     ChatCompletion,
     CodeBlock,
@@ -14,7 +15,7 @@ from rlm.domain.models import (
     ReplResult,
     UsageSummary,
 )
-from rlm.domain.result import Err, Ok, Result
+from rlm.domain.models.result import Err, Ok
 
 
 @pytest.mark.unit
@@ -88,16 +89,24 @@ def test_domain_repl_result_from_dict_accepts_legacy_rlm_calls_key() -> None:
 
 @pytest.mark.unit
 def test_domain_result_type_pattern_matching() -> None:
-    def _f(flag: bool) -> Result[int]:
+    # Result type uses Ok[T] | Err[E] pattern for explicit error handling
+    def _f(flag: bool) -> Ok[int] | Err[ValidationError]:
         if flag:
             return Ok(123)
-        return Err("nope")
+        return Err(ValidationError("nope"))
 
     match _f(True):
         case Ok(value=v):
             assert v == 123
         case _:
             raise AssertionError("expected Ok")
+
+    # Also test Err branch
+    match _f(False):
+        case Err(error=e):
+            assert str(e) == "nope"
+        case _:
+            raise AssertionError("expected Err")
 
 
 # =============================================================================

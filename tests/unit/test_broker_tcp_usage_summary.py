@@ -29,7 +29,8 @@ def test_tcp_broker_usage_summary_merges_registered_llm_summaries() -> None:
 
 @pytest.mark.unit
 def test_tcp_broker_usage_summary_counts_only_calls_routed_through_broker() -> None:
-    """Regression test: broker usage must not include direct LLM calls made outside the broker.
+    """
+    Regression test: broker usage must not include direct LLM calls made outside the broker.
 
     This matters because the orchestrator calls its root LLM directly; the broker should
     only account for environment subcalls routed through `BrokerPort`.

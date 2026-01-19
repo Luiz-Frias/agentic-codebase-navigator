@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/DetachHead/basedpyright/main/packages/pyright/schemas/pyrightconfig.schema.json",
   "include": ["src/rlm"],
   "exclude": ["src/rlm/_legacy", "references", "tests", "**/__pycache__"],
   "pythonVersion": "3.12",

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import builtins
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 
 def _default_allowed_import_roots() -> frozenset[str]:
-    """Default allowlist for `import ...` inside execution environments.
+    """
+    Default allowlist for `import ...` inside execution environments.
 
     Notes:
     - This is intentionally conservative (safe-ish, not a security boundary).
@@ -39,7 +40,8 @@ def _default_allowed_import_roots() -> frozenset[str]:
 
 @dataclass(frozen=True, slots=True)
 class ExecutionNamespacePolicy:
-    """Infrastructure policy for building a restricted-ish Python execution namespace.
+    """
+    Infrastructure policy for building a restricted-ish Python execution namespace.
 
     Responsibilities:
     - Provide "safe-ish" builtins (block eval/exec/input/etc).
@@ -51,7 +53,7 @@ class ExecutionNamespacePolicy:
       Local environment adapter.
     """
 
-    allowed_import_roots: frozenset[str] = _default_allowed_import_roots()
+    allowed_import_roots: frozenset[str] = field(default_factory=_default_allowed_import_roots)
 
     def build_builtins(self, *, session_dir: Path) -> dict[str, Any]:
         """Build a builtins dict suitable for passing as `globals()['__builtins__']` to `exec`."""
@@ -100,10 +102,7 @@ class ExecutionNamespacePolicy:
 
             # Resolve relative paths under the current working directory.
             # The Local environment adapter changes cwd to `session_dir` before execution.
-            if not p.is_absolute():
-                p = (Path.cwd() / p).resolve()
-            else:
-                p = p.resolve()
+            p = (Path.cwd() / p).resolve() if not p.is_absolute() else p.resolve()
 
             try:
                 p.relative_to(session_dir)

@@ -3,14 +3,15 @@ from __future__ import annotations
 import json
 import threading
 import uuid
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 from rlm.adapters.base import BaseLoggerAdapter
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rlm.domain.models import Iteration, RunMetadata
 
 
@@ -19,7 +20,8 @@ def _utc_now_iso() -> str:
 
 
 class JsonlLoggerAdapter(BaseLoggerAdapter):
-    """JSONL logger adapter.
+    """
+    JSONL logger adapter.
 
     Schema (versioned, line-oriented):
     - metadata entry:
@@ -96,7 +98,7 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
     def _write_entry(self, entry: dict[str, object]) -> None:
         path = self._ensure_path()
         line = json.dumps(entry, ensure_ascii=False, sort_keys=True)
-        with open(path, "a", encoding="utf-8") as f:
+        with path.open("a", encoding="utf-8") as f:
             f.write(line)
             f.write("\n")
 
@@ -106,7 +108,7 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
                 self._start_new_run()
             if self._metadata_logged:
                 return
-            metadata_dict = cast("dict[str, Any]", metadata.to_dict())
+            metadata_dict = metadata.to_dict()
             entry: dict[str, object] = {
                 "schema_version": self._schema_version,
                 "type": "metadata",
@@ -120,7 +122,7 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
         with self._lock:
             self._ensure_path()
             self._iteration_count += 1
-            iteration_dict = cast("dict[str, Any]", iteration.to_dict())
+            iteration_dict = iteration.to_dict()
             entry: dict[str, object] = {
                 "schema_version": self._schema_version,
                 "type": "iteration",

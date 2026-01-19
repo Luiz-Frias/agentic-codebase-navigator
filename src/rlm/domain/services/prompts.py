@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import textwrap
+from typing import TYPE_CHECKING
 
-from rlm.domain.models.query_metadata import QueryMetadata
+if TYPE_CHECKING:
+    from rlm.domain.models.query_metadata import QueryMetadata
+
+# Maximum number of chunk lengths to display in context metadata prompt.
+# Prevents excessively long prompts when context has many small chunks.
+_MAX_DISPLAYED_CHUNK_LENGTHS = 100
 
 # NOTE: This is intentionally copied from the upstream prompt to preserve behavior
 # during the migration. We will refine/shorten this later when Goal2 lands.
@@ -89,7 +95,8 @@ def build_rlm_system_prompt(
     query_metadata: QueryMetadata,
     /,
 ) -> list[dict[str, str]]:
-    """Build the initial prompt message history for an RLM run.
+    """
+    Build the initial prompt message history for an RLM run.
 
     Mirrors the upstream behavior:
     - system prompt as a "system" role message
@@ -99,10 +106,12 @@ def build_rlm_system_prompt(
     context_total_length = query_metadata.context_total_length
     context_type = query_metadata.context_type
 
-    # If there are more than 100 chunks, truncate to the first 100 chunks.
-    if len(context_lengths) > 100:
-        others = len(context_lengths) - 100
-        lengths_display = str(context_lengths[:100]) + "... [" + str(others) + " others]"
+    # If there are more than _MAX_DISPLAYED_CHUNK_LENGTHS chunks, truncate the display.
+    if len(context_lengths) > _MAX_DISPLAYED_CHUNK_LENGTHS:
+        others = len(context_lengths) - _MAX_DISPLAYED_CHUNK_LENGTHS
+        lengths_display = (
+            str(context_lengths[:_MAX_DISPLAYED_CHUNK_LENGTHS]) + f"... [{others} others]"
+        )
     else:
         lengths_display = str(context_lengths)
 

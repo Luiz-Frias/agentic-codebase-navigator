@@ -12,7 +12,8 @@ LoggerName = Literal["none", "jsonl", "console"]
 
 @dataclass(frozen=True, slots=True)
 class LLMConfig:
-    """Minimal LLM configuration (Phase 1).
+    """
+    Minimal LLM configuration (Phase 1).
 
     In later phases this becomes validated and mapped to concrete adapters via
     registries in the composition root.
@@ -69,7 +70,8 @@ class LoggerConfig:
 
 @dataclass(frozen=True, slots=True)
 class RLMConfig:
-    """RLM facade configuration.
+    """
+    RLM facade configuration.
 
     Agent Modes:
         - "code" (default): LLM generates Python code in ```repl blocks for execution.

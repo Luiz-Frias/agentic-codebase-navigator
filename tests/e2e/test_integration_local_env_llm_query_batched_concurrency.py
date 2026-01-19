@@ -12,7 +12,8 @@ from tests.fakes_ports import CollectingLogger
 
 
 class _OrchestratorThenBarrierLLM(LLMPort):
-    """LLM that:
+    """
+    LLM that:
     - returns a single code-block response that calls llm_query_batched([...])
     - implements `acomplete()` with a barrier so the broker must run batched calls concurrently
     """

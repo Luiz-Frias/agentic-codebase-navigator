@@ -1,4 +1,5 @@
-"""Native tool adapter for Python callables.
+"""
+Native tool adapter for Python callables.
 
 Wraps plain Python functions as ToolPort implementations, automatically
 extracting schema from type hints and docstrings.
@@ -11,14 +12,17 @@ import inspect
 import re
 import types
 import typing
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, get_type_hints
 
 from rlm.adapters.base import BaseToolAdapter
+from rlm.domain.agent_ports import ToolDefinition
 
 if TYPE_CHECKING:
-    from rlm.domain.agent_ports import ToolDefinition
+    from collections.abc import Callable
+
+# dict[K, V] has exactly 2 type args: key type and value type
+_DICT_TYPE_ARGS_COUNT = 2
 
 
 def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
@@ -48,7 +52,7 @@ def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
         item_type = cast("type", args[0])
         return {"type": "array", "items": _python_type_to_json_schema(item_type)}
 
-    if origin is dict and len(args) >= 2:
+    if origin is dict and len(args) >= _DICT_TYPE_ARGS_COUNT:
         value_type = cast("type", args[1])
         return {
             "type": "object",
@@ -69,7 +73,8 @@ def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
 
 
 def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
-    """Parse parameter descriptions from docstring.
+    """
+    Parse parameter descriptions from docstring.
 
     Supports Google, NumPy, and Sphinx style docstrings.
     """
@@ -113,7 +118,8 @@ def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
 
 @dataclass(slots=True)
 class NativeToolAdapter(BaseToolAdapter):
-    """Wraps a Python callable as a ToolPort.
+    """
+    Wraps a Python callable as a ToolPort.
 
     Automatically extracts tool schema from:
     - Function name (or custom name)
