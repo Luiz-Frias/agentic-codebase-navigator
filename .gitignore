@@ -10,10 +10,7 @@ wheels/
 .venv
 
 # IDEs
-.vscode/
 .idea/
-.cursor/*.*
-.claude/
 
 
 # OS
