@@ -11,14 +11,12 @@ from tests.fakes_ports import CollectingLogger, QueueLLM
 @pytest.mark.e2e
 @pytest.mark.docker
 def test_docker_env_state_persists_across_execute_code_calls() -> None:
-    """
-    Integration: docker env must persist state across multiple `execute_code` calls.
+    """Integration: docker env must persist state across multiple `execute_code` calls.
 
     We validate this by:
     - Iteration 0: set `x = 1` in a code block (no FINAL)
     - Iteration 1: return `FINAL_VAR('x')` without redefining `x`
     """
-
     try:
         ensure_docker_available(timeout_s=0.5)
     except RuntimeError as exc:

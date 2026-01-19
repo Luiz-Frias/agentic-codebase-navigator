@@ -11,8 +11,7 @@ from rlm.domain.models import LLMRequest
 @pytest.mark.integration
 @pytest.mark.live_llm
 def test_live_openai_adapter_smoke() -> None:
-    """
-    Real-network smoke test for OpenAIAdapter.
+    """Real-network smoke test for OpenAIAdapter.
 
     Skipped by default; enable with:
       - RLM_RUN_LIVE_LLM_TESTS=1
@@ -22,7 +21,6 @@ def test_live_openai_adapter_smoke() -> None:
       - OPENAI_BASE_URL=... (for OpenAI-compatible endpoints)
       - OPENAI_MODEL=... (defaults to gpt-5-nano)
     """
-
     if importlib.util.find_spec("openai") is None:
         pytest.skip("openai package not installed")
 
@@ -61,8 +59,7 @@ def test_live_openai_adapter_smoke() -> None:
 @pytest.mark.integration
 @pytest.mark.live_llm
 def test_live_openai_adapter_tool_calling() -> None:
-    """
-    Real-network test for OpenAI tool calling.
+    """Real-network test for OpenAI tool calling.
 
     Skipped by default; enable with:
       - RLM_RUN_LIVE_LLM_TESTS=1
@@ -72,7 +69,6 @@ def test_live_openai_adapter_tool_calling() -> None:
       - OPENAI_BASE_URL=... (for OpenAI-compatible endpoints)
       - OPENAI_MODEL=... (defaults to gpt-4o-mini)
     """
-
     if importlib.util.find_spec("openai") is None:
         pytest.skip("openai package not installed")
 
@@ -101,7 +97,7 @@ def test_live_openai_adapter_tool_calling() -> None:
                 },
                 "required": ["location"],
             },
-        }
+        },
     ]
 
     llm = OpenAIAdapter(
@@ -120,7 +116,7 @@ def test_live_openai_adapter_tool_calling() -> None:
             prompt="What's the weather in Tokyo?",
             tools=tools,
             tool_choice="auto",
-        )
+        ),
     )
 
     assert cc.root_model == model
@@ -148,8 +144,7 @@ def test_live_openai_adapter_tool_calling() -> None:
 @pytest.mark.integration
 @pytest.mark.live_llm
 def test_live_anthropic_adapter_smoke() -> None:
-    """
-    Real-network smoke test for AnthropicAdapter.
+    """Real-network smoke test for AnthropicAdapter.
 
     Skipped by default; enable with:
       - RLM_RUN_LIVE_LLM_TESTS=1
@@ -158,7 +153,6 @@ def test_live_anthropic_adapter_smoke() -> None:
     Optional:
       - ANTHROPIC_MODEL=... (defaults to claude-3-5-haiku-20241022)
     """
-
     if importlib.util.find_spec("anthropic") is None:
         pytest.skip("anthropic package not installed (install the llm-anthropic extra)")
 

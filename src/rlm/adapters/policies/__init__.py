@@ -1,5 +1,4 @@
-"""
-Default policy implementations for RLM extension protocols.
+"""Default policy implementations for RLM extension protocols.
 
 These adapters provide sensible defaults that preserve backward compatibility
 while enabling external apps to inject custom behavior.

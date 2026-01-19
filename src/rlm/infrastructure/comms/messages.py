@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rlm.domain.models import ChatCompletion
-from rlm.domain.types import Prompt
+
+if TYPE_CHECKING:
+    from rlm.domain.types import Prompt
 
 
 def _is_prompt(value: object) -> bool:
@@ -21,8 +23,7 @@ def _is_prompt(value: object) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class WireRequest:
-    """
-    Wire DTO: request from an environment/process to the broker.
+    """Wire DTO: request from an environment/process to the broker.
 
     Supports both:
     - single prompt: `prompt`
@@ -132,8 +133,7 @@ class WireResult:
 
 @dataclass(frozen=True, slots=True)
 class WireResponse:
-    """
-    Wire DTO: broker response.
+    """Wire DTO: broker response.
 
     - For request-level failures (invalid payload): `error` is set and `results` is None.
     - For successful routing: `results` is set with per-item success/error.

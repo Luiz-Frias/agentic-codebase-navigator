@@ -12,8 +12,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class ChatCompletion:
-    """
-    A single LLM call result.
+    """A single LLM call result.
 
     Mirrors the shape of the legacy `RLMChatCompletion`, but is dependency-free
     and owned by the domain layer.
@@ -26,6 +25,7 @@ class ChatCompletion:
         execution_time: Time taken for the API call in seconds.
         tool_calls: List of tool call requests from the LLM (None if no tools called).
         finish_reason: Why the LLM stopped generating (e.g., "stop", "tool_calls").
+
     """
 
     root_model: str
@@ -77,8 +77,8 @@ class ChatCompletion:
                             total_calls=1,
                             total_input_tokens=int(pt),
                             total_output_tokens=int(ct),
-                        )
-                    }
+                        ),
+                    },
                 )
         # Parse tool_calls if present (list of ToolCallRequest dicts)
         raw_tool_calls = data.get("tool_calls")

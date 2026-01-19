@@ -58,7 +58,7 @@ def test_domain_models_roundtrip_via_to_from_dict_is_stable() -> None:
 @pytest.mark.unit
 def test_domain_model_usage_summary_from_dict_treats_none_as_zero() -> None:
     s = ModelUsageSummary.from_dict(
-        {"total_calls": None, "total_input_tokens": None, "total_output_tokens": None}
+        {"total_calls": None, "total_input_tokens": None, "total_output_tokens": None},
     )
     assert (s.total_calls, s.total_input_tokens, s.total_output_tokens) == (0, 0, 0)
 
@@ -78,7 +78,7 @@ def test_domain_repl_result_from_dict_accepts_legacy_rlm_calls_key() -> None:
                 "response": "FINAL(pong)",
                 "usage_summary": {"model_usage_summaries": {"dummy": {"total_calls": 1}}},
                 "execution_time": 0.01,
-            }
+            },
         ],
     }
 
@@ -208,7 +208,7 @@ def test_llm_request_with_tools_and_tool_choice() -> None:
                 "properties": {"city": {"type": "string"}},
                 "required": ["city"],
             },
-        }
+        },
     ]
 
     # Test with tools and auto tool_choice

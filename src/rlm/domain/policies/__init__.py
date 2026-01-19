@@ -1,5 +1,4 @@
-"""
-Domain policy objects.
+"""Domain policy objects.
 
 These are small, dependency-free configuration carriers that express runtime
 policies (timeouts/cancellation) without pulling in adapters or infrastructure.

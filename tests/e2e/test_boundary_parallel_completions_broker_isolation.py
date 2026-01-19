@@ -10,8 +10,7 @@ from rlm.api import create_rlm
 
 @pytest.mark.e2e
 def test_parallel_completions_do_not_conflict() -> None:
-    """
-    Boundary: two parallel runs should not conflict (broker ports/threads/env state).
+    """Boundary: two parallel runs should not conflict (broker ports/threads/env state).
 
     This is intentionally minimal and hermetic: it doesn't require docker or network.
     """

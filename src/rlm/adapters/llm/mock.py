@@ -20,13 +20,11 @@ if TYPE_CHECKING:
 
 
 def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
-    """
-    Deterministically stringify a prompt for mock responses.
+    """Deterministically stringify a prompt for mock responses.
 
     Avoids depending on provider-specific message formats while keeping behavior
     stable across test runs.
     """
-
     match prompt:
         case str():
             text = prompt
@@ -55,12 +53,10 @@ def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
 
 
 def _estimate_input_tokens(prompt: Prompt, /) -> int:
-    """
-    A tiny, deterministic token estimate for tests.
+    """A tiny, deterministic token estimate for tests.
 
     We intentionally avoid any external tokenizer dependency.
     """
-
     preview = _prompt_preview(prompt, max_chars=10_000)
     # Count whitespace-separated chunks as an extremely rough proxy.
     return 0 if not preview.strip() else len(preview.split())
@@ -72,8 +68,7 @@ def _estimate_output_tokens(text: str, /) -> int:
 
 @dataclass
 class MockLLMAdapter(BaseLLMAdapter):
-    """
-    Deterministic, dependency-free `LLMPort` implementation for tests/examples.
+    """Deterministic, dependency-free `LLMPort` implementation for tests/examples.
 
     Behavior:
     - If `script` is provided, each call pops one item:
@@ -166,8 +161,8 @@ class MockLLMAdapter(BaseLLMAdapter):
                         total_calls=1,
                         total_input_tokens=in_tokens,
                         total_output_tokens=out_tokens,
-                    )
-                }
+                    ),
+                },
             )
 
         return ChatCompletion(
@@ -196,7 +191,7 @@ class MockLLMAdapter(BaseLLMAdapter):
                         total_output_tokens=mus.total_output_tokens,
                     )
                     for model, mus in self._usage.model_usage_summaries.items()
-                }
+                },
             )
 
     def get_last_usage(self) -> UsageSummary:
@@ -209,7 +204,7 @@ class MockLLMAdapter(BaseLLMAdapter):
                         total_output_tokens=mus.total_output_tokens,
                     )
                     for model, mus in self._last_usage.model_usage_summaries.items()
-                }
+                },
             )
 
     # ---------------------------------------------------------------------
@@ -217,8 +212,7 @@ class MockLLMAdapter(BaseLLMAdapter):
     # ---------------------------------------------------------------------
 
     def _next_script_item(self, prompt: Prompt, /) -> str | dict[str, Any]:
-        """
-        Get the next scripted response item.
+        """Get the next scripted response item.
 
         Returns:
             - str: plain text response
@@ -227,6 +221,7 @@ class MockLLMAdapter(BaseLLMAdapter):
         Raises:
             Exception: if the script item is an Exception
             LLMError: if the script is exhausted
+
         """
         with self._lock:
             script = self.script

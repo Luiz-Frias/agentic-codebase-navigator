@@ -11,8 +11,7 @@ from tests.fakes_ports import CollectingLogger, QueueLLM
 @pytest.mark.e2e
 @pytest.mark.docker
 def test_docker_env_llm_query_can_route_to_other_backend_by_model_name() -> None:
-    """
-    Integration: orchestrator + docker env + broker, routing subcalls by `model=...`.
+    """Integration: orchestrator + docker env + broker, routing subcalls by `model=...`.
 
     Best-effort; should skip cleanly if Docker isn't available.
     """

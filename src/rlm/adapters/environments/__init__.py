@@ -1,5 +1,4 @@
-"""
-Environment adapters (hexagonal).
+"""Environment adapters (hexagonal).
 
 Native adapters live here. Legacy has been fully removed.
 """

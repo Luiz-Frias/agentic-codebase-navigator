@@ -1,5 +1,4 @@
-"""
-Logger adapters (hexagonal).
+"""Logger adapters (hexagonal).
 
 The domain owns `LoggerPort`; these are concrete implementations for persistence
 and developer UX.

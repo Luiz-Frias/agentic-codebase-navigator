@@ -1,5 +1,4 @@
-"""
-Native tool adapter for Python callables.
+"""Native tool adapter for Python callables.
 
 Wraps plain Python functions as ToolPort implementations, automatically
 extracting schema from type hints and docstrings.
@@ -14,10 +13,12 @@ import types
 import typing
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, get_type_hints
 
 from rlm.adapters.base import BaseToolAdapter
-from rlm.domain.agent_ports import ToolDefinition
+
+if TYPE_CHECKING:
+    from rlm.domain.agent_ports import ToolDefinition
 
 
 def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
@@ -44,10 +45,11 @@ def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
     args = get_args(python_type)
 
     if origin is list and args:
-        return {"type": "array", "items": _python_type_to_json_schema(args[0])}
+        item_type = cast("type", args[0])
+        return {"type": "array", "items": _python_type_to_json_schema(item_type)}
 
-    if origin is dict and len(args) >= 2:  # noqa: PLR2004
-        value_type = args[1]  # type: ignore[misc]
+    if origin is dict and len(args) >= 2:
+        value_type = cast("type", args[1])
         return {
             "type": "object",
             "additionalProperties": _python_type_to_json_schema(value_type),
@@ -55,19 +57,19 @@ def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
 
     # Union types (including Optional)
     if origin in (types.UnionType, typing.Union):
-        non_none = [a for a in args if a is not type(None)]
+        non_none = [cast("type", a) for a in args if a is not type(None)]
         if len(non_none) == 1:
             # Optional[X] -> X (nullable handled implicitly by most LLMs)
             return _python_type_to_json_schema(non_none[0])
-        return {"anyOf": [_python_type_to_json_schema(a) for a in args]}
+        union_types = [cast("type", a) for a in args]
+        return {"anyOf": [_python_type_to_json_schema(a) for a in union_types]}
 
     # Fallback to string for complex types
     return {"type": "string"}
 
 
 def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
-    """
-    Parse parameter descriptions from docstring.
+    """Parse parameter descriptions from docstring.
 
     Supports Google, NumPy, and Sphinx style docstrings.
     """
@@ -82,7 +84,9 @@ def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
     if google_match:
         args_section = google_match.group(1)
         for match in re.finditer(
-            r"(\w+)\s*(?:\([^)]*\))?:\s*(.+?)(?=\n\s+\w+|\n\n|$)", args_section, re.DOTALL
+            r"(\w+)\s*(?:\([^)]*\))?:\s*(.+?)(?=\n\s+\w+|\n\n|$)",
+            args_section,
+            re.DOTALL,
         ):
             params[match.group(1)] = match.group(2).strip()
 
@@ -92,7 +96,9 @@ def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
     if numpy_match and not params:
         params_section = numpy_match.group(1)
         for match in re.finditer(
-            r"(\w+)\s*:\s*\w+.*?\n\s+(.+?)(?=\n\w+\s*:|\n\n|$)", params_section, re.DOTALL
+            r"(\w+)\s*:\s*\w+.*?\n\s+(.+?)(?=\n\w+\s*:|\n\n|$)",
+            params_section,
+            re.DOTALL,
         ):
             params[match.group(1)] = match.group(2).strip()
 
@@ -107,8 +113,7 @@ def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
 
 @dataclass(slots=True)
 class NativeToolAdapter(BaseToolAdapter):
-    """
-    Wraps a Python callable as a ToolPort.
+    """Wraps a Python callable as a ToolPort.
 
     Automatically extracts tool schema from:
     - Function name (or custom name)
@@ -120,7 +125,7 @@ class NativeToolAdapter(BaseToolAdapter):
         def get_weather(city: str, unit: str = "celsius") -> str:
             '''Get the current weather for a city.
 
-            Args:
+    Args:
                 city: The city name to look up
                 unit: Temperature unit (celsius or fahrenheit)
             '''
@@ -128,6 +133,7 @@ class NativeToolAdapter(BaseToolAdapter):
 
         tool = NativeToolAdapter(get_weather)
         # tool.definition will have the proper JSON schema
+
     """
 
     func: Callable[..., Any]
@@ -157,6 +163,7 @@ class NativeToolAdapter(BaseToolAdapter):
         param_docs = _parse_docstring_params(docstring)
 
         # Get type hints
+        hints: dict[str, type[Any]]
         try:
             hints = get_type_hints(self.func)
         except Exception:
@@ -214,7 +221,7 @@ class NativeToolAdapter(BaseToolAdapter):
             result.close()
             raise TypeError(
                 "Tool function returned a coroutine in sync execution. "
-                "Declare the tool as async or call it via aexecute()."
+                "Declare the tool as async or call it via aexecute().",
             )
         return result
 
@@ -228,6 +235,6 @@ class NativeToolAdapter(BaseToolAdapter):
             result.close()
             raise TypeError(
                 "Tool function returned a coroutine from a sync implementation. "
-                "Declare the tool as async instead."
+                "Declare the tool as async instead.",
             )
         return result

@@ -22,18 +22,16 @@ from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
 
 
 def _require_litellm() -> Any:
-    """
-    Lazily import LiteLLM.
+    """Lazily import LiteLLM.
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-litellm]`.
     """
-
     try:
         import litellm  # type: ignore[import-not-found]
-    except Exception as e:  # noqa: BLE001 - dependency boundary
+    except Exception as e:
         raise ImportError(
             "LiteLLM adapter selected but the 'litellm' package is not installed. "
-            "Install the optional extra: `agentic-codebase-navigator[llm-litellm]`."
+            "Install the optional extra: `agentic-codebase-navigator[llm-litellm]`.",
         ) from e
     return litellm
 
@@ -76,7 +74,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = litellm.completion(model=model, messages=messages, **api_kwargs)
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("LiteLLM", e)) from None
         end = time.perf_counter()
 
@@ -87,7 +85,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:  # noqa: BLE001
+        except Exception:
             if tool_calls:
                 text = ""
             else:
@@ -124,7 +122,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = await litellm.acompletion(model=model, messages=messages, **api_kwargs)
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("LiteLLM", e)) from None
         end = time.perf_counter()
 
@@ -135,7 +133,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:  # noqa: BLE001
+        except Exception:
             if tool_calls:
                 text = ""
             else:

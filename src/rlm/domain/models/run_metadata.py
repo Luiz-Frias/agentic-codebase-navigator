@@ -8,8 +8,7 @@ from rlm.domain.models.serialization import serialize_value
 
 @dataclass(slots=True, frozen=True)
 class RunMetadata:
-    """
-    Metadata about a completion run.
+    """Metadata about a completion run.
 
     This mirrors the legacy `RLMMetadata` shape but lives in the domain layer.
     """

@@ -6,9 +6,12 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 from rlm.adapters.base import BaseLoggerAdapter
-from rlm.domain.models import Iteration, RunMetadata
+
+if TYPE_CHECKING:
+    from rlm.domain.models import Iteration, RunMetadata
 
 
 def _utc_now_iso() -> str:
@@ -16,8 +19,7 @@ def _utc_now_iso() -> str:
 
 
 class JsonlLoggerAdapter(BaseLoggerAdapter):
-    """
-    JSONL logger adapter.
+    """JSONL logger adapter.
 
     Schema (versioned, line-oriented):
     - metadata entry:
@@ -28,6 +30,7 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
     Notes:
     - Writes are streaming (one line per call); no in-memory buffering of events.
     - By default we rotate to a new file per `log_metadata(...)` call to keep one run per file.
+
     """
 
     __slots__ = (
@@ -103,11 +106,12 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
                 self._start_new_run()
             if self._metadata_logged:
                 return
+            metadata_dict = cast("dict[str, Any]", metadata.to_dict())
             entry: dict[str, object] = {
                 "schema_version": self._schema_version,
                 "type": "metadata",
                 "timestamp": self._now_fn(),
-                **metadata.to_dict(),
+                **metadata_dict,
             }
             self._write_entry(entry)
             self._metadata_logged = True
@@ -116,11 +120,12 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
         with self._lock:
             self._ensure_path()
             self._iteration_count += 1
+            iteration_dict = cast("dict[str, Any]", iteration.to_dict())
             entry: dict[str, object] = {
                 "schema_version": self._schema_version,
                 "type": "iteration",
                 "iteration": self._iteration_count,
                 "timestamp": self._now_fn(),
-                **iteration.to_dict(),
+                **iteration_dict,
             }
             self._write_entry(entry)

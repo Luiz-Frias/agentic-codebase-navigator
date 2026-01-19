@@ -28,7 +28,7 @@ class _FakeEnv:
     def load_context(self, context: Any) -> None:
         self.loaded.append(context)
 
-    def execute_code(self, code: str) -> ReplResult:  # noqa: ARG002
+    def execute_code(self, code: str) -> ReplResult:
         # Return a fresh result so tests don't accidentally share mutated objects.
         return ReplResult(
             correlation_id=self._repl_result.correlation_id,
@@ -49,7 +49,7 @@ class _FakeLLM:
         assert self._responses, "test bug: no more fake responses"
         return self._responses.pop(0)
 
-    def complete(self, req: LLMRequest) -> ChatCompletion:  # noqa: ARG002
+    def complete(self, req: LLMRequest) -> ChatCompletion:
         usage = UsageSummary(model_usage_summaries={self.model_name: ModelUsageSummary(1, 1, 1)})
         return ChatCompletion(
             root_model=self.model_name,
@@ -59,7 +59,7 @@ class _FakeLLM:
             execution_time=0.0,
         )
 
-    async def acomplete(self, req: LLMRequest) -> ChatCompletion:  # noqa: ARG002
+    async def acomplete(self, req: LLMRequest) -> ChatCompletion:
         usage = UsageSummary(model_usage_summaries={self.model_name: ModelUsageSummary(1, 1, 1)})
         return ChatCompletion(
             root_model=self.model_name,
@@ -192,7 +192,7 @@ def test_orchestrator_sync_executes_code_and_carries_repl_output_into_next_promp
         responses=[
             '```repl\nprint("HELLO")\n```\n',
             "FINAL(ok)",
-        ]
+        ],
     )
     logger = CollectingLogger()
     orch = RLMOrchestrator(llm=llm, environment=env, logger=logger)
@@ -222,7 +222,7 @@ async def test_orchestrator_async_executes_code_and_returns_final_answer() -> No
         responses=[
             '```repl\nprint("HELLO")\n```\n',
             "FINAL(ok)",
-        ]
+        ],
     )
     logger = CollectingLogger()
     orch = RLMOrchestrator(llm=llm, environment=env, logger=logger)
@@ -296,7 +296,7 @@ def test_orchestrator_sync_out_of_iterations_asks_for_final_answer() -> None:
         responses=[
             "no final here",
             "FINAL(done)",
-        ]
+        ],
     )
     logger = CollectingLogger()
     orch = RLMOrchestrator(llm=llm, environment=env, logger=logger)
@@ -343,8 +343,7 @@ def test_orchestrator_sync_propagates_environment_execution_errors() -> None:
 
 
 class _ToolQueueLLM:
-    """
-    LLM fake that can return tool_calls in responses.
+    """LLM fake that can return tool_calls in responses.
 
     Script items can be:
     - str: text response (no tool calls)
@@ -391,9 +390,11 @@ class _ToolQueueLLM:
         usage = UsageSummary(
             model_usage_summaries={
                 self._model_name: ModelUsageSummary(
-                    total_calls=1, total_input_tokens=10, total_output_tokens=10
-                )
-            }
+                    total_calls=1,
+                    total_input_tokens=10,
+                    total_output_tokens=10,
+                ),
+            },
         )
         return ChatCompletion(
             root_model=self._model_name,
@@ -415,17 +416,19 @@ class _ToolQueueLLM:
                     total_calls=len(self._calls),
                     total_input_tokens=10 * len(self._calls),
                     total_output_tokens=10 * len(self._calls),
-                )
-            }
+                ),
+            },
         )
 
     def get_last_usage(self) -> UsageSummary:
         return UsageSummary(
             model_usage_summaries={
                 self._model_name: ModelUsageSummary(
-                    total_calls=1, total_input_tokens=10, total_output_tokens=10
-                )
-            }
+                    total_calls=1,
+                    total_input_tokens=10,
+                    total_output_tokens=10,
+                ),
+            },
         )
 
 
@@ -515,7 +518,7 @@ def test_orchestrator_tool_mode_happy_path_single_tool_call() -> None:
             },
             # Second: LLM returns final answer after seeing result
             "The answer is 5.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -571,7 +574,7 @@ def test_orchestrator_tool_mode_serializes_dataclass_tool_results() -> None:
         script=[
             {"tool_calls": [_make_tool_call("call_1", "produce_payload", {})]},
             "Done.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -607,7 +610,7 @@ def test_orchestrator_tool_mode_serializes_common_types() -> None:
         script=[
             {"tool_calls": [_make_tool_call("call_1", "produce_payload", {})]},
             "Done.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -646,7 +649,7 @@ def test_orchestrator_tool_mode_serialization_error_is_reported() -> None:
         script=[
             {"tool_calls": [_make_tool_call("call_1", "produce_unserializable", {})]},
             "Done.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -676,7 +679,7 @@ def test_orchestrator_tool_mode_summarizes_long_conversations() -> None:
             "Summary text.",
             {"tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 1, "b": 2})]},
             "Final.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -712,7 +715,7 @@ def test_orchestrator_tool_mode_uses_adapter_token_count() -> None:
         script=[
             {"tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 1, "b": 2})]},
             "Final.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -753,7 +756,7 @@ def test_orchestrator_tool_mode_multi_turn_tool_calls() -> None:
             },
             # Third: Final answer
             "2+3=5, then 5*4=20.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -788,7 +791,7 @@ def test_orchestrator_tool_mode_multiple_parallel_tool_calls() -> None:
             },
             # Final answer
             "1+2=3 and 3*4=12.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -815,7 +818,7 @@ def test_orchestrator_tool_mode_tool_not_found_raises() -> None:
             {
                 "tool_calls": [_make_tool_call("call_1", "nonexistent_tool", {"arg": "value"})],
             },
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -846,7 +849,7 @@ def test_orchestrator_tool_mode_tool_execution_error_captured() -> None:
             },
             # LLM sees the error and responds accordingly
             "The tool failed with an error.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -881,7 +884,7 @@ def test_orchestrator_tool_mode_max_iterations_enforced() -> None:
             {"tool_calls": [_make_tool_call("call_2", "simple_add", {"a": 1, "b": 1})]},
             # 4th call: orchestrator forces final answer request
             "Forced final answer",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -911,7 +914,7 @@ def test_orchestrator_tool_mode_immediate_final_answer() -> None:
         script=[
             # LLM decides to answer directly without using tools
             "I already know the answer is 42.",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(
@@ -941,7 +944,7 @@ async def test_orchestrator_tool_mode_async_happy_path() -> None:
                 "tool_calls": [_make_tool_call("call_1", "simple_add", {"a": 10, "b": 20})],
             },
             "10 + 20 = 30",
-        ]
+        ],
     )
 
     orch = RLMOrchestrator(

@@ -1,5 +1,4 @@
-"""
-E2E tests for RLM tool calling mode.
+"""E2E tests for RLM tool calling mode.
 
 Tests the full stack using config-based instantiation:
 create_rlm_from_config() → RLM facade → orchestrator → MockLLM
@@ -36,6 +35,7 @@ def add(a: float, b: float) -> float:
 
     Returns:
         Sum of a and b
+
     """
     return a + b
 
@@ -49,6 +49,7 @@ def multiply(a: float, b: float) -> float:
 
     Returns:
         Product of a and b
+
     """
     return a * b
 
@@ -65,6 +66,7 @@ def divide(a: float, b: float) -> float:
 
     Raises:
         ValueError: If divisor is zero
+
     """
     if b == 0:
         raise ValueError("Cannot divide by zero")
@@ -80,6 +82,7 @@ def get_weather(city: str, unit: str = "celsius") -> dict[str, Any]:
 
     Returns:
         Weather data dictionary
+
     """
     temps = {"london": 15, "tokyo": 22, "new_york": 18, "paris": 17}
     temp = temps.get(city.lower(), 20)
@@ -110,7 +113,7 @@ def test_e2e_tool_calling_calculator_single_tool() -> None:
                     },
                     # LLM returns final answer
                     "The sum of 5 and 3 is 8.",
-                ]
+                ],
             },
         ),
         env=EnvironmentConfig(environment="local"),
@@ -143,7 +146,7 @@ def test_e2e_tool_calling_multi_step_calculation() -> None:
                     },
                     # Final answer
                     "4 times 5 is 20, plus 10 equals 30.",
-                ]
+                ],
             },
         ),
         env=EnvironmentConfig(environment="local"),
@@ -168,12 +171,14 @@ def test_e2e_tool_calling_weather_tool() -> None:
                     {
                         "tool_calls": [
                             _make_tool_call(
-                                "call_1", "get_weather", {"city": "Tokyo", "unit": "celsius"}
-                            )
+                                "call_1",
+                                "get_weather",
+                                {"city": "Tokyo", "unit": "celsius"},
+                            ),
                         ],
                     },
                     "The weather in Tokyo is 22°C.",
-                ]
+                ],
             },
         ),
         env=EnvironmentConfig(environment="local"),
@@ -195,7 +200,7 @@ def test_e2e_tool_calling_immediate_answer_no_tools() -> None:
             backend="mock",
             model_name="mock-direct",
             backend_kwargs={
-                "script": ["Paris is the capital of France. I didn't need any tools for this!"]
+                "script": ["Paris is the capital of France. I didn't need any tools for this!"],
             },
         ),
         env=EnvironmentConfig(environment="local"),
@@ -224,7 +229,7 @@ def test_e2e_tool_calling_error_handling() -> None:
                     },
                     # LLM acknowledges the error
                     "I tried to divide 10 by 0, but that's not allowed. Division by zero is undefined.",
-                ]
+                ],
             },
         ),
         env=EnvironmentConfig(environment="local"),
@@ -251,7 +256,7 @@ async def test_e2e_tool_calling_async_path() -> None:
                         "tool_calls": [_make_tool_call("call_1", "multiply", {"a": 7, "b": 8})],
                     },
                     "7 multiplied by 8 equals 56.",
-                ]
+                ],
             },
         ),
         env=EnvironmentConfig(environment="local"),
@@ -337,7 +342,7 @@ def test_e2e_tool_calling_with_structured_response() -> None:
                     },
                     # LLM returns structured JSON response
                     '{"operation": "add", "operands": [15, 25], "result": 40}',
-                ]
+                ],
             },
         ),
         env=EnvironmentConfig(environment="local"),
@@ -383,7 +388,7 @@ def test_e2e_can_create_separate_code_and_tool_instances() -> None:
                 "script": [
                     {"tool_calls": [_make_tool_call("call_1", "add", {"a": 1, "b": 2})]},
                     "Tool result: 3",
-                ]
+                ],
             },
         ),
         env=EnvironmentConfig(environment="local"),

@@ -18,7 +18,7 @@ def test_default_environment_registry_local_passes_broker_and_kwargs(
             self,
             broker=None,
             broker_address=None,
-            correlation_id=None,  # noqa: ARG002 - captured for assertions
+            correlation_id=None,
             context_payload=None,
             setup_code=None,
             **kwargs,
@@ -30,7 +30,7 @@ def test_default_environment_registry_local_passes_broker_and_kwargs(
                     "context_payload": context_payload,
                     "setup_code": setup_code,
                     "kwargs": kwargs,
-                }
+                },
             )
 
         def load_context(self, _context_payload) -> None:
@@ -54,7 +54,7 @@ def test_default_environment_registry_local_passes_broker_and_kwargs(
                 "context_payload": {"x": 1},
                 "setup_code": "print('hi')",
             },
-        )
+        ),
     )
     env = factory.build(broker, ("127.0.0.1", 12345))
     assert env is not None

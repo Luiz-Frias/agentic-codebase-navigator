@@ -5,7 +5,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
@@ -19,23 +19,23 @@ from rlm.adapters.llm.provider_base import (
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
-from rlm.domain.types import Prompt
+
+if TYPE_CHECKING:
+    from rlm.domain.types import Prompt
 
 
 def _require_google_genai() -> Any:
-    """
-    Lazily import the Google GenAI (Gemini) SDK.
+    """Lazily import the Google GenAI (Gemini) SDK.
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-gemini]`.
     """
-
     try:
         # `google-genai` exposes `google.genai`
         from google import genai  # type: ignore[import-not-found]
-    except Exception as e:  # noqa: BLE001 - dependency boundary
+    except Exception as e:
         raise ImportError(
             "Gemini adapter selected but the 'google-genai' package is not installed. "
-            "Install the optional extra: `agentic-codebase-navigator[llm-gemini]`."
+            "Install the optional extra: `agentic-codebase-navigator[llm-gemini]`.",
         ) from e
     return genai
 
@@ -91,10 +91,11 @@ def _extract_usage_tokens(response: Any, /) -> tuple[int, int]:
         return (in_tokens, out_tokens)
 
     in_tokens = _int(
-        getattr(usage, "prompt_token_count", None) or getattr(usage, "input_token_count", None)
+        getattr(usage, "prompt_token_count", None) or getattr(usage, "input_token_count", None),
     )
     out_tokens = _int(
-        getattr(usage, "candidates_token_count", None) or getattr(usage, "output_token_count", None)
+        getattr(usage, "candidates_token_count", None)
+        or getattr(usage, "output_token_count", None),
     )
     return (in_tokens, out_tokens)
 
@@ -147,9 +148,9 @@ def _prompt_to_gemini_contents(prompt: Prompt, /) -> list[dict[str, Any]] | str:
                 {
                     "role": "user",
                     "parts": [
-                        {"function_response": {"name": tool_name, "response": response_payload}}
+                        {"function_response": {"name": tool_name, "response": response_payload}},
                     ],
-                }
+                },
             )
             continue
 
@@ -250,7 +251,7 @@ class GeminiAdapter(BaseLLMAdapter):
             api_kwargs["tools"] = [{"function_declarations": function_declarations}]
         if request.tool_choice is not None:
             function_calling_config = tool_choice_to_gemini_function_calling_config(
-                request.tool_choice
+                request.tool_choice,
             )
             if function_calling_config is not None:
                 tool_config = api_kwargs.get("tool_config")
@@ -262,7 +263,7 @@ class GeminiAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = client.models.generate_content(model=model, contents=contents, **api_kwargs)
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("Gemini", e)) from None
         end = time.perf_counter()
 
@@ -315,7 +316,7 @@ class GeminiAdapter(BaseLLMAdapter):
             if client_cls is None:
                 raise ImportError(
                     "Gemini SDK API mismatch: expected `google.genai.Client` class. "
-                    "Please upgrade `google-genai` (install `agentic-codebase-navigator[llm-gemini]`)."
+                    "Please upgrade `google-genai` (install `agentic-codebase-navigator[llm-gemini]`).",
                 )
 
             kwargs: dict[str, Any] = {}

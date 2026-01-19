@@ -92,7 +92,7 @@ def test_openai_adapter_complete_maps_prompt_and_extracts_text_and_usage(
     resp = _Response("hi", prompt_tokens=3, completion_tokens=5)
     created: list[_FakeOpenAIClient] = []
 
-    class OpenAI:  # noqa: N801 - matches SDK naming
+    class OpenAI:
         def __init__(self, **kwargs):
             client = _FakeOpenAIClient(response=resp, **kwargs)
             created.append(client)
@@ -132,7 +132,7 @@ async def test_openai_adapter_acomplete_maps_prompt_and_extracts_text_and_usage(
     resp = _Response("ahi", prompt_tokens=1, completion_tokens=2)
     created: list[_FakeAsyncOpenAIClient] = []
 
-    class AsyncOpenAI:  # noqa: N801 - matches SDK naming
+    class AsyncOpenAI:
         def __init__(self, **kwargs):
             client = _FakeAsyncOpenAIClient(response=resp, **kwargs)
             created.append(client)
@@ -177,7 +177,7 @@ def test_openai_adapter_maps_provider_errors_to_safe_messages(
     class _BoomChat:
         completions = _BoomCompletions()
 
-    class OpenAI:  # noqa: N801
+    class OpenAI:
         def __init__(self, **kwargs):
             pass
 
@@ -201,7 +201,7 @@ def test_openai_adapter_usage_accumulates_across_calls(
 
     resp = _Response("hi", prompt_tokens=3, completion_tokens=5)
 
-    class OpenAI:  # noqa: N801 - matches SDK naming
+    class OpenAI:
         def __init__(self, **kwargs):
             self._client = _FakeOpenAIClient(response=resp, **kwargs)
 

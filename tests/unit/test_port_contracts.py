@@ -88,7 +88,7 @@ def test_environment_port_contract_executes_in_order_and_propagates_errors() -> 
         results=[
             ReplResult(stdout="s1"),
             ValueError("exec_failed"),
-        ]
+        ],
     )
 
     r1 = env.execute_code("print(1)")

@@ -1,5 +1,4 @@
-"""
-Pydantic-based structured output adapter.
+"""Pydantic-based structured output adapter.
 
 Validates and parses LLM responses into typed Python objects using Pydantic.
 """
@@ -16,8 +15,7 @@ from rlm.domain.errors import ValidationError
 
 
 def _extract_json_from_response(response: str) -> str:
-    """
-    Extract JSON from an LLM response.
+    """Extract JSON from an LLM response.
 
     Handles responses that contain JSON in code blocks or mixed with text.
     """
@@ -59,10 +57,11 @@ def _type_to_json_schema(python_type: type) -> dict[str, Any]:
     args = getattr(python_type, "__args__", ())
 
     if origin is list and args:
-        return {"type": "array", "items": _type_to_json_schema(args[0])}
+        item_type = cast("type", args[0])
+        return {"type": "array", "items": _type_to_json_schema(item_type)}
 
-    if origin is dict and len(args) >= 2:  # noqa: PLR2004
-        value_type = args[1]  # type: ignore[misc]
+    if origin is dict and len(args) >= 2:
+        value_type = cast("type", args[1])
         return {
             "type": "object",
             "additionalProperties": _type_to_json_schema(value_type),
@@ -74,7 +73,8 @@ def _type_to_json_schema(python_type: type) -> dict[str, Any]:
 
     # Check for Pydantic model
     if hasattr(python_type, "model_json_schema"):
-        return python_type.model_json_schema()
+        model_json_schema_method = python_type.model_json_schema
+        return cast("dict[str, Any]", model_json_schema_method())
 
     # Fallback
     return {"type": "object"}
@@ -85,6 +85,7 @@ def _dataclass_to_schema(dc_type: type) -> dict[str, Any]:
     properties: dict[str, Any] = {}
     required: list[str] = []
 
+    hints: dict[str, type[Any]]
     try:
         hints = get_type_hints(dc_type)
     except Exception:
@@ -112,8 +113,7 @@ def _dataclass_to_schema(dc_type: type) -> dict[str, Any]:
 
 
 class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
-    """
-    Validates LLM responses against Pydantic models or dataclasses.
+    """Validates LLM responses against Pydantic models or dataclasses.
 
     Supports:
     - Pydantic BaseModel subclasses
@@ -135,11 +135,11 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
             WeatherResponse
         )
         # result is a WeatherResponse instance
+
     """
 
     def validate(self, response: str, output_type: type[T], /) -> T:
-        """
-        Validate and parse an LLM response into the target type.
+        """Validate and parse an LLM response into the target type.
 
         Args:
             response: Raw LLM response (typically contains JSON)
@@ -150,6 +150,7 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
 
         Raises:
             ValidationError: If parsing or validation fails
+
         """
         # Extract JSON from response
         json_str = _extract_json_from_response(response)
@@ -162,8 +163,9 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
         # Handle Pydantic models (duck typing for model_validate)
         if hasattr(output_type, "model_validate"):
             try:
-                model_validate = output_type.model_validate  # type: ignore[attr-defined]
-                return cast(T, model_validate(data))  # type: ignore[redundant-cast]
+                model_validate_method = output_type.model_validate
+                validated_result = model_validate_method(data)
+                return cast("T", validated_result)
             except Exception as e:
                 raise ValidationError(f"Pydantic validation failed: {e}") from e
 
@@ -172,26 +174,27 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
             if not isinstance(output_type, type):
                 raise ValidationError("Expected a dataclass type, not an instance")
             try:
-                return cast(T, output_type(**data))  # type: ignore[redundant-cast]
+                dataclass_instance = output_type(**data)
+                return cast("T", dataclass_instance)
             except Exception as e:
                 raise ValidationError(f"Dataclass instantiation failed: {e}") from e
 
         # Handle simple types
         if output_type in (str, int, float, bool):
             try:
-                return cast(T, output_type(data))  # type: ignore[call-arg,redundant-cast]
+                converted_value = output_type(data)  # type: ignore[call-arg]
+                return cast("T", converted_value)
             except Exception as e:
                 raise ValidationError(f"Type conversion failed: {e}") from e
 
         # Handle list/dict - return as-is if types match
-        if isinstance(data, output_type):  # type: ignore[arg-type]
-            return cast(T, data)  # type: ignore[redundant-cast]
+        if isinstance(data, (list, dict)):
+            return cast("T", data)
 
         raise ValidationError(f"Cannot validate response to type {output_type.__name__}")
 
     def get_schema(self, output_type: type[T], /) -> dict[str, Any]:
-        """
-        Get the JSON schema for an output type.
+        """Get the JSON schema for an output type.
 
         This schema can be included in the system prompt to guide LLM output.
         """

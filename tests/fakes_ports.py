@@ -47,8 +47,7 @@ class SequenceIdGenerator(IdGeneratorPort):
 
 
 class QueueLLM(LLMPort):
-    """
-    Deterministic LLMPort for tests.
+    """Deterministic LLMPort for tests.
 
     Provide a sequence of responses (strings) or exceptions. Each call pops one.
     """
@@ -79,9 +78,11 @@ class QueueLLM(LLMPort):
         self._last_usage = UsageSummary(
             model_usage_summaries={
                 self._model_name: ModelUsageSummary(
-                    total_calls=1, total_input_tokens=0, total_output_tokens=0
-                )
-            }
+                    total_calls=1,
+                    total_input_tokens=0,
+                    total_output_tokens=0,
+                ),
+            },
         )
         return ChatCompletion(
             root_model=request.model or self._model_name,
@@ -101,8 +102,8 @@ class QueueLLM(LLMPort):
                     total_calls=self._total_calls,
                     total_input_tokens=0,
                     total_output_tokens=0,
-                )
-            }
+                ),
+            },
         )
 
     def get_last_usage(self) -> UsageSummary:
@@ -152,7 +153,7 @@ class InMemoryBroker(BrokerPort):
         self._llms: dict[str, LLMPort] = {default_llm.model_name: default_llm}
         self._default = default_llm
         self._routing_rules = build_routing_rules(
-            [ModelSpec(name=default_llm.model_name, is_default=True)]
+            [ModelSpec(name=default_llm.model_name, is_default=True)],
         )
         self._started = False
 
@@ -161,7 +162,7 @@ class InMemoryBroker(BrokerPort):
             raise ValidationError("Broker.register_llm requires a non-empty model_name")
         if model_name != llm.model_name:
             raise ValidationError(
-                f"Broker.register_llm model_name {model_name!r} must match llm.model_name {llm.model_name!r}"
+                f"Broker.register_llm model_name {model_name!r} must match llm.model_name {llm.model_name!r}",
             )
         self._llms[model_name] = llm
         default = self._default.model_name

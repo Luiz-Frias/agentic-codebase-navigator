@@ -9,22 +9,24 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rlm.adapters.base import BaseEnvironmentAdapter
-from rlm.domain.models import BatchedLLMRequest, ChatCompletion, LLMRequest, ReplResult
 from rlm.domain.policies.timeouts import (
     DEFAULT_BROKER_CLIENT_TIMEOUT_S,
     DEFAULT_LOCAL_EXECUTE_TIMEOUT_S,
 )
-from rlm.domain.ports import BrokerPort
-from rlm.domain.types import ContextPayload, Prompt
 from rlm.infrastructure.comms.protocol import (
     request_completion,
     request_completions_batched,
 )
 from rlm.infrastructure.execution_namespace_policy import ExecutionNamespacePolicy
 from rlm.infrastructure.logging import warn_cleanup_failure
+
+if TYPE_CHECKING:
+    from rlm.domain.models import BatchedLLMRequest, ChatCompletion, LLMRequest, ReplResult
+    from rlm.domain.ports import BrokerPort
+    from rlm.domain.types import ContextPayload, Prompt
 
 # -----------------------------------------------------------------------------
 # Process-wide safety guards
@@ -37,14 +39,13 @@ _PROCESS_EXEC_LOCK = threading.Lock()
 
 @contextmanager
 def _execution_timeout(timeout_s: float | None, /):
-    """
-    Best-effort execution timeout for runaway code (Local env only).
+    """Best-effort execution timeout for runaway code (Local env only).
 
     Notes:
     - Uses SIGALRM when available and only in the main thread.
     - If unavailable, acts as a no-op (we still rely on broker timeouts for `llm_query`).
-    """
 
+    """
     if timeout_s is None:
         yield
         return
@@ -58,7 +59,7 @@ def _execution_timeout(timeout_s: float | None, /):
     prev_handler = signal.getsignal(signal.SIGALRM)
     prev_timer = signal.getitimer(signal.ITIMER_REAL)
 
-    def _on_alarm(_signum: int, _frame):  # noqa: ANN001 - signal handler signature
+    def _on_alarm(_signum: int, _frame):
         raise TimeoutError(f"Execution timed out after {timeout_s}s")
 
     signal.signal(signal.SIGALRM, _on_alarm)
@@ -72,8 +73,7 @@ def _execution_timeout(timeout_s: float | None, /):
 
 
 class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
-    """
-    Native Local environment adapter (Phase 05).
+    """Native Local environment adapter (Phase 05).
 
     Key semantics (legacy-compatible):
     - Persistent namespace across `execute_code` calls.
@@ -107,7 +107,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
                 policy = ExecutionNamespacePolicy()
             else:
                 policy = ExecutionNamespacePolicy(
-                    allowed_import_roots=frozenset(allowed_import_roots)
+                    allowed_import_roots=frozenset(allowed_import_roots),
                 )
         self._policy = policy
 
@@ -144,7 +144,6 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
     @property
     def session_dir(self) -> Path:
         """Per-run session directory (temp cwd + allowed open root)."""
-
         return self._session_dir
 
     # ------------------------------------------------------------------
@@ -170,8 +169,8 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
                 os.chdir(self._session_dir)
                 with _execution_timeout(self._execute_timeout_s):
                     try:
-                        exec(code, self._ns, self._ns)  # noqa: S102  # nosec B102 - core feature: controlled code execution
-                    except Exception as exc:  # noqa: BLE001 - capture into stderr, legacy-style
+                        exec(code, self._ns, self._ns)  # nosec B102 - core feature: controlled code execution
+                    except Exception as exc:
                         # Keep formatting stable: no tracebacks, just type + message.
                         stderr_buf.write(f"\n{type(exc).__name__}: {exc}")
             finally:
@@ -191,7 +190,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         # Best-effort idempotency.
         try:
             self._tmp.cleanup()
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("LocalEnvironment.cleanup_tmp", exc)
         self._ns.clear()
         self._pending_llm_calls.clear()
@@ -205,7 +204,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         if name in self._ns:
             try:
                 return str(self._ns[name])
-            except Exception as exc:  # noqa: BLE001 - robust string conversion
+            except Exception as exc:
                 return f"Error: Failed to stringify variable {name!r} - {exc}"
         return f"Error: Variable '{name}' not found"
 
@@ -215,15 +214,13 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         model: str | None = None,
         correlation_id: str | None = None,
     ) -> str:
-        """
-        Query the broker from within executed code.
+        """Query the broker from within executed code.
 
         Legacy semantics:
         - returns the response string on success
         - returns "Error: ..." string on failure (does not raise)
         - records successful calls into `ReplResult.llm_calls`
         """
-
         cid = (
             correlation_id if (correlation_id is None or isinstance(correlation_id, str)) else None
         )
@@ -232,7 +229,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
 
         try:
             cc = self._request_completion(prompt=prompt, model=model, correlation_id=cid)
-        except Exception as exc:  # noqa: BLE001 - legacy behavior: surface as string
+        except Exception as exc:
             return f"Error: LM query failed - {exc}"
         self._pending_llm_calls.append(cc)
         return cc.response
@@ -255,9 +252,11 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
 
         try:
             results, calls = self._request_completions_batched(
-                prompts=prompts, model=model, correlation_id=cid
+                prompts=prompts,
+                model=model,
+                correlation_id=cid,
             )
-        except Exception as exc:  # noqa: BLE001 - legacy behavior: per-item errors
+        except Exception as exc:
             return [f"Error: LM query failed - {exc}"] * len(prompts)
 
         self._pending_llm_calls.extend(calls)
@@ -315,7 +314,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         if self._broker is not None:
             # Use the broker's batched interface (supports concurrency in the TCP broker).
             completions = self._broker.complete_batched(
-                BatchedLLMRequest(prompts=prompts, model=model)
+                BatchedLLMRequest(prompts=prompts, model=model),
             )
             return [c.response for c in completions], list(completions)
 

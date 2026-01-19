@@ -6,7 +6,9 @@ import time
 from collections.abc import Coroutine
 from socketserver import StreamRequestHandler, ThreadingTCPServer
 from threading import Event, Lock, Thread
-from typing import Any, Final
+from typing import Any, Final, TypeVar
+
+_T = TypeVar("_T")
 
 from rlm.adapters.base import BaseBrokerAdapter
 from rlm.domain.errors import LLMError, ValidationError
@@ -38,8 +40,7 @@ from rlm.infrastructure.logging import warn_cleanup_failure
 
 
 def _safe_error_message(exc: BaseException, /) -> str:
-    """
-    Convert internal exceptions to client-safe error strings.
+    """Convert internal exceptions to client-safe error strings.
 
     Important: do not leak stack traces or repr() of large/sensitive payloads.
     """
@@ -59,8 +60,7 @@ def _safe_error_message(exc: BaseException, /) -> str:
 
 
 class _AsyncLoopThread:
-    """
-    Single shared asyncio loop used for batched request execution.
+    """Single shared asyncio loop used for batched request execution.
 
     This avoids calling `asyncio.run()` inside `socketserver` handler threads.
     """
@@ -78,7 +78,7 @@ class _AsyncLoopThread:
         self._ready.clear()
 
         def _runner() -> None:
-            loop = asyncio.new_event_loop()
+            loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
             self._loop = loop
             asyncio.set_event_loop(loop)
             self._ready.set()
@@ -86,7 +86,7 @@ class _AsyncLoopThread:
 
             # Best-effort cleanup on stop.
             try:
-                pending = asyncio.all_tasks(loop)
+                pending: set[asyncio.Task[Any]] = asyncio.all_tasks(loop)
                 for task in pending:
                     task.cancel()
                 if pending:
@@ -106,7 +106,7 @@ class _AsyncLoopThread:
             self._loop = None
             return
 
-        loop = self._loop
+        loop: asyncio.AbstractEventLoop = self._loop
         loop.call_soon_threadsafe(loop.stop)
         self._thread.join(timeout=DEFAULT_BROKER_THREAD_JOIN_TIMEOUT_S)
         self._thread = None
@@ -114,12 +114,12 @@ class _AsyncLoopThread:
 
     def run(
         self,
-        coro: Coroutine[Any, Any, Any],
+        coro: Coroutine[Any, Any, _T],
         /,
         *,
         timeout_s: float | None = None,
         cancellation: CancellationPolicy | None = None,
-    ) -> Any:
+    ) -> _T:
         if self._loop is None:
             raise RuntimeError("Async loop not started")
         fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
@@ -137,7 +137,7 @@ class _AsyncLoopThread:
             if grace > 0:
                 try:
                     fut.result(timeout=grace)
-                except Exception as exc:  # noqa: BLE001  # nosec B110
+                except Exception as exc:  # nosec B110
                     warn_cleanup_failure("TcpBrokerAdapter.cancellation_grace", exc)
             raise TimeoutError("Batched request timed out") from None
 
@@ -148,34 +148,40 @@ class _TcpBrokerServer(ThreadingTCPServer):
 
 
 class _TcpBrokerRequestHandler(StreamRequestHandler):
-    def handle(self) -> None:  # noqa: D401 - socketserver API
+    def handle(self) -> None:
         broker: TcpBrokerAdapter = self.server.broker  # type: ignore[attr-defined]
 
         try:
-            raw = recv_frame(self.connection, max_message_bytes=DEFAULT_MAX_MESSAGE_BYTES)
+            raw: dict[str, Any] | None = recv_frame(
+                self.connection,
+                max_message_bytes=DEFAULT_MAX_MESSAGE_BYTES,
+            )
             if raw is None:
                 return
 
+            request: WireRequest | None
+            parse_error: WireResponse | None
             request, parse_error = try_parse_request(raw)
             if parse_error is not None:
                 send_frame(self.connection, parse_error.to_dict())
                 return
             assert request is not None
 
-            response = broker._handle_wire_request(request)
+            response: WireResponse = broker._handle_wire_request(request)
             send_frame(self.connection, response.to_dict())
-        except Exception as exc:  # noqa: BLE001 - boundary: convert to safe wire response
+        except Exception as exc:
             send_frame(
                 self.connection,
                 WireResponse(
-                    correlation_id=None, error=_safe_error_message(exc), results=None
+                    correlation_id=None,
+                    error=_safe_error_message(exc),
+                    results=None,
                 ).to_dict(),
             )
 
 
 class TcpBrokerAdapter(BaseBrokerAdapter):
-    """
-    A TCP broker that:
+    """A TCP broker that:
     - exposes the infra wire protocol over a length-prefixed JSON socket server
     - routes requests to registered `LLMPort` implementations by model name
     - supports batched requests via an asyncio TaskGroup (runs on a dedicated loop thread)
@@ -198,7 +204,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         self._default_llm = default_llm
         self._llms: dict[str, LLMPort] = {default_llm.model_name: default_llm}
         self._routing_rules = build_routing_rules(
-            [ModelSpec(name=default_llm.model_name, is_default=True)]
+            [ModelSpec(name=default_llm.model_name, is_default=True)],
         )
 
         self._timeouts = timeouts or BrokerTimeouts()
@@ -221,13 +227,13 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
             raise ValidationError("Broker.register_llm requires a non-empty model_name")
         if model_name != llm.model_name:
             raise ValidationError(
-                f"Broker.register_llm model_name {model_name!r} must match llm.model_name {llm.model_name!r}"
+                f"Broker.register_llm model_name {model_name!r} must match llm.model_name {llm.model_name!r}",
             )
 
         self._llms[model_name] = llm
         # Rebuild routing rules deterministically (avoid accidental ambiguity).
-        default = self._default_llm.model_name
-        specs = [ModelSpec(name=default, is_default=True)]
+        default: str = self._default_llm.model_name
+        specs: list[ModelSpec] = [ModelSpec(name=default, is_default=True)]
         for name in sorted(self._llms):
             if name == default:
                 continue
@@ -251,7 +257,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
             self._async_loop.stop()
             return
 
-        thread = self._thread
+        thread: Thread | None = self._thread
         self._server.shutdown()
         self._server.server_close()
         self._server = None
@@ -262,12 +268,12 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         self._async_loop.stop()
 
     def complete(self, request: LLMRequest, /) -> ChatCompletion:
-        llm = self._select_llm(request.model)
-        start = time.perf_counter()
+        llm: LLMPort = self._select_llm(request.model)
+        start: float = time.perf_counter()
         # `request.model` is used for *routing*; once selected, call the chosen
         # adapter with its own model name to keep `root_model` and usage consistent.
-        cc = llm.complete(LLMRequest(prompt=request.prompt, model=llm.model_name))
-        end = time.perf_counter()
+        cc: ChatCompletion = llm.complete(LLMRequest(prompt=request.prompt, model=llm.model_name))
+        end: float = time.perf_counter()
 
         # Preserve adapter timings when the LLM impl doesn't set execution_time.
         if cc.execution_time == 0.0:
@@ -283,13 +289,13 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         return cc
 
     def complete_batched(self, request: BatchedLLMRequest, /) -> list[ChatCompletion]:
-        llm = self._select_llm(request.model)
+        llm: LLMPort = self._select_llm(request.model)
 
         async def _run() -> list[ChatCompletion | Exception]:
             return await _acomplete_prompts_batched(llm, request.prompts, llm.model_name)
 
         try:
-            out = self._async_loop.run(
+            out: list[ChatCompletion | Exception] = self._async_loop.run(
                 _run(),
                 timeout_s=self._timeouts.batched_completion_timeout_s,
                 cancellation=self._cancellation,
@@ -322,20 +328,18 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         return (self._host, self._server.server_address[1])
 
     def _select_llm(self, model: str | None, /) -> LLMPort:
-        resolved = self._routing_rules.resolve(model)
+        resolved: str = self._routing_rules.resolve(model)
         return self._llms[resolved]
 
     def _record_usage(self, usage: UsageSummary, /) -> None:
-        """
-        Merge a per-call usage summary into the broker's totals.
+        """Merge a per-call usage summary into the broker's totals.
 
         This intentionally tracks *only* calls routed through this broker instance,
         independent of any internal totals maintained by LLM adapters.
         """
-
         with self._usage_lock:
             for model, mus in usage.model_usage_summaries.items():
-                current = self._usage.model_usage_summaries.get(model)
+                current: ModelUsageSummary | None = self._usage.model_usage_summaries.get(model)
                 if current is None:
                     self._usage.model_usage_summaries[model] = ModelUsageSummary(
                         total_calls=mus.total_calls,
@@ -351,13 +355,17 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
         try:
             if request.prompt is not None:
                 try:
-                    cc = self.complete(LLMRequest(prompt=request.prompt, model=request.model))
-                    result = WireResult(error=None, chat_completion=cc)
-                except Exception as exc:  # noqa: BLE001 - per-item error mapping
+                    cc: ChatCompletion = self.complete(
+                        LLMRequest(prompt=request.prompt, model=request.model),
+                    )
+                    result: WireResult = WireResult(error=None, chat_completion=cc)
+                except Exception as exc:
                     result = WireResult(error=_safe_error_message(exc), chat_completion=None)
 
                 return WireResponse(
-                    correlation_id=request.correlation_id, error=None, results=[result]
+                    correlation_id=request.correlation_id,
+                    error=None,
+                    results=[result],
                 )
 
             if request.prompts is None:
@@ -367,16 +375,22 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                     results=None,
                 )
 
-            llm = self._select_llm(request.model)
-            prompts = request.prompts  # Capture for closure type narrowing
+            llm: LLMPort = self._select_llm(request.model)
+            prompts: list[str | dict[str, Any] | list[Any]] = (
+                request.prompts
+            )  # Capture for closure type narrowing
 
             async def _run() -> list[WireResult]:
-                out = await _acomplete_prompts_batched(llm, prompts, llm.model_name)
+                out: list[ChatCompletion | Exception] = await _acomplete_prompts_batched(
+                    llm,
+                    prompts,
+                    llm.model_name,
+                )
                 results: list[WireResult] = []
                 for item in out:
                     if isinstance(item, Exception):
                         results.append(
-                            WireResult(error=_safe_error_message(item), chat_completion=None)
+                            WireResult(error=_safe_error_message(item), chat_completion=None),
                         )
                     else:
                         self._record_usage(item.usage_summary)
@@ -384,7 +398,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                 return results
 
             try:
-                results = self._async_loop.run(
+                results: list[WireResult] = self._async_loop.run(
                     _run(),
                     timeout_s=self._timeouts.batched_completion_timeout_s,
                     cancellation=self._cancellation,
@@ -396,7 +410,7 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
                     results=None,
                 )
             return WireResponse(correlation_id=request.correlation_id, error=None, results=results)
-        except Exception as exc:  # noqa: BLE001 - never crash the server; safe response
+        except Exception as exc:
             return WireResponse(
                 correlation_id=request.correlation_id,
                 error=_safe_error_message(exc),
@@ -405,21 +419,21 @@ class TcpBrokerAdapter(BaseBrokerAdapter):
 
 
 async def _acomplete_prompts_batched(
-    llm: LLMPort, prompts: list[Any], model: str | None
+    llm: LLMPort,
+    prompts: list[str | dict[str, Any] | list[Any]],
+    model: str | None,
 ) -> list[ChatCompletion | Exception]:
-    """
-    Run multiple `llm.acomplete(...)` calls concurrently and preserve ordering.
+    """Run multiple `llm.acomplete(...)` calls concurrently and preserve ordering.
 
     This is used by both the direct `complete_batched` API and the wire-protocol
     handler to keep concurrency logic consistent.
     """
-
     out: list[ChatCompletion | Exception] = [Exception("uninitialized")] * len(prompts)
 
-    async def _one(i: int, prompt: Any) -> None:
+    async def _one(i: int, prompt: str | dict[str, Any] | list[Any]) -> None:
         try:
             out[i] = await llm.acomplete(LLMRequest(prompt=prompt, model=model))
-        except Exception as exc:  # noqa: BLE001 - isolate per-item errors
+        except Exception as exc:
             out[i] = exc
 
     async with asyncio.TaskGroup() as tg:

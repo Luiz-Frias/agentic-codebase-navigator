@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from rlm.domain.types import ContextPayload
 
-ContextType = Literal["str", "dict", "list"]
+ContextType: TypeAlias = Literal["str", "dict", "list"]
 
 
 @dataclass(frozen=True, slots=True)
 class QueryMetadata:
-    """
-    Metadata about a query/context payload.
+    """Metadata about a query/context payload.
 
     This is the domain-owned counterpart to the legacy `QueryMetadata` used to
     build the initial system prompt. It is intentionally dependency-free and
@@ -28,8 +27,7 @@ class QueryMetadata:
 
     @classmethod
     def from_context(cls, context: ContextPayload, /) -> QueryMetadata:
-        """
-        Compute metadata for a context payload.
+        """Compute metadata for a context payload.
 
         Semantics are intentionally aligned with the upstream/legacy computation
         so prompt behavior remains stable during the migration.

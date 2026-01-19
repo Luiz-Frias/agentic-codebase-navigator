@@ -9,7 +9,7 @@ import textwrap
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from rlm.adapters.base import BaseEnvironmentAdapter
 from rlm.domain.models import ChatCompletion, LLMRequest, ReplResult
@@ -20,8 +20,10 @@ from rlm.domain.policies.timeouts import (
     DEFAULT_DOCKER_SUBPROCESS_TIMEOUT_S,
     DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S,
 )
-from rlm.domain.ports import BrokerPort
 from rlm.domain.types import ContextPayload
+
+if TYPE_CHECKING:
+    from rlm.domain.ports import BrokerPort
 from rlm.infrastructure.comms.protocol import (
     request_completion,
     request_completions_batched,
@@ -30,8 +32,7 @@ from rlm.infrastructure.logging import warn_cleanup_failure
 
 
 def _use_host_network() -> bool:
-    """
-    Check if Docker should use host networking mode.
+    """Check if Docker should use host networking mode.
 
     When RLM_DOCKER_USE_HOST_NETWORK=1, the container shares the host's network
     namespace. This is useful in CI environments (like GitHub Actions) where
@@ -47,8 +48,7 @@ def _use_host_network() -> bool:
 
 
 class DockerLLMProxyHandler(BaseHTTPRequestHandler):
-    """
-    Host-side HTTP proxy for `llm_query()` calls issued from within a container.
+    """Host-side HTTP proxy for `llm_query()` calls issued from within a container.
 
     The in-container execution script calls:
     - POST /llm_query
@@ -67,10 +67,10 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
     timeout_s: float = DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S
 
     # Silence noisy default logging.
-    def log_message(self, *_args: object) -> None:  # noqa: D401 - BaseHTTPRequestHandler API
-        return None
+    def log_message(self, *_args: object) -> None:
+        return
 
-    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+    def do_POST(self) -> None:
         try:
             raw_len = self.headers.get("Content-Length")
             if raw_len is None:
@@ -84,17 +84,19 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
             if content_length <= 0:
                 self._respond(400, {"error": "Missing request body"})
                 return
-            body = json.loads(self.rfile.read(content_length))
+            body_raw: Any = json.loads(self.rfile.read(content_length))
         except json.JSONDecodeError:
             self._respond(400, {"error": "Invalid JSON payload"})
             return
-        except Exception as exc:  # noqa: BLE001 - proxy boundary
+        except Exception as exc:
             self._respond(400, {"error": str(exc)})
             return
 
-        if not isinstance(body, dict):
+        if not isinstance(body_raw, dict):
             self._respond(400, {"error": "Request body must be a JSON object"})
             return
+
+        body: dict[str, Any] = cast("dict[str, Any]", body_raw)
 
         if self.path == "/llm_query":
             result = self._handle_single(body)
@@ -143,7 +145,7 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
                     correlation_id=correlation_id,
                     timeout_s=self.timeout_s,
                 )
-        except Exception as exc:  # noqa: BLE001 - proxy boundary
+        except Exception as exc:
             return {"error": str(exc)}
 
         with self.lock:
@@ -174,7 +176,7 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
                     continue
                 try:
                     cc = broker.complete(LLMRequest(prompt=p, model=model))
-                except Exception as exc:  # noqa: BLE001 - per-item boundary
+                except Exception as exc:
                     results.append(f"Error: {exc}")
                     continue
                 with self.lock:
@@ -194,7 +196,7 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
                 correlation_id=correlation_id,
                 timeout_s=self.timeout_s,
             )
-        except Exception as exc:  # noqa: BLE001 - proxy boundary
+        except Exception as exc:
             return {"error": str(exc)}
 
         wire_responses: list[str] = []
@@ -217,8 +219,7 @@ def _build_exec_script(
     proxy_timeout_s: float = DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S,
     use_host_network: bool = False,
 ) -> str:
-    """
-    Build the container-side Python script.
+    """Build the container-side Python script.
 
     The script:
     - loads persistent locals from /workspace/state.pkl
@@ -227,7 +228,6 @@ def _build_exec_script(
     - persists locals back to state.pkl (dropping unpickleable values)
     - prints a final JSON object containing stdout/stderr/locals
     """
-
     code_b64 = base64.b64encode(code.encode()).decode()
     # When using host network mode, the container shares the host's network namespace,
     # so we use localhost. Otherwise, use Docker's special DNS name.
@@ -344,13 +344,12 @@ print(
         ensure_ascii=False,
     )
 )
-"""
+""",
     )
 
 
 class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
-    """
-    Native Docker environment adapter (Phase 05).
+    """Native Docker environment adapter (Phase 05).
 
     Runs Python code in a per-session container with:
     - persistent state across executions (pickled state under /workspace)
@@ -416,8 +415,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
     # ------------------------------------------------------------------
 
     def load_context(self, context_payload: ContextPayload, /) -> None:
-        """
-        Load context into the container-backed REPL.
+        """Load context into the container-backed REPL.
 
         IMPORTANT: Do *not* embed `json.dumps(context_payload)` directly inside a quoted
         Python string literal. JSON does not escape single quotes, so payloads like
@@ -425,7 +423,6 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         payload to a file in the mounted workspace and load it from within the
         container.
         """
-
         if isinstance(context_payload, str):
             host_path = os.path.join(self._host_workspace, "context.txt")
             container_path = "/workspace/context.txt"
@@ -433,7 +430,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                 f.write(context_payload)
             self.execute_code(
                 f"with open({container_path!r}, 'r', encoding='utf-8') as f:\n"
-                "    context = f.read()"
+                "    context = f.read()",
             )
             return
 
@@ -444,7 +441,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         self.execute_code(
             "import json\n"
             f"with open({container_path!r}, 'r', encoding='utf-8') as f:\n"
-            "    context = json.load(f)"
+            "    context = json.load(f)",
         )
 
     def execute_code(self, code: str, /) -> ReplResult:
@@ -472,6 +469,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         try:
             result = subprocess.run(  # nosec B603 - safe list-form command, no shell injection risk
                 cmd,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=self._subprocess_timeout_s,
@@ -483,7 +481,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                 self._pending_calls.clear()
             try:
                 self.cleanup()
-            except Exception as cleanup_exc:  # noqa: BLE001  # nosec B110
+            except Exception as cleanup_exc:  # nosec B110
                 warn_cleanup_failure("DockerEnvironment.execute_timeout", cleanup_exc)
 
             raw_stderr = exc.stderr or b""
@@ -507,7 +505,11 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         elapsed = time.perf_counter() - start
         try:
             lines = result.stdout.strip().split("\n")
-            data = json.loads(lines[-1]) if lines else {}
+            data_raw: Any = json.loads(lines[-1]) if lines else {}
+            data: dict[str, Any] = cast(
+                "dict[str, Any]",
+                data_raw if isinstance(data_raw, dict) else {},
+            )
             return ReplResult(
                 stdout=str(data.get("stdout", "")),
                 stderr=str(data.get("stderr", "")) + (result.stderr or ""),
@@ -543,6 +545,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                         str(getattr(self, "_stop_grace_s", DEFAULT_DOCKER_STOP_GRACE_S)),
                         container_id,
                     ],
+                    check=False,
                     capture_output=True,
                     timeout=getattr(
                         self,
@@ -550,7 +553,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                         DEFAULT_DOCKER_CLEANUP_SUBPROCESS_TIMEOUT_S,
                     ),
                 )
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_container_stop", exc)
         finally:
             try:
@@ -562,7 +565,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
             if proxy_server is not None:
                 proxy_server.shutdown()
                 proxy_server.server_close()
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_proxy_server", exc)
         finally:
             try:
@@ -577,9 +580,9 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                         self,
                         "_thread_join_timeout_s",
                         DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S,
-                    )
+                    ),
                 )
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_proxy_thread", exc)
         finally:
             try:
@@ -591,13 +594,13 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
             if calls_lock is not None and pending_calls is not None:
                 with calls_lock:
                     pending_calls.clear()
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_pending_calls", exc)
 
         try:
             if tmp is not None and hasattr(tmp, "cleanup"):
                 tmp.cleanup()
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_tmp", exc)
 
     # ------------------------------------------------------------------
@@ -605,7 +608,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
     # ------------------------------------------------------------------
 
     def _start_proxy(self) -> None:
-        handler = type(
+        handler: type[DockerLLMProxyHandler] = type(
             "DockerProxyHandler",
             (DockerLLMProxyHandler,),
             {
@@ -649,6 +652,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
 
         result = subprocess.run(  # nosec B603 B607 - safe list-form command, Docker CLI is standard
             cmd,
+            check=False,
             capture_output=True,
             text=True,
             timeout=self._subprocess_timeout_s,

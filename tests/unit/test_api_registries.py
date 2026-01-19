@@ -34,7 +34,9 @@ def test_default_llm_registry_raises_for_unknown_backend() -> None:
 @pytest.mark.unit
 def test_validate_environment_kwargs_prunes_legacy_key_when_allowed() -> None:
     out = _validate_environment_kwargs(
-        "local", {"lm_handler_address": "127.0.0.1:1"}, allow_legacy_keys=True
+        "local",
+        {"lm_handler_address": "127.0.0.1:1"},
+        allow_legacy_keys=True,
     )
     assert out == {}
 
@@ -46,21 +48,29 @@ def test_validate_environment_kwargs_local_validations() -> None:
 
     with pytest.raises(ValueError, match="allowed_import_roots.*set/list/tuple"):
         _validate_environment_kwargs(
-            "local", {"allowed_import_roots": "nope"}, allow_legacy_keys=False
+            "local",
+            {"allowed_import_roots": "nope"},
+            allow_legacy_keys=False,
         )
 
     with pytest.raises(ValueError, match="allowed_import_roots.*non-empty strings"):
         _validate_environment_kwargs(
-            "local", {"allowed_import_roots": {"", "x"}}, allow_legacy_keys=False
+            "local",
+            {"allowed_import_roots": {"", "x"}},
+            allow_legacy_keys=False,
         )
 
     out_roots = _validate_environment_kwargs(
-        "local", {"allowed_import_roots": ["math"]}, allow_legacy_keys=False
+        "local",
+        {"allowed_import_roots": ["math"]},
+        allow_legacy_keys=False,
     )
     assert out_roots["allowed_import_roots"] == {"math"}
 
     out = _validate_environment_kwargs(
-        "local", {"execute_timeout_s": None}, allow_legacy_keys=False
+        "local",
+        {"execute_timeout_s": None},
+        allow_legacy_keys=False,
     )
     assert out["execute_timeout_s"] is None
 
@@ -69,7 +79,9 @@ def test_validate_environment_kwargs_local_validations() -> None:
 
     with pytest.raises(ValueError, match="context_payload.*one of str\\|dict\\|list"):
         _validate_environment_kwargs(
-            "local", {"context_payload": object()}, allow_legacy_keys=False
+            "local",
+            {"context_payload": object()},
+            allow_legacy_keys=False,
         )
 
     with pytest.raises(ValueError, match="setup_code.*string"):

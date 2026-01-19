@@ -23,26 +23,23 @@ from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
 
 
 def _require_openai() -> Any:
-    """
-    Lazily import the OpenAI SDK (used for Azure OpenAI as well).
+    """Lazily import the OpenAI SDK (used for Azure OpenAI as well).
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-azure-openai]`.
     """
-
     try:
         import openai  # type: ignore[import-not-found]
-    except Exception as e:  # noqa: BLE001 - dependency boundary
+    except Exception as e:
         raise ImportError(
             "Azure OpenAI adapter selected but the 'openai' package is not installed. "
-            "Install the optional extra: `agentic-codebase-navigator[llm-azure-openai]`."
+            "Install the optional extra: `agentic-codebase-navigator[llm-azure-openai]`.",
         ) from e
     return openai
 
 
 @dataclass
 class AzureOpenAIAdapter(BaseLLMAdapter):
-    """
-    Adapter skeleton: Azure OpenAI (via OpenAI SDK) -> domain `LLMPort`.
+    """Adapter skeleton: Azure OpenAI (via OpenAI SDK) -> domain `LLMPort`.
 
     Phase 4 will implement real request/response mapping.
     """
@@ -89,7 +86,7 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = client.chat.completions.create(model=deployment, messages=messages, **api_kwargs)
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
         end = time.perf_counter()
 
@@ -100,7 +97,7 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Response may have no text content when tool_calls are present
             if tool_calls:
                 text = ""
@@ -109,7 +106,9 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
         last = self._usage_tracker.record(
-            deployment, input_tokens=in_tokens, output_tokens=out_tokens
+            deployment,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
         )
         # Use the per-call usage returned by `record()` (race-free under concurrency).
         last_usage = UsageSummary(model_usage_summaries={deployment: last})
@@ -141,9 +140,11 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = await client.chat.completions.create(
-                model=deployment, messages=messages, **api_kwargs
+                model=deployment,
+                messages=messages,
+                **api_kwargs,
             )
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
         end = time.perf_counter()
 
@@ -154,7 +155,7 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Response may have no text content when tool_calls are present
             if tool_calls:
                 text = ""
@@ -163,7 +164,9 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
         last = self._usage_tracker.record(
-            deployment, input_tokens=in_tokens, output_tokens=out_tokens
+            deployment,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
         )
         # Use the per-call usage returned by `record()` (race-free under concurrency).
         last_usage = UsageSummary(model_usage_summaries={deployment: last})
@@ -193,7 +196,7 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
             if client_cls is None:
                 raise ImportError(
                     "OpenAI SDK API mismatch: expected `openai.AzureOpenAI` class. "
-                    "Please upgrade `openai` (install `agentic-codebase-navigator[llm-azure-openai]`)."
+                    "Please upgrade `openai` (install `agentic-codebase-navigator[llm-azure-openai]`).",
                 )
 
             kwargs: dict[str, Any] = {}
@@ -216,7 +219,7 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
             if client_cls is None:
                 raise ImportError(
                     "OpenAI SDK API mismatch: expected `openai.AsyncAzureOpenAI` class. "
-                    "Please upgrade `openai` (install `agentic-codebase-navigator[llm-azure-openai]`)."
+                    "Please upgrade `openai` (install `agentic-codebase-navigator[llm-azure-openai]`).",
                 )
 
             kwargs: dict[str, Any] = {}

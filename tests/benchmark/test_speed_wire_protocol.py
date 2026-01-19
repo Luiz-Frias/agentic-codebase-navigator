@@ -227,7 +227,7 @@ def test_large_response_parsing(benchmark) -> None:
                                 "total_input_tokens": 2000,
                                 "total_output_tokens": 1000,
                             },
-                        }
+                        },
                     },
                     "execution_time": 1.5,
                 },

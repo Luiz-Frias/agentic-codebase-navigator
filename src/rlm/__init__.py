@@ -1,5 +1,4 @@
-"""
-rlm
+"""rlm
 
 This repository is migrating an upstream snapshot in `references/rlm/**` into a
 src-layout Python package (`src/rlm/**`) and refactoring toward a hexagonal

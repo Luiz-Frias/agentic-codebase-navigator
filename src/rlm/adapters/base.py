@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from rlm.domain.agent_ports import ToolDefinition, ToolPort
-from rlm.domain.models import (
-    BatchedLLMRequest,
-    ChatCompletion,
-    Iteration,
-    LLMRequest,
-    ReplResult,
-    RunMetadata,
-    UsageSummary,
-)
-from rlm.domain.ports import LLMPort
-from rlm.domain.types import ContextPayload
+if TYPE_CHECKING:
+    from rlm.domain.agent_ports import ToolDefinition, ToolPort
+    from rlm.domain.models import (
+        BatchedLLMRequest,
+        ChatCompletion,
+        Iteration,
+        LLMRequest,
+        ReplResult,
+        RunMetadata,
+        UsageSummary,
+    )
+    from rlm.domain.ports import LLMPort
+    from rlm.domain.types import ContextPayload
 
 
 class BaseLLMAdapter(ABC):
