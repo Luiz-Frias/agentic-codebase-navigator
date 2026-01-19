@@ -13,7 +13,32 @@ RLM supports multiple execution environments for running generated code. Each en
 
 ## Local Environment
 
-The local environment executes Python code in-process with a persistent namespace.
+The local environment executes Python code in **isolated subprocess workers** (v1.2.0+). Each execution runs in a separate process with IPC communication to the parent orchestrator.
+
+> **Note (v1.2.0)**: Prior to v1.2.0, local execution ran in-process with a shared namespace. The subprocess model improves isolation and reliability. See [Migration Guide](../migration.md) for upgrade details.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│             Parent Process                   │
+│  ┌─────────────┐    ┌──────────────────┐   │
+│  │ RLM         │    │ Broker           │   │
+│  │ Orchestrator│◄───│ (llm_query)      │   │
+│  └─────────────┘    └──────────────────┘   │
+│         │                   ▲               │
+│         │ spawn             │ IPC           │
+│         ▼                   │               │
+│  ┌──────────────────────────┴──────────┐   │
+│  │         Worker Subprocess            │   │
+│  │  ┌─────────────────────────────┐    │   │
+│  │  │     Isolated Namespace      │    │   │
+│  │  │  - Code execution           │    │   │
+│  │  │  - llm_query() → parent IPC │    │   │
+│  │  └─────────────────────────────┘    │   │
+│  └─────────────────────────────────────┘   │
+└─────────────────────────────────────────────┘
+```
 
 ### Configuration
 
@@ -41,27 +66,29 @@ rlm = create_rlm_from_config(config)
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `execute_timeout_s` | `float` | `30.0` | Code execution timeout (best-effort via SIGALRM) |
-| `broker_timeout_s` | `float` | `30.0` | Timeout for `llm_query()` calls |
+| `execute_timeout_s` | `float` | `30.0` | Per-execution timeout (process kill on timeout) |
+| `execute_timeout_cap_s` | `float` | `300.0` | Maximum allowed timeout cap |
+| `broker_timeout_s` | `float` | `30.0` | Timeout for `llm_query()` IPC calls |
 | `allowed_import_roots` | `set[str]` | Standard library | Additional allowed import paths |
-| `setup_code` | `str` | `None` | Code to run before each execution |
+| `setup_code` | `str` | `None` | Code to run in worker before each execution |
 
 ### Security Model
 
 The local environment provides **medium security** through:
 
-1. **Import Restrictions**: Only allowed modules can be imported
-2. **Builtins Filtering**: Dangerous builtins (`eval`, `exec`, `compile`, `__import__`) are removed
-3. **File I/O Restrictions**: `open()` is replaced with a restricted version
-4. **Temporary Directory**: Each session gets an isolated temp directory
+1. **Process Isolation**: Each execution runs in a subprocess (v1.2.0+)
+2. **Import Restrictions**: Only allowed modules can be imported
+3. **Builtins Filtering**: Dangerous builtins (`eval`, `exec`, `compile`, `__import__`) are removed
+4. **File I/O Restrictions**: `open()` is replaced with a restricted version
+5. **Temporary Directory**: Each session gets an isolated temp directory
 
-**Note**: Local execution runs in the same process. For untrusted code, use Docker.
+**Note**: While subprocess isolation improves reliability, for truly untrusted code use Docker.
 
-### Timeout Behavior
+### Timeout Behavior (v1.2.0+)
 
-- Uses `signal.SIGALRM` for timeouts (Unix only, main thread only)
-- On timeout: returns `TimeoutError` in `stderr`, triggers cleanup
-- Not available on Windows or in non-main threads
+- Worker process is killed on timeout (reliable across platforms)
+- Returns `TimeoutError` in `stderr`, triggers cleanup
+- Falls back to SIGALRM for in-worker timeouts (Unix main thread only)
 
 ### Best For
 
