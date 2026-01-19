@@ -41,7 +41,7 @@ class _WireProtocolHandler(StreamRequestHandler):
 
     MODEL: ClassVar[str] = "stub"
 
-    def handle(self) -> None:  # noqa: D401 - socketserver API
+    def handle(self) -> None:
         raw = recv_frame(self.connection, max_message_bytes=DEFAULT_MAX_MESSAGE_BYTES)
         if raw is None:
             return
@@ -76,7 +76,7 @@ class _WireProtocolHandler(StreamRequestHandler):
                             response=f"r{i + 1}",
                             model=self.MODEL,
                         ),
-                    )
+                    ),
                 )
 
         send_frame(

@@ -44,7 +44,7 @@ def test_query_metadata_from_context_list_empty() -> None:
 @pytest.mark.unit
 def test_query_metadata_from_context_message_list_with_content() -> None:
     md = QueryMetadata.from_context(
-        [{"role": "user", "content": "a"}, {"role": "assistant", "content": "bb"}]
+        [{"role": "user", "content": "a"}, {"role": "assistant", "content": "bb"}],
     )
     assert md.context_type == "list"
     assert md.context_lengths == [1, 2]

@@ -7,12 +7,162 @@ from itertools import count
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
+from rlm.domain.errors import LLMError
 from rlm.domain.models import ModelUsageSummary, UsageSummary
-from rlm.domain.types import Prompt
+from rlm.domain.models.result import Err, Ok, Result
+from rlm.domain.models.safe_accessor import SafeAccessor
 
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolCallRequest, ToolDefinition
     from rlm.domain.models.llm_request import ToolChoice
+    from rlm.domain.types import Prompt
+
+
+# =============================================================================
+# Pydantic TypeAdapter Integration (ADR-001 - Adapter Layer)
+# =============================================================================
+# Uses Pydantic BaseModel + TypeAdapter for SDK response validation when available.
+# Falls back to SafeAccessor when Pydantic not installed. This is an adapter-layer
+# concern - domain remains Pydantic-free per hexagonal discipline.
+#
+# Lazy class definition preserves optional dependency (pip install rlm[pydantic]).
+
+_PYDANTIC_MODELS_LOADED: bool = False
+_OpenAIFunctionModel: type | None = None
+_OpenAIToolCallModel: type | None = None
+_OpenAIToolCallsAdapter: object | None = None
+
+
+def _load_pydantic_models() -> bool:
+    """
+    Lazily load Pydantic BaseModel classes for SDK response validation.
+
+    Returns True if Pydantic is available and models were loaded.
+    Models are defined inside this function to preserve optional dependency.
+    """
+    global _PYDANTIC_MODELS_LOADED, _OpenAIFunctionModel, _OpenAIToolCallModel  # noqa: PLW0603
+    global _OpenAIToolCallsAdapter  # noqa: PLW0603
+
+    if _PYDANTIC_MODELS_LOADED:
+        return _OpenAIToolCallModel is not None
+
+    _PYDANTIC_MODELS_LOADED = True
+
+    try:
+        from pydantic import BaseModel, TypeAdapter
+
+        class OpenAIFunction(BaseModel):
+            """OpenAI function call shape within tool_calls."""
+
+            name: str
+            arguments: str  # JSON string to be parsed
+
+        class OpenAIToolCall(BaseModel):
+            """OpenAI tool_call response shape."""
+
+            id: str
+            type: str = "function"
+            function: OpenAIFunction
+
+        _OpenAIFunctionModel = OpenAIFunction
+        _OpenAIToolCallModel = OpenAIToolCall
+        _OpenAIToolCallsAdapter = TypeAdapter(list[OpenAIToolCall])
+
+    except ImportError:
+        return False
+
+    else:
+        return True
+
+
+def _validate_openai_tool_calls(
+    raw_tool_calls: list[object],
+) -> Result[list[ToolCallRequest], LLMError] | None:
+    """
+    Validate OpenAI tool calls using Pydantic TypeAdapter if available.
+
+    Returns:
+        Ok(list) - Pydantic validation succeeded, returns domain ToolCallRequest list
+        Err - Pydantic validation failed with clear error
+        None - Pydantic not available, caller should use SafeAccessor fallback
+
+    """
+    if not _load_pydantic_models() or _OpenAIToolCallsAdapter is None:
+        return None  # Signal: use SafeAccessor fallback
+
+    try:
+        # TypeAdapter.validate_python() - runtime validation with coercion
+        # pyright: ignore - TypeAdapter is dynamically imported
+        validated = _OpenAIToolCallsAdapter.validate_python(raw_tool_calls)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportAny]
+
+        result: list[ToolCallRequest] = []
+        for tc in validated:  # pyright: ignore[reportAny]
+            # Parse arguments JSON
+            args_str: str = tc.function.arguments  # pyright: ignore[reportAny]
+            arguments: dict[str, object] = {}
+            if args_str:
+                try:
+                    parsed = json.loads(args_str)
+                except json.JSONDecodeError as e:
+                    return Err(LLMError(f"Invalid JSON in tool call arguments: {e}"))
+                if not isinstance(parsed, dict):
+                    return Err(
+                        LLMError(f"Tool call arguments must be dict, got {type(parsed).__name__}")
+                    )
+                arguments = parsed
+
+            result.append(
+                {
+                    "id": tc.id,  # pyright: ignore[reportAny]
+                    "name": tc.function.name,  # pyright: ignore[reportAny]
+                    "arguments": arguments,
+                }
+            )
+
+        return Ok(result)
+
+    except Exception as e:
+        return Err(LLMError(f"Tool call validation failed: {e}"))
+
+
+def _extract_tool_calls_manual(
+    tool_calls_raw: list[object],
+) -> Result[list[ToolCallRequest] | None, LLMError]:
+    """
+    Extract OpenAI tool calls using SafeAccessor (fallback when Pydantic unavailable).
+
+    This is the manual parsing path that works without Pydantic installed.
+
+    """
+    result: list[ToolCallRequest] = []
+    for tc in tool_calls_raw:
+        tc_acc = SafeAccessor(tc)
+        tc_id = tc_acc.get_str_or("id", "")
+
+        func = tc_acc.get("function")
+        if func is None:
+            continue
+
+        func_acc = SafeAccessor(func)
+        name = func_acc.get_str_or("name", "")
+        args_str = func_acc.get_str_or("arguments", "")
+
+        # Parse arguments JSON with Result pattern
+        arguments: dict[str, object] = {}
+        if args_str:
+            try:
+                parsed = json.loads(args_str)
+            except json.JSONDecodeError as e:
+                return Err(LLMError(f"Invalid JSON in tool call arguments: {e}"))
+            if not isinstance(parsed, dict):
+                return Err(
+                    LLMError(f"Tool call arguments must be dict, got {type(parsed).__name__}")
+                )
+            arguments = parsed
+
+        result.append({"id": tc_id, "name": name, "arguments": arguments})
+
+    return Ok(result if result else None)
 
 
 _GEMINI_CALL_COUNTER = count(1)
@@ -31,12 +181,45 @@ def safe_provider_error_message(provider: str, exc: BaseException, /) -> str:
 
     This intentionally avoids leaking stack traces or provider response bodies.
     """
-
     if isinstance(exc, TimeoutError):
         return f"{provider} request timed out"
     if isinstance(exc, (ConnectionError, OSError)):
         return f"{provider} connection error"
     return f"{provider} request failed"
+
+
+# =============================================================================
+# Prompt Conversion Helpers (extracted for PLR0911 compliance)
+# =============================================================================
+
+
+def _list_to_messages(messages: list[object]) -> list[dict[str, Any]]:
+    """Convert a list prompt to OpenAI-style messages."""
+    if all(isinstance(m, dict) for m in messages):
+        # Validated: all elements are dicts - create new dict copies
+        return [dict(m.items()) for m in messages if isinstance(m, dict)]
+    return [{"role": "user", "content": str(messages)}]
+
+
+def _dict_to_messages(payload: dict[str, object]) -> list[dict[str, Any]]:
+    """Convert a dict prompt to OpenAI-style messages using SafeAccessor."""
+    accessor = SafeAccessor(payload)
+
+    # Try to extract messages list
+    msgs = accessor.get("messages")
+    if isinstance(msgs, list) and all(isinstance(m, dict) for m in msgs):
+        return [dict(m.items()) for m in msgs if isinstance(m, dict)]
+
+    # Try prompt or content keys
+    prompt_val = accessor.get("prompt")
+    if isinstance(prompt_val, str) and prompt_val:
+        return [{"role": "user", "content": prompt_val}]
+
+    content_val = accessor.get("content")
+    if isinstance(content_val, str) and content_val:
+        return [{"role": "user", "content": content_val}]
+
+    return [{"role": "user", "content": str(payload)}]
 
 
 def prompt_to_messages(prompt: Prompt, /) -> list[dict[str, Any]]:
@@ -45,51 +228,60 @@ def prompt_to_messages(prompt: Prompt, /) -> list[dict[str, Any]]:
 
     Many provider SDKs accept this common `messages=[{role, content}, ...]` shape.
     """
-
     match prompt:
         case str():
             return [{"role": "user", "content": prompt}]
-        case list() as messages:
-            if all(isinstance(m, dict) for m in messages):
-                return list(messages)  # type: ignore[return-value]
-            return [{"role": "user", "content": str(prompt)}]
-        case dict() as payload:
-            if "messages" in payload and isinstance(payload.get("messages"), list):
-                msgs = payload.get("messages")
-                if isinstance(msgs, list) and all(isinstance(m, dict) for m in msgs):
-                    return list(msgs)  # type: ignore[return-value]
-            if "prompt" in payload:
-                return [{"role": "user", "content": str(payload.get("prompt"))}]
-            if "content" in payload:
-                return [{"role": "user", "content": str(payload.get("content"))}]
-            return [{"role": "user", "content": str(payload)}]
+        case list():
+            return _list_to_messages(list(prompt))
+        case dict():
+            return _dict_to_messages(prompt)
         case _:
             return [{"role": "user", "content": str(prompt)}]
 
 
+def _list_to_text(messages: list[object]) -> str:
+    """Convert a list prompt to plain text."""
+    if all(isinstance(m, dict) for m in messages):
+        parts: list[str] = []
+        for m in messages:
+            if isinstance(m, dict):
+                role = m.get("role", "")
+                content = m.get("content", "")
+                parts.append(f"{role}: {content}")
+        return "\n".join(parts)
+    return str(messages)
+
+
+def _dict_to_text(payload: dict[str, object]) -> str:
+    """Convert a dict prompt to plain text using SafeAccessor."""
+    accessor = SafeAccessor(payload)
+
+    # Try prompt or content keys first
+    prompt_val = accessor.get("prompt")
+    if isinstance(prompt_val, str) and prompt_val:
+        return prompt_val
+
+    content_val = accessor.get("content")
+    if isinstance(content_val, str) and content_val:
+        return content_val
+
+    # Try messages key (recursive)
+    msgs = accessor.get("messages")
+    if isinstance(msgs, list):
+        return _list_to_text(list(msgs))
+
+    return str(payload)
+
+
 def prompt_to_text(prompt: Prompt, /) -> str:
     """Best-effort prompt stringification for providers that accept plain text."""
-
     match prompt:
         case str():
             return prompt
-        case list() as messages:
-            if all(isinstance(m, dict) for m in messages):
-                parts: list[str] = []
-                for m in messages:
-                    role = m.get("role", "")
-                    content = m.get("content", "")
-                    parts.append(f"{role}: {content}")
-                return "\n".join(parts)
-            return str(prompt)
-        case dict() as payload:
-            if "prompt" in payload:
-                return str(payload.get("prompt"))
-            if "content" in payload:
-                return str(payload.get("content"))
-            if "messages" in payload and isinstance(payload.get("messages"), list):
-                return prompt_to_text(payload.get("messages"))  # type: ignore[arg-type]
-            return str(payload)
+        case list():
+            return _list_to_text(list(prompt))
+        case dict():
+            return _dict_to_text(prompt)
         case _:
             return str(prompt)
 
@@ -106,7 +298,7 @@ def count_openai_prompt_tokens(
     Returns None if tiktoken is not installed or counting fails.
     """
     try:
-        import tiktoken  # type: ignore[import-not-found]
+        import tiktoken  # Optional dependency (config: pyproject.toml [[tool.mypy.overrides]])
     except Exception:
         return None
 
@@ -148,38 +340,26 @@ def extract_text_from_chat_response(response: Any, /) -> str:
 
     Supports both object-style (SDK models) and dict-style payloads.
     """
-
     if isinstance(response, str):
         return response
 
-    try:
-        choices = response.choices  # SDK model
-    except Exception:
-        choices = None
-    if choices is None:
-        choices = response.get("choices") if isinstance(response, dict) else None
-    if not choices:
+    accessor = SafeAccessor(response)
+    choices = accessor.get("choices")
+    if not choices or not isinstance(choices, list):
         raise ValueError("Provider response missing choices")
 
-    first = choices[0]
-    message = None
-    try:
-        message = first.message
-    except Exception:
-        if isinstance(first, dict):
-            message = first.get("message")
+    first_acc = SafeAccessor(choices[0])
+
+    # Try message.content path (standard chat completion format)
+    message = first_acc.get("message")
     if message is not None:
-        try:
-            content = message.content
-        except Exception:
-            content = message.get("content") if isinstance(message, dict) else None
+        msg_acc = SafeAccessor(message)
+        content = msg_acc.get("content")
         if content is not None:
             return str(content)
 
-    try:
-        text = first.text  # type: ignore[union-attr]
-    except Exception:
-        text = first.get("text") if isinstance(first, dict) else None
+    # Try text path (some providers use this)
+    text = first_acc.get("text")
     if text is not None:
         return str(text)
 
@@ -289,7 +469,8 @@ def tool_choice_to_anthropic_format(tool_choice: ToolChoice, /) -> dict[str, Any
 
 
 def tool_choice_to_gemini_function_calling_config(
-    tool_choice: ToolChoice, /
+    tool_choice: ToolChoice,
+    /,
 ) -> dict[str, Any] | None:
     """
     Convert a ToolChoice to Gemini's function_calling_config shape.
@@ -310,74 +491,55 @@ def tool_choice_to_gemini_function_calling_config(
     return {"mode": "ANY", "allowed_function_names": [tool_choice]}
 
 
-def extract_tool_calls_openai(response: Any, /) -> list[ToolCallRequest] | None:
+def extract_tool_calls_openai(response: Any, /) -> Result[list[ToolCallRequest] | None, LLMError]:
     """
     Extract tool calls from an OpenAI-style chat completion response.
 
     OpenAI returns tool calls in:
     response.choices[0].message.tool_calls[].{id, function.name, function.arguments}
 
-    Returns None if no tool calls are present.
+    Returns:
+        Ok(list) - tool calls found
+        Ok(None) - no tool calls present (valid response, model didn't call tools)
+        Err(LLMError) - malformed response (missing required structural fields)
+
+    Strategy (ADR-001):
+        1. Use SafeAccessor to navigate to tool_calls (works with SDK objects or dicts)
+        2. Try Pydantic TypeAdapter validation when available (better errors, type coercion)
+        3. Fall back to SafeAccessor manual parsing when Pydantic unavailable
+
+    Note:
+        Missing `choices` or `message` indicates a malformed response and returns Err.
+        Missing `tool_calls` is valid (model responded with text only) and returns Ok(None).
+
     """
-    try:
-        choices = response.choices
-    except Exception:
-        choices = response.get("choices") if isinstance(response, dict) else None
+    accessor = SafeAccessor(response)
 
-    if not choices:
-        return None
+    choices = accessor.get("choices")
+    if not choices or not isinstance(choices, list):
+        return Err(LLMError("Provider response missing choices"))
 
-    first = choices[0]
-
-    # Get message from choice
-    message = None
-    try:
-        message = first.message
-    except Exception:
-        if isinstance(first, dict):
-            message = first.get("message")
-
+    first_acc = SafeAccessor(choices[0])
+    message = first_acc.get("message")
     if message is None:
-        return None
+        return Err(LLMError("Provider response missing message"))
 
-    # Get tool_calls from message
-    tool_calls_raw = None
-    try:
-        tool_calls_raw = message.tool_calls
-    except Exception:
-        if isinstance(message, dict):
-            tool_calls_raw = message.get("tool_calls")
+    msg_acc = SafeAccessor(message)
+    tool_calls_raw = msg_acc.get("tool_calls")
+    if not tool_calls_raw or not isinstance(tool_calls_raw, list):
+        return Ok(None)
 
-    if not tool_calls_raw:
-        return None
+    # Try Pydantic TypeAdapter validation (ADR-001: better errors when available)
+    pydantic_result = _validate_openai_tool_calls(list(tool_calls_raw))
+    if pydantic_result is not None:
+        # Pydantic handled it - convert empty list to None per API contract
+        if isinstance(pydantic_result, Err):
+            return pydantic_result
+        tool_calls = pydantic_result.unwrap()
+        return Ok(tool_calls if tool_calls else None)
 
-    result: list[ToolCallRequest] = []
-    for tc in tool_calls_raw:
-        try:
-            # SDK model style
-            tc_id = tc.id
-            func = tc.function
-            name = func.name
-            args_str = func.arguments
-        except Exception:
-            # Dict style
-            if isinstance(tc, dict):
-                tc_id = tc.get("id", "")
-                func = tc.get("function", {})
-                name = func.get("name", "") if isinstance(func, dict) else ""
-                args_str = func.get("arguments", "{}") if isinstance(func, dict) else "{}"
-            else:
-                continue
-
-        # Parse arguments JSON
-        try:
-            arguments = json.loads(args_str) if isinstance(args_str, str) else args_str
-        except json.JSONDecodeError:
-            arguments = {}
-
-        result.append({"id": tc_id, "name": name, "arguments": arguments})
-
-    return result if result else None
+    # Fallback: SafeAccessor manual parsing (no Pydantic)
+    return _extract_tool_calls_manual(list(tool_calls_raw))
 
 
 def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | None:
@@ -389,120 +551,93 @@ def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | No
 
     Returns None if no tool calls are present.
     """
-    content = None
-    try:
-        content = response.content
-    except Exception:
-        if isinstance(response, dict):
-            content = response.get("content")
-
-    if not content:
+    accessor = SafeAccessor(response)
+    content = accessor.get("content")
+    if not content or not isinstance(content, list):
         return None
 
     result: list[ToolCallRequest] = []
     for block in content:
-        block_type = None
-        try:
-            block_type = block.type
-        except Exception:
-            if isinstance(block, dict):
-                block_type = block.get("type")
+        block_acc = SafeAccessor(block)
+        block_type = block_acc.get_str_or("type", "")
 
         if block_type != "tool_use":
             continue
 
-        try:
-            # SDK model style (duck-typed attribute access)
-            tc_id = block.id  # type: ignore[union-attr]
-            name = block.name  # type: ignore[union-attr]
-            arguments = block.input  # type: ignore[union-attr]
-        except Exception:
-            # Dict style
-            if isinstance(block, dict):
-                tc_id = block.get("id", "")
-                name = block.get("name", "")
-                arguments = block.get("input", {})
-            else:
-                continue
+        tc_id = block_acc.get_str_or("id", "")
+        name = block_acc.get_str_or("name", "")
+        arguments = block_acc.get("input")
+        if not isinstance(arguments, dict):
+            arguments = {}
 
         result.append({"id": tc_id, "name": name, "arguments": arguments})
 
     return result if result else None
 
 
-def extract_tool_calls_gemini(response: Any, /) -> list[ToolCallRequest] | None:
+def extract_tool_calls_gemini(response: Any, /) -> Result[list[ToolCallRequest] | None, LLMError]:
     """
     Extract tool calls from a Google Gemini response.
 
     Gemini returns function calls in:
     response.candidates[0].content.parts[].function_call.{name, args}
 
-    Returns None if no tool calls are present.
+    Returns:
+        Ok(list) - tool calls found
+        Ok(None) - no tool calls present (valid response, model didn't call tools)
+        Err(LLMError) - malformed response (missing required structural fields)
+
+    Note:
+        Uses SafeAccessor for unified SDK/dict access pattern.
+        Missing `candidates` or `content` indicates a malformed response and returns Err.
+        Missing `parts` or parts without `function_call` is valid and returns Ok(None).
+
     """
-    candidates = None
-    try:
-        candidates = response.candidates
-    except Exception:
-        if isinstance(response, dict):
-            candidates = response.get("candidates")
+    accessor = SafeAccessor(response)
 
-    if not candidates:
-        return None
+    candidates = accessor.get("candidates")
+    if not candidates or not isinstance(candidates, list):
+        return Err(LLMError("Provider response missing candidates"))
 
-    first = candidates[0]
-
-    # Get content from candidate
-    content = None
-    try:
-        content = first.content
-    except Exception:
-        if isinstance(first, dict):
-            content = first.get("content")
-
+    first_acc = SafeAccessor(candidates[0])
+    content = first_acc.get("content")
     if content is None:
-        return None
+        return Err(LLMError("Provider response missing content"))
 
-    # Get parts from content
-    parts = None
-    try:
-        parts = content.parts
-    except Exception:
-        if isinstance(content, dict):
-            parts = content.get("parts")
-
-    if not parts:
-        return None
+    content_acc = SafeAccessor(content)
+    parts = content_acc.get("parts")
+    if not parts or not isinstance(parts, list):
+        return Ok(None)
 
     result: list[ToolCallRequest] = []
     for part in parts:
-        function_call = None
-        try:
-            function_call = part.function_call
-        except Exception:
-            if isinstance(part, dict):
-                function_call = part.get("function_call") or part.get("functionCall")
+        part_acc = SafeAccessor(part)
 
+        # Try both naming conventions (function_call and functionCall)
+        function_call = part_acc.get("function_call") or part_acc.get("functionCall")
         if function_call is None:
             continue
 
-        try:
-            # SDK model style
-            name = function_call.name
-            args = function_call.args
-        except Exception:
-            # Dict style
-            if isinstance(function_call, dict):
-                name = function_call.get("name", "")
-                args = function_call.get("args", {})
-            else:
-                continue
+        fc_acc = SafeAccessor(function_call)
+        name = fc_acc.get_str_or("name", "")
+
+        # Gemini args: None/missing = no args, non-dict = error
+        args_raw = fc_acc.get("args")
+        if args_raw is None:
+            arguments: dict[str, object] = {}
+        elif isinstance(args_raw, dict):
+            arguments = args_raw
+        else:
+            return Err(
+                LLMError(f"Gemini function call args must be dict, got {type(args_raw).__name__}")
+            )
 
         # Gemini doesn't provide IDs, so we generate process-unique ones
         tc_id = _next_gemini_call_id()
 
-        result.append({"id": tc_id, "name": name, "arguments": args})
+        result.append({"id": tc_id, "name": name, "arguments": arguments})
 
-    return result if result else None
+    return Ok(result if result else None)
 
 
 def extract_finish_reason_openai(response: Any, /) -> str | None:
@@ -511,23 +646,14 @@ def extract_finish_reason_openai(response: Any, /) -> str | None:
 
     Returns: "stop", "tool_calls", "length", etc. or None if not available.
     """
-    try:
-        choices = response.choices
-    except Exception:
-        choices = response.get("choices") if isinstance(response, dict) else None
-
-    if not choices:
+    accessor = SafeAccessor(response)
+    choices = accessor.get("choices")
+    if not choices or not isinstance(choices, list):
         return None
 
-    first = choices[0]
-
-    try:
-        return first.finish_reason
-    except Exception:
-        if isinstance(first, dict):
-            return first.get("finish_reason")
-
-    return None
+    first_acc = SafeAccessor(choices[0])
+    finish_reason = first_acc.get("finish_reason")
+    return str(finish_reason) if finish_reason is not None else None
 
 
 def extract_finish_reason_anthropic(response: Any, /) -> str | None:
@@ -537,15 +663,12 @@ def extract_finish_reason_anthropic(response: Any, /) -> str | None:
     Anthropic uses "end_turn", "tool_use", "max_tokens" etc.
     We normalize to "stop", "tool_calls", "length" for consistency.
     """
-    stop_reason = None
-    try:
-        stop_reason = response.stop_reason
-    except Exception:
-        if isinstance(response, dict):
-            stop_reason = response.get("stop_reason")
-
+    accessor = SafeAccessor(response)
+    stop_reason = accessor.get("stop_reason")
     if stop_reason is None:
         return None
+
+    stop_reason_str = str(stop_reason)
 
     # Normalize Anthropic's stop reasons to OpenAI-style
     mapping = {
@@ -554,7 +677,7 @@ def extract_finish_reason_anthropic(response: Any, /) -> str | None:
         "max_tokens": "length",
         "stop_sequence": "stop",
     }
-    return mapping.get(stop_reason, stop_reason)
+    return mapping.get(stop_reason_str, stop_reason_str)
 
 
 def extract_finish_reason_gemini(response: Any, /) -> str | None:
@@ -564,31 +687,22 @@ def extract_finish_reason_gemini(response: Any, /) -> str | None:
     Gemini uses STOP, MAX_TOKENS, SAFETY, etc.
     We normalize to "stop", "length", etc. for consistency.
     """
-    candidates = None
-    try:
-        candidates = response.candidates
-    except Exception:
-        if isinstance(response, dict):
-            candidates = response.get("candidates")
-
-    if not candidates:
+    accessor = SafeAccessor(response)
+    candidates = accessor.get("candidates")
+    if not candidates or not isinstance(candidates, list):
         return None
 
-    first = candidates[0]
+    first_acc = SafeAccessor(candidates[0])
 
-    finish_reason = None
-    try:
-        finish_reason = first.finish_reason
-    except Exception:
-        if isinstance(first, dict):
-            finish_reason = first.get("finish_reason") or first.get("finishReason")
-
+    # Try both naming conventions (finish_reason and finishReason)
+    finish_reason = first_acc.get("finish_reason") or first_acc.get("finishReason")
     if finish_reason is None:
         return None
 
     # Handle enum values (Gemini SDK returns enums)
-    if hasattr(finish_reason, "name"):
-        finish_reason = finish_reason.name
+    finish_reason_name = getattr(finish_reason, "name", None)
+    if finish_reason_name is not None:
+        finish_reason = finish_reason_name
 
     # Normalize Gemini's finish reasons to OpenAI-style
     mapping = {
@@ -608,33 +722,30 @@ def extract_openai_style_token_usage(response: Any, /) -> tuple[int, int]:
     Supports both the classic (prompt_tokens/completion_tokens) and newer
     (input_tokens/output_tokens) key names.
     """
-
-    usage: Any | None
-    try:
-        usage = response.usage
-    except Exception:
-        usage = response.get("usage") if isinstance(response, dict) else None
-
+    accessor = SafeAccessor(response)
+    usage = accessor.get("usage")
     if usage is None:
         return (0, 0)
 
-    def _int(value: Any | None) -> int:
+    def _coerce_int(value: object) -> int:
+        """Coerce value to int, returning 0 on failure."""
         if value is None:
             return 0
         try:
-            return int(value)
-        except Exception:
+            return int(value)  # type: ignore[arg-type,call-overload]
+        except (ValueError, TypeError):
             return 0
 
-    if isinstance(usage, dict):
-        in_tokens = _int(usage.get("prompt_tokens") or usage.get("input_tokens"))
-        out_tokens = _int(usage.get("completion_tokens") or usage.get("output_tokens"))
-        return (in_tokens, out_tokens)
+    usage_acc = SafeAccessor(usage)
 
-    in_tokens = _int(getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", None))
-    out_tokens = _int(
-        getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None)
+    # Try both naming conventions (classic and newer)
+    in_tokens = _coerce_int(usage_acc.get("prompt_tokens")) or _coerce_int(
+        usage_acc.get("input_tokens")
     )
+    out_tokens = _coerce_int(usage_acc.get("completion_tokens")) or _coerce_int(
+        usage_acc.get("output_tokens")
+    )
+
     return (in_tokens, out_tokens)
 
 
@@ -698,7 +809,7 @@ class UsageTracker:
                     total_output_tokens=output_tokens,
                 )
                 for model, calls, input_tokens, output_tokens in items
-            }
+            },
         )
 
     def get_last_usage(self) -> UsageSummary:
@@ -720,5 +831,5 @@ class UsageTracker:
                     total_output_tokens=output_tokens,
                 )
                 for model, calls, input_tokens, output_tokens in items
-            }
+            },
         )

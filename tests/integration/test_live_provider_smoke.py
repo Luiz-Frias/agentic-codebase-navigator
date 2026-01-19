@@ -22,7 +22,6 @@ def test_live_openai_adapter_smoke() -> None:
       - OPENAI_BASE_URL=... (for OpenAI-compatible endpoints)
       - OPENAI_MODEL=... (defaults to gpt-5-nano)
     """
-
     if importlib.util.find_spec("openai") is None:
         pytest.skip("openai package not installed")
 
@@ -72,7 +71,6 @@ def test_live_openai_adapter_tool_calling() -> None:
       - OPENAI_BASE_URL=... (for OpenAI-compatible endpoints)
       - OPENAI_MODEL=... (defaults to gpt-4o-mini)
     """
-
     if importlib.util.find_spec("openai") is None:
         pytest.skip("openai package not installed")
 
@@ -101,7 +99,7 @@ def test_live_openai_adapter_tool_calling() -> None:
                 },
                 "required": ["location"],
             },
-        }
+        },
     ]
 
     llm = OpenAIAdapter(
@@ -120,7 +118,7 @@ def test_live_openai_adapter_tool_calling() -> None:
             prompt="What's the weather in Tokyo?",
             tools=tools,
             tool_choice="auto",
-        )
+        ),
     )
 
     assert cc.root_model == model
@@ -158,7 +156,6 @@ def test_live_anthropic_adapter_smoke() -> None:
     Optional:
       - ANTHROPIC_MODEL=... (defaults to claude-3-5-haiku-20241022)
     """
-
     if importlib.util.find_spec("anthropic") is None:
         pytest.skip("anthropic package not installed (install the llm-anthropic extra)")
 

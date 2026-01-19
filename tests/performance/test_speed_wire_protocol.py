@@ -237,15 +237,14 @@ def test_socket_frame_roundtrip() -> None:
 
     iterations = 100
 
-    with perf_timer() as timing:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-            client.connect(("127.0.0.1", server_port[0]))
-            client.settimeout(5.0)
+    with perf_timer() as timing, socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+        client.connect(("127.0.0.1", server_port[0]))
+        client.settimeout(5.0)
 
-            for _ in range(iterations):
-                send_frame(client, message)
-                response = recv_frame(client)
-                assert response is not None
+        for _ in range(iterations):
+            send_frame(client, message)
+            response = recv_frame(client)
+            assert response is not None
 
     timing.iterations = iterations
 
@@ -312,7 +311,7 @@ def test_large_response_parsing() -> None:
                                 "total_input_tokens": 2000,
                                 "total_output_tokens": 1000,
                             },
-                        }
+                        },
                     },
                     "execution_time": 1.5,
                 },

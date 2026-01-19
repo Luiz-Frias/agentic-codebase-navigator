@@ -109,7 +109,7 @@ def test_usage_totals_accumulation_fast() -> None:
                 total_output_tokens=50,
             )
             for model in models
-        }
+        },
     )
 
     iterations = 1000
@@ -305,7 +305,7 @@ def test_orchestrator_single_iteration_timing() -> None:
         # Live LLM: just verify it completes in reasonable time
         print(
             f"\n[Live LLM: {provider_info['provider']}/{provider_info['model']}] "
-            f"Single iteration: {timing.elapsed_seconds:.2f}s"
+            f"Single iteration: {timing.elapsed_seconds:.2f}s",
         )
         assert timing.elapsed_seconds < 60, f"Live LLM too slow: {timing.elapsed_seconds:.2f}s"
     else:
@@ -341,7 +341,7 @@ def test_orchestrator_multi_iteration_benchmark() -> None:
         print(
             f"\n[Live LLM: {provider_info['provider']}/{provider_info['model']}] "
             f"Multi-iteration ({3} iters): {timing.elapsed_seconds:.2f}s, "
-            f"avg: {timing.elapsed_seconds / 3:.2f}s/iter"
+            f"avg: {timing.elapsed_seconds / 3:.2f}s/iter",
         )
         # Live: allow more time but still bounded
         assert timing.elapsed_seconds < 120, (

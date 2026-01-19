@@ -16,7 +16,7 @@ class _DummyEnv:
     def __init__(self, result: ReplResult) -> None:
         self._result = result
 
-    def execute_code(self, code: str) -> ReplResult:  # noqa: ARG002
+    def execute_code(self, code: str) -> ReplResult:
         return self._result
 
 

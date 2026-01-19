@@ -70,7 +70,7 @@ def test_namespace_policy_allows_open_within_session_dir() -> None:
             "with open('ok.txt', 'w') as f:\n"
             "    f.write('hi')\n"
             "with open('ok.txt', 'r') as f:\n"
-            "    print(f.read())"
+            "    print(f.read())",
         )
         assert r.stdout == "hi\n"
         assert r.stderr == ""

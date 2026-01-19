@@ -14,7 +14,6 @@ def test_local_env_code_can_call_llm_query_and_result_is_returned_via_final_var(
     The LLM produces a code block that calls `llm_query()`, and then returns the
     nested call result via `FINAL_VAR(...)`.
     """
-
     llm = QueueLLM(
         model_name="dummy",
         responses=[

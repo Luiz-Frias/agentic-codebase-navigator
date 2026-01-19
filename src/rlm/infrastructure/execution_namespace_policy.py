@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import builtins
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +13,8 @@ def _default_allowed_import_roots() -> frozenset[str]:
     Notes:
     - This is intentionally conservative (safe-ish, not a security boundary).
     - Environments may override/extend this allowlist via configuration.
-    """
 
+    """
     # Keep sorted for deterministic repr/debugging.
     return frozenset(
         [
@@ -34,7 +34,7 @@ def _default_allowed_import_roots() -> frozenset[str]:
             "textwrap",
             "typing",
             "uuid",
-        ]
+        ],
     )
 
 
@@ -53,26 +53,23 @@ class ExecutionNamespacePolicy:
       Local environment adapter.
     """
 
-    allowed_import_roots: frozenset[str] = _default_allowed_import_roots()
+    allowed_import_roots: frozenset[str] = field(default_factory=_default_allowed_import_roots)
 
     def build_builtins(self, *, session_dir: Path) -> dict[str, Any]:
-        """
-        Build a builtins dict suitable for passing as `globals()['__builtins__']` to `exec`.
-        """
-
+        """Build a builtins dict suitable for passing as `globals()['__builtins__']` to `exec`."""
         session_dir = Path(session_dir).resolve()
 
         orig_import = builtins.__import__
 
         def _controlled_import(  # type: ignore[no-untyped-def]
             name,
-            globals=None,  # noqa: A002 - matches `__import__` signature
-            locals=None,  # noqa: A002 - matches `__import__` signature
+            globals=None,
+            locals=None,
             fromlist=(),
             level=0,
         ):
             # Very small validation surface: allow only absolute imports.
-            if level not in (0,):
+            if level != 0:
                 raise ImportError("Relative imports are not allowed in this environment")
             if not isinstance(name, str) or not name.strip():
                 raise ImportError("Invalid import name")
@@ -105,16 +102,13 @@ class ExecutionNamespacePolicy:
 
             # Resolve relative paths under the current working directory.
             # The Local environment adapter changes cwd to `session_dir` before execution.
-            if not p.is_absolute():
-                p = (Path.cwd() / p).resolve()
-            else:
-                p = p.resolve()
+            p = (Path.cwd() / p).resolve() if not p.is_absolute() else p.resolve()
 
             try:
                 p.relative_to(session_dir)
             except ValueError as exc:
                 raise PermissionError(
-                    f"open() is restricted to the session directory: {session_dir}"
+                    f"open() is restricted to the session directory: {session_dir}",
                 ) from exc
 
             return orig_open(
@@ -144,6 +138,7 @@ class ExecutionNamespacePolicy:
             "type": type,
             "isinstance": isinstance,
             "issubclass": issubclass,
+            "__build_class__": builtins.__build_class__,
             "enumerate": enumerate,
             "zip": zip,
             "map": map,

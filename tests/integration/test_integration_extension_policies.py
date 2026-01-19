@@ -68,16 +68,14 @@ class TrackingStoppingPolicy:
                 "method": "on_iteration_complete",
                 "context": dict(context),
                 "result_response": result.response,
-            }
+            },
         )
         self.iteration_results.append(result.response)
 
 
 @dataclass
 class TrackingContextCompressor:
-    """
-    Custom context compressor that tracks invocations for testing.
-    """
+    """Custom context compressor that tracks invocations for testing."""
 
     prefix: str = "[COMPRESSED] "
     invocation_log: list[dict[str, Any]] = field(default_factory=list)
@@ -89,16 +87,14 @@ class TrackingContextCompressor:
                 "method": "compress",
                 "result_length": len(result),
                 "max_tokens": max_tokens,
-            }
+            },
         )
         return self.prefix + result
 
 
 @dataclass
 class TrackingNestedCallPolicy:
-    """
-    Custom nested call policy that tracks invocations for testing.
-    """
+    """Custom nested call policy that tracks invocations for testing."""
 
     orchestrate_at_depth: int = 0  # Never orchestrate by default
     invocation_log: list[dict[str, Any]] = field(default_factory=list)
@@ -110,7 +106,7 @@ class TrackingNestedCallPolicy:
                 "method": "should_orchestrate",
                 "prompt": prompt[:50] + "..." if len(prompt) > 50 else prompt,
                 "depth": depth,
-            }
+            },
         )
         return depth >= self.orchestrate_at_depth and self.orchestrate_at_depth > 0
 
@@ -126,19 +122,23 @@ class TrackingNestedCallPolicy:
 
 
 def simple_tool(value: str) -> str:
-    """A simple tool that returns the value with a prefix.
+    """
+    A simple tool that returns the value with a prefix.
 
     Args:
         value: The input value
+
     """
     return f"Result: {value}"
 
 
 def multi_call_tool(count: int) -> str:
-    """A tool that returns a message about call count.
+    """
+    A tool that returns a message about call count.
 
     Args:
         count: A number
+
     """
     return f"Called with count={count}"
 

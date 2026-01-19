@@ -25,7 +25,7 @@ def test_merge_usage_summaries_merges_distinct_models_and_sorts_keys() -> None:
         model_usage_summaries={
             "b": ModelUsageSummary(1, 0, 0),
             "a": ModelUsageSummary(2, 0, 0),
-        }
+        },
     )
     s2 = UsageSummary(model_usage_summaries={"c": ModelUsageSummary(3, 0, 0)})
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from rlm.domain.errors import LLMError
 from rlm.adapters.llm.provider_base import (
     UsageTracker,
     extract_finish_reason_anthropic,
@@ -105,13 +106,13 @@ def test_extract_openai_style_token_usage_handles_dict_object_and_missing_usage(
     assert extract_openai_style_token_usage({}) == (0, 0)
 
     assert extract_openai_style_token_usage(
-        {"usage": {"prompt_tokens": 1, "completion_tokens": 2}}
+        {"usage": {"prompt_tokens": 1, "completion_tokens": 2}},
     ) == (
         1,
         2,
     )
     assert extract_openai_style_token_usage(
-        {"usage": {"input_tokens": "3", "output_tokens": "4"}}
+        {"usage": {"input_tokens": "3", "output_tokens": "4"}},
     ) == (
         3,
         4,
@@ -279,15 +280,15 @@ def test_extract_tool_calls_openai_from_dict() -> None:
                                 "name": "get_weather",
                                 "arguments": '{"city": "NYC"}',
                             },
-                        }
-                    ]
+                        },
+                    ],
                 },
                 "finish_reason": "tool_calls",
-            }
-        ]
+            },
+        ],
     }
 
-    result = extract_tool_calls_openai(response)
+    result = extract_tool_calls_openai(response).unwrap()
 
     assert result is not None
     assert len(result) == 1
@@ -298,12 +299,34 @@ def test_extract_tool_calls_openai_from_dict() -> None:
 
 @pytest.mark.unit
 def test_extract_tool_calls_openai_returns_none_when_no_tools() -> None:
-    """extract_tool_calls_openai should return None when no tool calls."""
+    """extract_tool_calls_openai should return Ok(None) when no tool calls."""
     response = {"choices": [{"message": {"content": "Hello!"}}]}
-    assert extract_tool_calls_openai(response) is None
+    assert extract_tool_calls_openai(response).unwrap() is None
 
     response2 = {"choices": [{"message": {"tool_calls": []}}]}
-    assert extract_tool_calls_openai(response2) is None
+    assert extract_tool_calls_openai(response2).unwrap() is None
+
+
+@pytest.mark.unit
+def test_extract_tool_calls_openai_returns_err_for_malformed_response() -> None:
+    """extract_tool_calls_openai should return Err for malformed responses."""
+    # Missing choices entirely
+    result = extract_tool_calls_openai({})
+    assert result.is_err()
+    with pytest.raises(LLMError, match="missing choices"):
+        result.unwrap()
+
+    # Empty choices list
+    result2 = extract_tool_calls_openai({"choices": []})
+    assert result2.is_err()
+    with pytest.raises(LLMError, match="missing choices"):
+        result2.unwrap()
+
+    # Missing message in choice
+    result3 = extract_tool_calls_openai({"choices": [{"finish_reason": "stop"}]})
+    assert result3.is_err()
+    with pytest.raises(LLMError, match="missing message"):
+        result3.unwrap()
 
 
 @pytest.mark.unit
@@ -343,21 +366,63 @@ def test_extract_tool_calls_gemini_from_dict() -> None:
                             "function_call": {
                                 "name": "get_weather",
                                 "args": {"location": "Seattle"},
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
+                            },
+                        },
+                    ],
+                },
+            },
+        ],
     }
 
-    result = extract_tool_calls_gemini(response)
+    result = extract_tool_calls_gemini(response).unwrap()
 
     assert result is not None
     assert len(result) == 1
     assert result[0]["id"].startswith("gemini_call_")  # Generated ID
     assert result[0]["name"] == "get_weather"
     assert result[0]["arguments"] == {"location": "Seattle"}
+
+
+@pytest.mark.unit
+def test_extract_tool_calls_gemini_returns_none_when_no_tools() -> None:
+    """extract_tool_calls_gemini should return Ok(None) when no function calls."""
+    # Valid response with text-only parts (no function_call)
+    response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [{"text": "Hello!"}],
+                },
+            },
+        ],
+    }
+    assert extract_tool_calls_gemini(response).unwrap() is None
+
+    # Valid response with empty parts
+    response2 = {"candidates": [{"content": {"parts": []}}]}
+    assert extract_tool_calls_gemini(response2).unwrap() is None
+
+
+@pytest.mark.unit
+def test_extract_tool_calls_gemini_returns_err_for_malformed_response() -> None:
+    """extract_tool_calls_gemini should return Err for malformed responses."""
+    # Missing candidates entirely
+    result = extract_tool_calls_gemini({})
+    assert result.is_err()
+    with pytest.raises(LLMError, match="missing candidates"):
+        result.unwrap()
+
+    # Empty candidates list
+    result2 = extract_tool_calls_gemini({"candidates": []})
+    assert result2.is_err()
+    with pytest.raises(LLMError, match="missing candidates"):
+        result2.unwrap()
+
+    # Missing content in candidate
+    result3 = extract_tool_calls_gemini({"candidates": [{"finishReason": "STOP"}]})
+    assert result3.is_err()
+    with pytest.raises(LLMError, match="missing content"):
+        result3.unwrap()
 
 
 @pytest.mark.unit

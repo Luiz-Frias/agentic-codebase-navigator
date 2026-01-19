@@ -51,7 +51,7 @@ def test_docker_proxy_handler_batched_uses_broker_per_item_and_preserves_order()
     import threading
 
     broker = InMemoryBroker(
-        default_llm=QueueLLM(model_name="dummy", responses=["r1", RuntimeError("boom"), "r3"])
+        default_llm=QueueLLM(model_name="dummy", responses=["r1", RuntimeError("boom"), "r3"]),
     )
     dummy = SimpleNamespace(
         broker=broker,
@@ -62,7 +62,8 @@ def test_docker_proxy_handler_batched_uses_broker_per_item_and_preserves_order()
     )
 
     out = DockerLLMProxyHandler._handle_batched(  # type: ignore[arg-type]
-        dummy, {"prompts": ["a", "b", "c"], "model": "dummy"}
+        dummy,
+        {"prompts": ["a", "b", "c"], "model": "dummy"},
     )
     assert out == {"responses": ["r1", "Error: boom", "r3"]}
     assert [c.response for c in dummy.pending_calls] == ["r1", "r3"]
@@ -86,7 +87,6 @@ def test_docker_exec_script_llm_query_preserves_empty_string_response() -> None:
     The container-side script should explicitly branch on `error` rather than
     using `d.get("response") or ...`, because `""` is falsy.
     """
-
     script = _build_exec_script("print('hi')", 1234)
     assert 'return d.get("response") or' not in script
     assert 'return d.get("responses") or' not in script
@@ -285,7 +285,7 @@ def test_docker_proxy_handler_respond_and_log_message_are_noops() -> None:
 def test_docker_proxy_handler_single_and_batched_can_use_broker_address(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _stub_request_completion(*_a, **_k):  # noqa: ANN001
+    def _stub_request_completion(*_a, **_k):
         return ChatCompletion(
             root_model="m",
             prompt=_k.get("prompt"),
@@ -307,7 +307,7 @@ def test_docker_proxy_handler_single_and_batched_can_use_broker_address(
     assert out == {"response": "ok"}
     assert [c.response for c in dummy.pending_calls] == ["ok"]
 
-    def _stub_request_completions_batched(*_a, **_k):  # noqa: ANN001
+    def _stub_request_completions_batched(*_a, **_k):
         return [
             WireResult(error="oops", chat_completion=None),
             WireResult(
@@ -323,7 +323,9 @@ def test_docker_proxy_handler_single_and_batched_can_use_broker_address(
         ]
 
     monkeypatch.setattr(
-        docker_mod, "request_completions_batched", _stub_request_completions_batched
+        docker_mod,
+        "request_completions_batched",
+        _stub_request_completions_batched,
     )
     out2 = DockerLLMProxyHandler._handle_batched(dummy, {"prompts": ["p1", "p2"]})  # type: ignore[arg-type]
     assert out2 == {"responses": ["Error: oops", "r2"]}

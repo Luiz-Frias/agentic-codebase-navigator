@@ -13,7 +13,7 @@ def test_local_env_load_context_sets_context_variable_for_str_prompt() -> None:
     llm = QueueLLM(
         responses=[
             "```repl\nprint(context)\n```\nFINAL(ok)",
-        ]
+        ],
     )
     logger = CollectingLogger()
     rlm = create_rlm(llm, environment="local", max_iterations=1, verbose=False, logger=logger)
@@ -31,7 +31,7 @@ def test_local_env_load_context_sets_context_variable_for_dict_prompt() -> None:
     llm = QueueLLM(
         responses=[
             "```repl\nprint(context['x'])\n```\nFINAL(ok)",
-        ]
+        ],
     )
     logger = CollectingLogger()
     rlm = create_rlm(llm, environment="local", max_iterations=1, verbose=False, logger=logger)

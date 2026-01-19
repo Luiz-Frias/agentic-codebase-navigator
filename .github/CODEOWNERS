@@ -1,0 +1,56 @@
+# CODEOWNERS for agentic-codebase-navigator
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for all code
+* @Luiz-Frias
+
+# Domain layer (core business logic)
+/src/rlm/domain/ @Luiz-Frias
+
+# Application layer (use cases)
+/src/rlm/application/ @Luiz-Frias
+
+# API layer (public facade)
+/src/rlm/api/ @Luiz-Frias
+
+# Adapter: LLM Providers
+/src/rlm/adapters/llm/ @Luiz-Frias
+
+# Adapter: Execution Environments
+/src/rlm/adapters/environments/ @Luiz-Frias
+
+# Adapter: Tool Calling
+/src/rlm/adapters/tools/ @Luiz-Frias
+
+# Adapter: Broker (multi-backend routing)
+/src/rlm/adapters/broker/ @Luiz-Frias
+
+# Adapter: Policies (extension protocols)
+/src/rlm/adapters/policies/ @Luiz-Frias
+
+# Infrastructure
+/src/rlm/infrastructure/ @Luiz-Frias
+
+# Tests
+/tests/ @Luiz-Frias
+
+# Documentation
+/docs/ @Luiz-Frias
+README.md @Luiz-Frias
+CONTRIBUTING.md @Luiz-Frias
+
+# Configuration
+pyproject.toml @Luiz-Frias
+mise.toml @Luiz-Frias
+.pre-commit-config.yaml @Luiz-Frias
+pyrightconfig.json @Luiz-Frias
+
+# GitHub workflows
+.github/workflows/ @Luiz-Frias
+
+# Community
+CODE_OF_CONDUCT.md @Luiz-Frias
+SECURITY.md @Luiz-Frias
+LICENSE @Luiz-Frias
+ATTRIBUTION.md @Luiz-Frias
+CHANGELOG.md @Luiz-Frias

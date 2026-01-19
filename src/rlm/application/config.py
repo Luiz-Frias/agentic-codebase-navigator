@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from rlm.domain.agent_ports import AgentModeName
+if TYPE_CHECKING:
+    from rlm.domain.agent_ports import AgentModeName
 
 EnvironmentName = Literal["local", "modal", "docker", "prime"]
 LoggerName = Literal["none", "jsonl", "console"]
@@ -45,7 +46,7 @@ class EnvironmentConfig:
             raise ValueError(
                 "EnvironmentConfig.environment must be one of "
                 "['local','docker','modal','prime'], "
-                f"got {self.environment!r}"
+                f"got {self.environment!r}",
             )
         if not isinstance(self.environment_kwargs, dict):
             raise ValueError("EnvironmentConfig.environment_kwargs must be a dict")
@@ -61,7 +62,7 @@ class LoggerConfig:
     def __post_init__(self) -> None:
         if self.logger not in ("none", "jsonl", "console"):
             raise ValueError(
-                f"LoggerConfig.logger must be one of ['none','jsonl','console'], got {self.logger!r}"
+                f"LoggerConfig.logger must be one of ['none','jsonl','console'], got {self.logger!r}",
             )
         if not isinstance(self.logger_kwargs, dict):
             raise ValueError("LoggerConfig.logger_kwargs must be a dict")
@@ -99,5 +100,5 @@ class RLMConfig:
                 raise ValueError("RLMConfig.other_llms must contain only LLMConfig values")
         if self.agent_mode not in ("code", "tools"):
             raise ValueError(
-                f"RLMConfig.agent_mode must be one of ['code', 'tools'], got {self.agent_mode!r}"
+                f"RLMConfig.agent_mode must be one of ['code', 'tools'], got {self.agent_mode!r}",
             )

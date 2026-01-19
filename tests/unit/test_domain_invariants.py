@@ -4,6 +4,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from rlm.domain.errors import ValidationError
 from rlm.domain.models import (
     ChatCompletion,
     ModelUsageSummary,
@@ -11,7 +12,7 @@ from rlm.domain.models import (
     ReplResult,
     UsageSummary,
 )
-from rlm.domain.result import Err, Ok
+from rlm.domain.models.result import Err, Ok
 
 
 @pytest.mark.unit
@@ -23,12 +24,14 @@ def test_result_types_are_frozen_and_hashable() -> None:
     with pytest.raises(FrozenInstanceError):
         ok1.value = 999  # type: ignore[misc]
 
-    err1 = Err("nope")
-    err2 = Err("nope")
-    assert err1 == err2
-    assert hash(err1) == hash(err2)
+    # Err wraps Exception subclasses - use ValidationError from domain
+    err1 = Err(ValidationError("nope"))
+    err2 = Err(ValidationError("nope"))
+    # Note: Exceptions don't compare equal by default, so we check type and message
+    assert type(err1.error) is type(err2.error)
+    assert str(err1.error) == str(err2.error)
     with pytest.raises(FrozenInstanceError):
-        err1.error = "changed"  # type: ignore[misc]
+        err1.error = ValidationError("changed")  # type: ignore[misc]
 
 
 @pytest.mark.unit
@@ -58,10 +61,18 @@ def test_domain_models_are_eq_comparable_but_unhashable_by_default() -> None:
         hash(cc1)
 
     repl1 = ReplResult(
-        stdout="out", stderr="", locals={"x": 1}, llm_calls=[cc1], execution_time=0.2
+        stdout="out",
+        stderr="",
+        locals={"x": 1},
+        llm_calls=[cc1],
+        execution_time=0.2,
     )
     repl2 = ReplResult(
-        stdout="out", stderr="", locals={"x": 1}, llm_calls=[cc2], execution_time=0.2
+        stdout="out",
+        stderr="",
+        locals={"x": 1},
+        llm_calls=[cc2],
+        execution_time=0.2,
     )
     assert repl1 == repl2
     with pytest.raises(TypeError):

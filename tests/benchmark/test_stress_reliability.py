@@ -69,8 +69,8 @@ class SlowLLM(LLMPort):
                     total_calls=self._call_count,
                     total_input_tokens=0,
                     total_output_tokens=0,
-                )
-            }
+                ),
+            },
         )
 
     def get_last_usage(self) -> UsageSummary:

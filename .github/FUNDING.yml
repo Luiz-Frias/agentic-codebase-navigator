@@ -1,0 +1,22 @@
+# Sponsorship and funding options for agentic-codebase-navigator
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/displaying-a-repository-with-a-funding-configuration-file/about-the-funding-file
+
+# GitHub Sponsors
+github: [Luiz-Frias]
+
+# Patreon
+patreon: n/a
+
+# Open Collective
+open_collective: n/a
+
+# Ko-fi
+ko_fi: n/a
+
+# Tidelift
+tidelift: n/a
+
+# Community Note
+# If you'd like to sponsor development of agentic-codebase-navigator,
+# please reach out via GitHub Discussions or email contact.me@luizfrias.com
+custom: ["https://github.com/sponsors", "mailto:contact.me@luizfrias.com"]

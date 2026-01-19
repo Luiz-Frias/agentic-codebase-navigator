@@ -90,7 +90,7 @@ def test_registry_azure_openai_backend_raises_helpful_error_if_dependency_missin
     _block_imports(monkeypatch, blocked={"openai"})
 
     llm = DefaultLLMRegistry().build(
-        LLMConfig(backend="azure_openai", model_name="deployment-test")
+        LLMConfig(backend="azure_openai", model_name="deployment-test"),
     )
     with pytest.raises(ImportError, match=r"\[llm-azure-openai\]"):
         llm.complete(LLMRequest(prompt="hello"))

@@ -37,12 +37,12 @@ If you use this work in research, please cite the original paper:
 
 ### Architecture Migration
 
-| Aspect | Original | Refactored |
-|--------|----------|-----------|
-| **Pattern** | Flat/monolithic | Hexagonal modular monolith |
-| **Package layout** | `rlm/` | `src/rlm/` (src-layout) |
-| **Design** | Tight coupling | Ports/adapters pattern |
-| **Testing** | Basic | Comprehensive (unit/integration/e2e/packaging/performance) |
+| Aspect             | Original        | Refactored                                                 |
+| ------------------ | --------------- | ---------------------------------------------------------- |
+| **Pattern**        | Flat/monolithic | Hexagonal modular monolith                                 |
+| **Package layout** | `rlm/`          | `src/rlm/` (src-layout)                                    |
+| **Design**         | Tight coupling  | Ports/adapters pattern                                     |
+| **Testing**        | Basic           | Comprehensive (unit/integration/e2e/packaging/performance) |
 
 ### Key Additions
 

@@ -34,7 +34,6 @@ def _live_llm_enabled() -> bool:
     spend. Enable with:
       - RLM_RUN_LIVE_LLM_TESTS=1
     """
-
     raw = (os.environ.get("RLM_RUN_LIVE_LLM_TESTS") or "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
@@ -89,7 +88,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         if len(markers) != 1:
             errors.append(
                 f"{item_path}: expected exactly one category marker "
-                f"{sorted(category_markers)}; got {sorted(markers)}"
+                f"{sorted(category_markers)}; got {sorted(markers)}",
             )
             continue
         marker = next(iter(markers))

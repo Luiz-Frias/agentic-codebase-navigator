@@ -194,7 +194,7 @@ def test_format_iteration_truncation_fast() -> None:
                     llm_calls=[],
                     execution_time=0.0,
                 ),
-            )
+            ),
         ],
         final_answer=None,
         iteration_time=0.1,

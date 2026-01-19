@@ -17,6 +17,8 @@ class _UsageMetadata:
 class _Response:
     def __init__(self, text: str, *, prompt_tokens: int = 0, output_tokens: int = 0):
         self.text = text
+        # Include candidates structure for stricter validation in extract_tool_calls_gemini
+        self.candidates = [{"content": {"parts": [{"text": text}]}}]
         self.usage_metadata = _UsageMetadata(prompt_tokens, output_tokens)
 
 
@@ -45,7 +47,7 @@ def test_gemini_adapter_complete_maps_prompt_and_extracts_text_and_usage(
     resp = _Response("hi", prompt_tokens=3, output_tokens=5)
     created: list[_FakeClient] = []
 
-    class Client:  # noqa: N801 - matches SDK naming
+    class Client:
         def __init__(self, **kwargs):
             client = _FakeClient(response=resp, **kwargs)
             created.append(client)
@@ -86,7 +88,7 @@ async def test_gemini_adapter_acomplete_runs_sync_path_in_thread(
 
     resp = _Response("ahi", prompt_tokens=1, output_tokens=2)
 
-    class Client:  # noqa: N801
+    class Client:
         def __init__(self, **kwargs):
             self.models = _FakeModels(resp)
 

@@ -25,7 +25,7 @@ class _AsyncLLM:
     def __init__(self) -> None:
         self.model_name = "m"
 
-    def complete(self, request: LLMRequest, /) -> ChatCompletion:  # noqa: ARG002
+    def complete(self, request: LLMRequest, /) -> ChatCompletion:
         raise AssertionError("not used")
 
     async def acomplete(self, request: LLMRequest, /) -> ChatCompletion:
@@ -133,13 +133,13 @@ def test_tcp_broker_handle_wire_request_missing_prompts_and_timeout() -> None:
     broker.start()
     try:
         # Force timeout branch in _handle_wire_request for batched prompts.
-        def _timeout(coro, *_a, **_k):  # noqa: ANN001
+        def _timeout(coro, *_a, **_k):
             try:
                 close = getattr(coro, "close", None)
                 if callable(close):
                     close()
             finally:
-                raise TimeoutError()
+                raise TimeoutError
 
         broker._async_loop.run = _timeout  # type: ignore[method-assign]
         resp2 = broker._handle_wire_request(WireRequest(prompts=["a"]))

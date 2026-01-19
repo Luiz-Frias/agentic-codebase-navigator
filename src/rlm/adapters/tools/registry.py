@@ -6,13 +6,16 @@ Provides a simple registry for managing tools during an RLM run.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from rlm.adapters.base import BaseToolRegistryAdapter
 from rlm.adapters.tools.native import NativeToolAdapter
-from rlm.domain.agent_ports import ToolDefinition, ToolPort
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from rlm.domain.agent_ports import ToolDefinition, ToolPort
 
 
 @dataclass(slots=True)
@@ -36,6 +39,7 @@ class InMemoryToolRegistry(BaseToolRegistryAdapter):
 
         Raises:
             ValueError: If a tool with the same name is already registered.
+
         """
         # Wrap plain callables - use duck typing (check for definition attribute)
         wrapped_tool: ToolPort
@@ -45,9 +49,10 @@ class InMemoryToolRegistry(BaseToolRegistryAdapter):
             else:
                 raise TypeError(f"Expected a callable or tool adapter, got {type(tool)}")
         else:
-            wrapped_tool = tool  # type: ignore[assignment]
+            wrapped_tool = cast("ToolPort", tool)
 
-        name = wrapped_tool.definition["name"]
+        tool_definition = wrapped_tool.definition
+        name = tool_definition["name"]
         if name in self._tools:
             raise ValueError(f"Tool '{name}' is already registered")
 
@@ -62,6 +67,7 @@ class InMemoryToolRegistry(BaseToolRegistryAdapter):
 
         Returns:
             The tool if found, None otherwise.
+
         """
         return self._tools.get(name)
 
@@ -71,6 +77,7 @@ class InMemoryToolRegistry(BaseToolRegistryAdapter):
 
         Returns:
             List of tool definitions in registration order.
+
         """
         return [tool.definition for tool in self._tools.values()]
 

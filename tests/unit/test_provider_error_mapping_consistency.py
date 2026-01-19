@@ -21,7 +21,7 @@ def test_anthropic_adapter_maps_provider_errors_without_leaking_messages(
         def create(self, **kwargs):
             raise ValueError(f"Incorrect API key provided: {secret}")
 
-    class Anthropic:  # noqa: N801
+    class Anthropic:
         def __init__(self, **kwargs):
             self.messages = _BoomMessages()
 
@@ -51,7 +51,7 @@ def test_gemini_adapter_maps_provider_errors_without_leaking_messages(
         def generate_content(self, **kwargs):
             raise ValueError(f"bad key: {secret}")
 
-    class Client:  # noqa: N801
+    class Client:
         def __init__(self, **kwargs):
             self.models = _BoomModels()
 
@@ -88,7 +88,7 @@ def test_portkey_adapter_maps_provider_errors_without_leaking_messages(
     class _BoomChat:
         completions = _BoomCompletions()
 
-    class Portkey:  # noqa: N801
+    class Portkey:
         def __init__(self, **kwargs):
             self.chat = _BoomChat()
 
@@ -146,7 +146,7 @@ def test_azure_openai_adapter_maps_provider_errors_without_leaking_messages(
     class _BoomChat:
         completions = _BoomCompletions()
 
-    class AzureOpenAI:  # noqa: N801
+    class AzureOpenAI:
         def __init__(self, **kwargs):
             self.chat = _BoomChat()
 

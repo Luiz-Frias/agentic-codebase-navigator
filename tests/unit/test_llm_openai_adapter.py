@@ -87,7 +87,7 @@ def test_openai_adapter_complete_success_and_error_paths(
         def __init__(self, **kwargs):
             created.append(kwargs)
             self.chat = SimpleNamespace(
-                completions=SimpleNamespace(create=_Client(resp=resp_ok).create)
+                completions=SimpleNamespace(create=_Client(resp=resp_ok).create),
             )
 
     dummy_openai = SimpleNamespace(OpenAI=OpenAI, AsyncOpenAI=None)
@@ -103,7 +103,9 @@ def test_openai_adapter_complete_success_and_error_paths(
     class OpenAI2:
         def __init__(self, **_kwargs):
             self.chat = SimpleNamespace(
-                completions=SimpleNamespace(create=_Client(resp=resp_ok, exc=TimeoutError()).create)
+                completions=SimpleNamespace(
+                    create=_Client(resp=resp_ok, exc=TimeoutError()).create,
+                ),
             )
 
     dummy_openai2 = SimpleNamespace(OpenAI=OpenAI2, AsyncOpenAI=None)
@@ -120,7 +122,7 @@ def test_openai_adapter_complete_success_and_error_paths(
     dummy_openai3 = SimpleNamespace(OpenAI=OpenAI3, AsyncOpenAI=None)
     monkeypatch.setattr(openai_mod, "_require_openai", lambda: dummy_openai3)
 
-    with pytest.raises(LLMError, match="response invalid"):
+    with pytest.raises(LLMError, match="missing choices"):
         OpenAIAdapter(model="m").complete(LLMRequest(prompt="hi"))
 
 
@@ -183,7 +185,7 @@ async def test_openai_adapter_acomplete_error_invalid_response_and_client_cache(
 
     class _AsyncCompletionsTimeout:
         async def create(self, **_kwargs):
-            raise TimeoutError()
+            raise TimeoutError
 
     class _AsyncClientTimeout:
         def __init__(self, **_kwargs):
@@ -206,7 +208,7 @@ async def test_openai_adapter_acomplete_error_invalid_response_and_client_cache(
     dummy_openai_bad = SimpleNamespace(OpenAI=None, AsyncOpenAI=_AsyncClientBad)
     monkeypatch.setattr(openai_mod, "_require_openai", lambda: dummy_openai_bad)
 
-    with pytest.raises(LLMError, match="response invalid"):
+    with pytest.raises(LLMError, match="missing choices"):
         await OpenAIAdapter(model="m").acomplete(LLMRequest(prompt="hi"))
 
 
@@ -254,7 +256,7 @@ def test_openai_adapter_complete_with_tools_passes_to_api(
                 "properties": {"city": {"type": "string"}},
                 "required": ["city"],
             },
-        }
+        },
     ]
 
     adapter = OpenAIAdapter(model="gpt-4")
@@ -308,11 +310,11 @@ def test_openai_adapter_complete_extracts_tool_calls(
                                         "name": "get_weather",
                                         "arguments": '{"city": "NYC"}',
                                     },
-                                }
+                                },
                             ],
                         },
                         "finish_reason": "tool_calls",
-                    }
+                    },
                 ],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5},
             }
@@ -361,7 +363,7 @@ async def test_openai_adapter_acomplete_with_tools_passes_to_api(
             "name": "get_weather",
             "description": "Get weather",
             "parameters": {"type": "object", "properties": {}},
-        }
+        },
     ]
 
     adapter = OpenAIAdapter(model="gpt-4")
@@ -394,11 +396,11 @@ async def test_openai_adapter_acomplete_extracts_tool_calls(
                                         "name": "search",
                                         "arguments": '{"query": "python"}',
                                     },
-                                }
+                                },
                             ],
                         },
                         "finish_reason": "tool_calls",
-                    }
+                    },
                 ],
                 "usage": {},
             }
