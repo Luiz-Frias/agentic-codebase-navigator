@@ -251,16 +251,11 @@ ignore = [
 ]
 
 # Tool adapters - introspection boundaries
+# Note: BLE001, PLR0911, C901 removed after Phase 6 refactor (JsonSchemaMapper + Result pattern)
 "src/rlm/adapters/tools/native.py" = [
     "ANN401",   # Tool execute(**kwargs: Any) is inherently dynamic
-    "BLE001",   # get_type_hints() can fail in many ways on user code
-    "PLR0911",  # Type-to-schema conversion has many type cases
-    "C901",     # Tool definition introspection has inherent complexity
 ]
-"src/rlm/adapters/tools/pydantic_output.py" = [
-    "BLE001",   # get_type_hints() can fail on user-defined classes
-    "PLR0911",  # Type-to-schema conversion has many type cases
-]
+# pydantic_output.py: All ignores removed after Phase 6 refactor
 
 # ============================================================================
 # DOMAIN MODELS - SDK BOUNDARY ABSTRACTIONS

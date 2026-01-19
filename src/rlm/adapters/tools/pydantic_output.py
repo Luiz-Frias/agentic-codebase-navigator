@@ -9,10 +9,14 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
-from typing import Any, cast, get_type_hints
+from typing import Any, cast
 
 from rlm.adapters.base import BaseStructuredOutputAdapter
 from rlm.domain.errors import ValidationError
+from rlm.domain.models.json_schema_mapper import JsonSchemaMapper
+
+# Module-level mapper instance (stateless, thread-safe)
+_schema_mapper = JsonSchemaMapper()
 
 
 def _extract_json_from_response(response: str) -> str:
@@ -33,87 +37,6 @@ def _extract_json_from_response(response: str) -> str:
 
     # Return as-is if no JSON found
     return response.strip()
-
-
-def _type_to_json_schema(python_type: type) -> dict[str, Any]:
-    """Convert a Python type to JSON Schema for structured output guidance."""
-    # Handle None
-    if python_type is type(None):
-        return {"type": "null"}
-
-    # Basic type mappings
-    type_map: dict[type, dict[str, Any]] = {
-        str: {"type": "string"},
-        int: {"type": "integer"},
-        float: {"type": "number"},
-        bool: {"type": "boolean"},
-        list: {"type": "array"},
-        dict: {"type": "object"},
-    }
-
-    if python_type in type_map:
-        return type_map[python_type]
-
-    # Handle generic types
-    origin = getattr(python_type, "__origin__", None)
-    args = getattr(python_type, "__args__", ())
-
-    if origin is list and args:
-        item_type = cast("type", args[0])
-        return {"type": "array", "items": _type_to_json_schema(item_type)}
-
-    if origin is dict and len(args) >= 2:  # noqa: PLR2004
-        # args is tuple[KeyType, ValueType] for dict - extract value type
-        args_list = list(args)
-        value_type = cast("type", args_list[1])
-        return {
-            "type": "object",
-            "additionalProperties": _type_to_json_schema(value_type),
-        }
-
-    # Handle dataclasses
-    if dataclasses.is_dataclass(python_type):
-        return _dataclass_to_schema(python_type)
-
-    # Check for Pydantic model
-    if hasattr(python_type, "model_json_schema"):
-        model_json_schema_method = python_type.model_json_schema
-        return cast("dict[str, Any]", model_json_schema_method())
-
-    # Fallback
-    return {"type": "object"}
-
-
-def _dataclass_to_schema(dc_type: type) -> dict[str, Any]:
-    """Convert a dataclass to JSON Schema."""
-    properties: dict[str, Any] = {}
-    required: list[str] = []
-
-    hints: dict[str, type[Any]]
-    try:
-        hints = get_type_hints(dc_type)
-    except Exception:
-        hints = {}
-
-    for dc_field in dataclasses.fields(dc_type):
-        field_type = hints.get(dc_field.name, str)
-        properties[dc_field.name] = _type_to_json_schema(field_type)
-
-        # Field is required if it has no default and no default_factory
-        if (
-            dc_field.default is dataclasses.MISSING
-            and dc_field.default_factory is dataclasses.MISSING
-        ):
-            required.append(dc_field.name)
-
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": properties,
-    }
-    if required:
-        schema["required"] = required
-
-    return schema
 
 
 class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
@@ -203,4 +126,4 @@ class PydanticOutputAdapter[T](BaseStructuredOutputAdapter[T]):
 
         This schema can be included in the system prompt to guide LLM output.
         """
-        return _type_to_json_schema(output_type)
+        return _schema_mapper.map(output_type)

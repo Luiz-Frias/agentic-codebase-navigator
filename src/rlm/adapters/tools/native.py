@@ -10,66 +10,19 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
-import types
-import typing
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, get_type_hints
 
 from rlm.adapters.base import BaseToolAdapter
 from rlm.domain.agent_ports import ToolDefinition
+from rlm.domain.models.json_schema_mapper import JsonSchemaMapper
+from rlm.domain.models.result import try_call
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# dict[K, V] has exactly 2 type args: key type and value type
-_DICT_TYPE_ARGS_COUNT = 2
-
-
-def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
-    """Convert a Python type to JSON Schema."""
-    # Handle None/NoneType
-    if python_type is type(None):
-        return {"type": "null"}
-
-    # Basic type mappings
-    type_map: dict[type, dict[str, Any]] = {
-        str: {"type": "string"},
-        int: {"type": "integer"},
-        float: {"type": "number"},
-        bool: {"type": "boolean"},
-        list: {"type": "array"},
-        dict: {"type": "object"},
-    }
-
-    if python_type in type_map:
-        return type_map[python_type]
-
-    # Handle Optional (Union with None) and parameterized collections
-    origin = get_origin(python_type)
-    args = get_args(python_type)
-
-    if origin is list and args:
-        item_type = cast("type", args[0])
-        return {"type": "array", "items": _python_type_to_json_schema(item_type)}
-
-    if origin is dict and len(args) >= _DICT_TYPE_ARGS_COUNT:
-        value_type = cast("type", args[1])
-        return {
-            "type": "object",
-            "additionalProperties": _python_type_to_json_schema(value_type),
-        }
-
-    # Union types (including Optional)
-    if origin in (types.UnionType, typing.Union):
-        non_none = [cast("type", a) for a in args if a is not type(None)]
-        if len(non_none) == 1:
-            # Optional[X] -> X (nullable handled implicitly by most LLMs)
-            return _python_type_to_json_schema(non_none[0])
-        union_types = [cast("type", a) for a in args]
-        return {"anyOf": [_python_type_to_json_schema(a) for a in union_types]}
-
-    # Fallback to string for complex types
-    return {"type": "string"}
+# Module-level mapper instance (stateless, thread-safe)
+_schema_mapper = JsonSchemaMapper()
 
 
 def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
@@ -168,12 +121,8 @@ class NativeToolAdapter(BaseToolAdapter):
         # Parse docstring for parameter descriptions
         param_docs = _parse_docstring_params(docstring)
 
-        # Get type hints
-        hints: dict[str, type[Any]]
-        try:
-            hints = get_type_hints(self.func)
-        except Exception:
-            hints = {}
+        # Get type hints safely using Result pattern
+        hints: dict[str, type] = try_call(lambda: get_type_hints(self.func)).unwrap_or({})
 
         # Get function signature
         sig = inspect.signature(self.func)
@@ -192,9 +141,9 @@ class NativeToolAdapter(BaseToolAdapter):
             if param_name in ("self", "cls"):
                 continue
 
-            # Get type from hints
-            param_type = hints.get(param_name, str)
-            param_schema = _python_type_to_json_schema(param_type)
+            # Get type from hints and convert to JSON schema
+            param_type: type = hints.get(param_name, str)
+            param_schema = _schema_mapper.map(param_type)
 
             # Add description if available
             if param_name in param_docs:

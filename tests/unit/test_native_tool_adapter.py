@@ -4,14 +4,20 @@ import typing
 
 import pytest
 
-from rlm.adapters.tools.native import NativeToolAdapter, _python_type_to_json_schema
+from rlm.adapters.tools.native import NativeToolAdapter
+from rlm.domain.models.json_schema_mapper import JsonSchemaMapper
 
 
 @pytest.mark.unit
-def test_python_type_to_json_schema_handles_optional_and_union() -> None:
-    assert _python_type_to_json_schema(typing.Optional[int]) == {"type": "integer"}  # noqa: UP045
-    assert _python_type_to_json_schema(int | None) == {"type": "integer"}
-    assert _python_type_to_json_schema(typing.Union[int, str]) == {  # noqa: UP007
+def test_json_schema_mapper_handles_optional_and_union() -> None:
+    """Test that JsonSchemaMapper handles Optional and Union types correctly.
+
+    This test was migrated from testing the removed _python_type_to_json_schema function.
+    """
+    mapper = JsonSchemaMapper()
+    assert mapper.map(typing.Optional[int]) == {"type": "integer"}  # noqa: UP045
+    assert mapper.map(int | None) == {"type": "integer"}
+    assert mapper.map(typing.Union[int, str]) == {  # noqa: UP007
         "anyOf": [{"type": "integer"}, {"type": "string"}],
     }
 
