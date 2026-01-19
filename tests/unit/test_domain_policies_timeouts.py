@@ -37,6 +37,8 @@ def test_timeout_policy_defaults_match_module_constants() -> None:
     assert policy.docker.thread_join_timeout_s == t.DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S
 
     assert policy.local.execute_timeout_s == t.DEFAULT_LOCAL_EXECUTE_TIMEOUT_S
+    assert policy.local.execute_timeout_cap_s == t.DEFAULT_LOCAL_EXECUTE_TIMEOUT_CAP_S
+    assert t.DEFAULT_LOCAL_EXECUTE_TIMEOUT_CAP_S <= t.MAX_LOCAL_EXECUTE_TIMEOUT_CAP_S
 
 
 @pytest.mark.unit
@@ -56,7 +58,7 @@ def test_timeout_and_cancellation_defaults_are_non_negative() -> None:
     assert policy.docker.cleanup_subprocess_timeout_s >= 0
     assert policy.docker.thread_join_timeout_s >= 0
 
-    if policy.local.execute_timeout_s is not None:
-        assert policy.local.execute_timeout_s >= 0
+    assert policy.local.execute_timeout_s >= 0
+    assert policy.local.execute_timeout_cap_s >= 0
 
     assert cancel.grace_timeout_s >= 0

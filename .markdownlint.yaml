@@ -1,0 +1,39 @@
+# markdownlint configuration
+# https://github.com/DavidAnson/markdownlint
+
+# Default state for all rules
+default: true
+
+# MD013 - Line length
+# Disabled: Prefer soft-wrapping in editors for prose
+MD013: false
+
+# MD024 - Multiple headings with the same content
+# Allow when headings are in different nesting contexts
+MD024:
+  siblings_only: true
+
+# MD033 - Inline HTML
+# Allow common HTML elements in markdown
+MD033:
+  allowed_elements:
+    - br
+    - sub
+    - sup
+    - kbd
+    - details
+    - summary
+
+# MD041 - First line in file should be a top-level heading
+# Disabled: Some files may have badges or metadata first
+MD041: false
+
+# MD046 - Code block style
+# Consistent fenced style (```)
+MD046:
+  style: fenced
+
+# MD048 - Code fence style
+# Consistent backtick style
+MD048:
+  style: backtick

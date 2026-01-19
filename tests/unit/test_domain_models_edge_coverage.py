@@ -18,7 +18,7 @@ def test_chat_completion_from_dict_back_compat_flat_token_counts() -> None:
             "prompt_tokens": 7,
             "completion_tokens": 9,
             "execution_time": 0.1,
-        }
+        },
     )
     mus = cc.usage_summary.model_usage_summaries["m"]
     assert mus.total_calls == 1
@@ -30,13 +30,13 @@ def test_chat_completion_from_dict_back_compat_flat_token_counts() -> None:
 def test_iteration_to_dict_includes_correlation_id_and_usage_summaries() -> None:
     iter_usage = UsageSummary(
         model_usage_summaries={
-            "m": ModelUsageSummary(total_calls=1, total_input_tokens=2, total_output_tokens=3)
-        }
+            "m": ModelUsageSummary(total_calls=1, total_input_tokens=2, total_output_tokens=3),
+        },
     )
     cum_usage = UsageSummary(
         model_usage_summaries={
-            "m": ModelUsageSummary(total_calls=2, total_input_tokens=4, total_output_tokens=6)
-        }
+            "m": ModelUsageSummary(total_calls=2, total_input_tokens=4, total_output_tokens=6),
+        },
     )
     it = Iteration(
         prompt="p",
@@ -54,7 +54,7 @@ def test_iteration_to_dict_includes_correlation_id_and_usage_summaries() -> None
 @pytest.mark.unit
 def test_run_metadata_from_dict_parses_other_backends_and_drops_invalid() -> None:
     md = RunMetadata.from_dict(
-        {"root_model": "m", "other_backends": ["a", 1], "correlation_id": "c"}
+        {"root_model": "m", "other_backends": ["a", 1], "correlation_id": "c"},
     )
     assert md.other_backends == ["a", "1"]
     assert md.correlation_id == "c"
@@ -82,7 +82,7 @@ def test_repl_result_to_dict_includes_correlation_id_and_from_dict_accepts_llm_c
                 response="r",
                 usage_summary=UsageSummary(model_usage_summaries={}),
                 execution_time=0.0,
-            )
+            ),
         ],
         execution_time=0.1,
     )
@@ -99,9 +99,9 @@ def test_repl_result_to_dict_includes_correlation_id_and_from_dict_accepts_llm_c
                     "prompt_tokens": 1,
                     "completion_tokens": 2,
                     "execution_time": 0.0,
-                }
-            ]
-        }
+                },
+            ],
+        },
     )
     assert len(rr2.llm_calls) == 1
     assert rr2.llm_calls[0].root_model == "m"

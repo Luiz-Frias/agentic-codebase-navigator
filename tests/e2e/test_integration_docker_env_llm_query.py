@@ -17,7 +17,6 @@ def test_docker_env_code_can_call_llm_query_and_result_is_returned_via_final_var
     This is best-effort and should skip cleanly if Docker isn't available or
     container startup/pulls are blocked in the environment running tests.
     """
-
     try:
         ensure_docker_available(timeout_s=0.5)
     except RuntimeError as exc:

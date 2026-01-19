@@ -213,7 +213,7 @@ def test_default_logger_registry_jsonl_builds_logger(tmp_path: Any) -> None:
         LoggerConfig(
             logger="jsonl",
             logger_kwargs={"log_dir": str(tmp_path), "file_name": "test"},
-        )
+        ),
     )
     assert logger is not None
 
@@ -228,7 +228,7 @@ def test_default_logger_registry_jsonl_builds_logger(tmp_path: Any) -> None:
             environment_type="local",
             environment_kwargs={},
             other_backends=[],
-        )
+        ),
     )
 
 

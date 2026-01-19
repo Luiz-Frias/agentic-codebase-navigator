@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from rlm.domain.models import (
-    BatchedLLMRequest,
-    ChatCompletion,
-    Iteration,
-    LLMRequest,
-    ReplResult,
-    RunMetadata,
-    UsageSummary,
-)
-from rlm.domain.types import ContextPayload
+if TYPE_CHECKING:
+    from rlm.domain.models import (
+        BatchedLLMRequest,
+        ChatCompletion,
+        Iteration,
+        LLMRequest,
+        ReplResult,
+        RunMetadata,
+        UsageSummary,
+    )
+    from rlm.domain.types import ContextPayload
 
 
 class LLMPort(Protocol):

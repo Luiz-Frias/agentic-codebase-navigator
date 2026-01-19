@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 import threading
 import uuid
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rlm.adapters.base import BaseLoggerAdapter
-from rlm.domain.models import Iteration, RunMetadata
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from rlm.domain.models import Iteration, RunMetadata
 
 
 def _utc_now_iso() -> str:
@@ -28,6 +32,7 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
     Notes:
     - Writes are streaming (one line per call); no in-memory buffering of events.
     - By default we rotate to a new file per `log_metadata(...)` call to keep one run per file.
+
     """
 
     __slots__ = (
@@ -93,7 +98,7 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
     def _write_entry(self, entry: dict[str, object]) -> None:
         path = self._ensure_path()
         line = json.dumps(entry, ensure_ascii=False, sort_keys=True)
-        with open(path, "a", encoding="utf-8") as f:
+        with path.open("a", encoding="utf-8") as f:
             f.write(line)
             f.write("\n")
 
@@ -103,11 +108,12 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
                 self._start_new_run()
             if self._metadata_logged:
                 return
+            metadata_dict = metadata.to_dict()
             entry: dict[str, object] = {
                 "schema_version": self._schema_version,
                 "type": "metadata",
                 "timestamp": self._now_fn(),
-                **metadata.to_dict(),
+                **metadata_dict,
             }
             self._write_entry(entry)
             self._metadata_logged = True
@@ -116,11 +122,12 @@ class JsonlLoggerAdapter(BaseLoggerAdapter):
         with self._lock:
             self._ensure_path()
             self._iteration_count += 1
+            iteration_dict = iteration.to_dict()
             entry: dict[str, object] = {
                 "schema_version": self._schema_version,
                 "type": "iteration",
                 "iteration": self._iteration_count,
                 "timestamp": self._now_fn(),
-                **iteration.to_dict(),
+                **iteration_dict,
             }
             self._write_entry(entry)

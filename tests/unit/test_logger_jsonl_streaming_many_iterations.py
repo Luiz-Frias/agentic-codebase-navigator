@@ -30,7 +30,7 @@ def test_jsonl_logger_can_write_many_iterations_without_buffering(
             environment_kwargs={},
             other_backends=None,
             correlation_id="cid-123",
-        )
+        ),
     )
 
     for _ in range(2_000):

@@ -79,7 +79,7 @@ def test_broker_routes_to_openai_or_anthropic_adapters_by_model_name(
     # Stub provider SDKs (no network / no optional deps required).
     openai_resp = _OpenAIResponse("OPENAI", prompt_tokens=1, completion_tokens=2)
 
-    class OpenAI:  # noqa: N801 - matches SDK naming
+    class OpenAI:
         def __init__(self, **kwargs):
             self.chat = _OpenAIChat(openai_resp)
 
@@ -90,7 +90,7 @@ def test_broker_routes_to_openai_or_anthropic_adapters_by_model_name(
 
     anthropic_resp = _AnthropicResponse("ANTHROPIC", input_tokens=3, output_tokens=4)
 
-    class Anthropic:  # noqa: N801 - matches SDK naming
+    class Anthropic:
         def __init__(self, **kwargs):
             self.messages = _AnthropicMessages(anthropic_resp)
 

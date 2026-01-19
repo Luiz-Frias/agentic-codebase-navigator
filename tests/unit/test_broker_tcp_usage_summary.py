@@ -35,7 +35,6 @@ def test_tcp_broker_usage_summary_counts_only_calls_routed_through_broker() -> N
     This matters because the orchestrator calls its root LLM directly; the broker should
     only account for environment subcalls routed through `BrokerPort`.
     """
-
     llm = QueueLLM(model_name="m1", responses=["FINAL(direct)", "FINAL(broker)"])
     broker = TcpBrokerAdapter(llm)
 

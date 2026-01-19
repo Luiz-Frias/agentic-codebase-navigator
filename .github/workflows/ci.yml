@@ -14,54 +14,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
+      - uses: jdx/mise-action@v2
         with:
-          python-version: "3.12"
+          experimental: true  # Required for some mise features
       - name: Install deps (dev + test)
         run: uv sync --group dev --group test
       - name: Ruff format (check)
-        run: uv run --group dev ruff format --check .
+        run: uv run ruff format --check .
       - name: Ruff lint
-        run: uv run --group dev ruff check .
-      - name: Unit tests
-        run: uv run --group test pytest -m unit
+        run: uv run ruff check .
+      - name: Unit tests (parallel)
+        run: uv run pytest -m unit -n auto
 
   integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
+      - uses: jdx/mise-action@v2
         with:
-          python-version: "3.12"
+          experimental: true
       - name: Install deps (test)
         run: uv sync --group test
-      - name: Integration tests
-        run: uv run --group test pytest -m integration
+      - name: Integration tests (parallel)
+        run: uv run pytest -m integration -n auto
 
   e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
+      - uses: jdx/mise-action@v2
         with:
-          python-version: "3.12"
+          experimental: true
       - name: Install deps (test)
         run: uv sync --group test
-      - name: E2E tests (docker tests included; auto-skip if docker unavailable)
-        run: uv run --group test pytest -m e2e
+      - name: E2E tests (parallel; docker tests auto-skip if unavailable)
+        run: uv run pytest -m e2e -n auto
 
   packaging:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
+      - uses: jdx/mise-action@v2
         with:
-          python-version: "3.12"
+          experimental: true
       - name: Install deps (test)
         run: uv sync --group test
-      - name: Packaging smoke tests
-        run: uv run --group test pytest -m packaging
+      - name: Packaging smoke tests (parallel)
+        run: uv run pytest -m packaging -n auto

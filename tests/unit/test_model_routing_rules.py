@@ -12,7 +12,7 @@ def test_model_routing_rules_resolves_default_for_none_or_blank_and_allows_alias
         [
             ModelSpec(name="root", aliases=("default", "main"), is_default=True),
             ModelSpec(name="sub"),
-        ]
+        ],
     )
 
     assert rules.resolve(None) == "root"
@@ -29,7 +29,7 @@ def test_model_routing_rules_unknown_model_raises_validation_error_with_allowed_
         [
             ModelSpec(name="root", is_default=True),
             ModelSpec(name="sub"),
-        ]
+        ],
     )
 
     with pytest.raises(ValidationError, match="Unknown model"):
@@ -56,7 +56,7 @@ def test_model_routing_rules_rejects_ambiguous_aliases() -> None:
             [
                 ModelSpec(name="a", aliases=("x",), is_default=True),
                 ModelSpec(name="b", aliases=("x",)),
-            ]
+            ],
         )
 
 
@@ -67,5 +67,5 @@ def test_model_routing_rules_requires_exactly_one_default() -> None:
 
     with pytest.raises(ValidationError, match="default"):
         build_routing_rules(
-            [ModelSpec(name="a", is_default=True), ModelSpec(name="b", is_default=True)]
+            [ModelSpec(name="a", is_default=True), ModelSpec(name="b", is_default=True)],
         )

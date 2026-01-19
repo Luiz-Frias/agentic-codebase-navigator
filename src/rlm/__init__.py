@@ -36,25 +36,21 @@ from rlm.domain.agent_ports import (
 from rlm.domain.models import ChatCompletion
 
 __all__ = [
-    # Core API
     "RLM",
-    "create_rlm",
-    "create_rlm_from_config",
-    "ChatCompletion",
-    "__version__",
-    # Configuration
     "AgentModeName",
+    "ChatCompletion",
+    "ContextCompressor",
+    "DefaultStoppingPolicy",
     "EnvironmentConfig",
     "LLMConfig",
     "LoggerConfig",
-    "RLMConfig",
-    # Extension Protocols (for external apps to implement)
-    "StoppingPolicy",
-    "ContextCompressor",
     "NestedCallPolicy",
     "NestedConfig",
-    # Default Policy Implementations (ready-to-use)
-    "DefaultStoppingPolicy",
     "NoOpContextCompressor",
+    "RLMConfig",
     "SimpleNestedCallPolicy",
+    "StoppingPolicy",
+    "__version__",
+    "create_rlm",
+    "create_rlm_from_config",
 ]

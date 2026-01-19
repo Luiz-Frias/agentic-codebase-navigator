@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from rlm.api.registries import (
     DefaultEnvironmentRegistry,
@@ -12,12 +11,14 @@ from rlm.api.registries import (
     LoggerRegistry,
 )
 from rlm.api.rlm import RLM
-from rlm.application.config import AgentModeName, EnvironmentName, RLMConfig
-from rlm.application.use_cases.run_completion import EnvironmentFactory
-from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from rlm.application.config import AgentModeName, EnvironmentName, RLMConfig
+    from rlm.application.use_cases.run_completion import EnvironmentFactory
     from rlm.domain.agent_ports import ToolPort
+    from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
 
 
 def create_rlm(
@@ -25,7 +26,7 @@ def create_rlm(
     *,
     other_llms: list[LLMPort] | None = None,
     environment: EnvironmentName = "local",
-    environment_kwargs: dict[str, Any] | None = None,
+    environment_kwargs: dict[str, object] | None = None,
     max_depth: int = 1,
     max_iterations: int = 30,
     verbose: bool = False,
@@ -34,7 +35,7 @@ def create_rlm(
     logger: LoggerPort | None = None,
     system_prompt: str | None = None,
     # Agent capability extensions
-    tools: list[ToolPort | Callable[..., Any]] | None = None,
+    tools: list[ToolPort | Callable[..., object]] | None = None,
     agent_mode: AgentModeName = "code",
 ) -> RLM:
     """
@@ -57,6 +58,7 @@ def create_rlm(
 
     Returns:
         Configured RLM facade instance.
+
     """
     return RLM(
         llm,
@@ -83,7 +85,7 @@ def create_rlm_from_config(
     environment_registry: EnvironmentRegistry | None = None,
     logger_registry: LoggerRegistry | None = None,
     # Runtime tool injection (tools cannot be serialized to config)
-    tools: list[ToolPort | Callable[..., Any]] | None = None,
+    tools: list[ToolPort | Callable[..., object]] | None = None,
 ) -> RLM:
     """
     Construct an `RLM` from config.
@@ -103,16 +105,16 @@ def create_rlm_from_config(
     Note:
         The `agent_mode` is read from config. If agent_mode="tools", you must
         provide tools via the `tools` parameter.
+
     """
     if llm is None:
         if llm_registry is None:
             llm_registry = DefaultLLMRegistry()
         llm = llm_registry.build(config.llm)
-    else:
-        # If the caller provided the root LLM but not a registry, we may still
-        # need a registry for `config.other_llms`.
-        if llm_registry is None:
-            llm_registry = DefaultLLMRegistry()
+    # If the caller provided the root LLM but not a registry, we may still
+    # need a registry for `config.other_llms`.
+    elif llm_registry is None:
+        llm_registry = DefaultLLMRegistry()
 
     other_llms: list[LLMPort] = [llm_registry.build(c) for c in config.other_llms]
 

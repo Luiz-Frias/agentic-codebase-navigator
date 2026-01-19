@@ -36,6 +36,7 @@ class DefaultStoppingPolicy:
         # After max iterations
         context["iteration"] = 10
         assert policy.should_stop(context)  # True, should stop
+
     """
 
     def should_stop(self, context: dict[str, Any]) -> bool:
@@ -47,6 +48,7 @@ class DefaultStoppingPolicy:
 
         Returns:
             True if the iteration limit has been reached.
+
         """
         iteration = context.get("iteration", 0)
         max_iterations = context.get("max_iterations", 30)
@@ -66,6 +68,6 @@ class DefaultStoppingPolicy:
         Args:
             _context: Mutable orchestrator state dict (unused in default).
             _result: The ChatCompletion from this iteration (unused in default).
+
         """
         # Default policy doesn't track any state
-        pass

@@ -20,8 +20,10 @@ DEFAULT_DOCKER_STOP_GRACE_S: int = 2
 DEFAULT_DOCKER_CLEANUP_SUBPROCESS_TIMEOUT_S: float = 5.0
 DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S: float = 2.0
 
-# Local execution (watchdog-style timeouts are opt-in during migration)
-DEFAULT_LOCAL_EXECUTE_TIMEOUT_S: float | None = DEFAULT_BROKER_CLIENT_TIMEOUT_S
+# Local execution (subprocess watchdog + capped max timeout)
+DEFAULT_LOCAL_EXECUTE_TIMEOUT_S: float = DEFAULT_BROKER_CLIENT_TIMEOUT_S
+DEFAULT_LOCAL_EXECUTE_TIMEOUT_CAP_S: float = 3600.0
+MAX_LOCAL_EXECUTE_TIMEOUT_CAP_S: float = 21600.0
 
 # Cancellation behavior (grace period for cooperative cancellation)
 DEFAULT_CANCELLATION_GRACE_TIMEOUT_S: float = 2.0
@@ -53,7 +55,8 @@ class DockerTimeouts:
 class LocalTimeouts:
     """Timeouts for local environments."""
 
-    execute_timeout_s: float | None = DEFAULT_LOCAL_EXECUTE_TIMEOUT_S
+    execute_timeout_s: float = DEFAULT_LOCAL_EXECUTE_TIMEOUT_S
+    execute_timeout_cap_s: float = DEFAULT_LOCAL_EXECUTE_TIMEOUT_CAP_S
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,10 +9,12 @@ import textwrap
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from rlm.adapters.base import BaseEnvironmentAdapter
 from rlm.domain.models import ChatCompletion, LLMRequest, ReplResult
+from rlm.domain.models.result import Err
+from rlm.domain.models.validation import Validator
 from rlm.domain.policies.timeouts import (
     DEFAULT_DOCKER_CLEANUP_SUBPROCESS_TIMEOUT_S,
     DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S,
@@ -20,13 +22,68 @@ from rlm.domain.policies.timeouts import (
     DEFAULT_DOCKER_SUBPROCESS_TIMEOUT_S,
     DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S,
 )
-from rlm.domain.ports import BrokerPort
-from rlm.domain.types import ContextPayload
+
+if TYPE_CHECKING:
+    from rlm.domain.ports import BrokerPort
+    from rlm.domain.types import ContextPayload, Prompt
 from rlm.infrastructure.comms.protocol import (
     request_completion,
     request_completions_batched,
 )
 from rlm.infrastructure.logging import warn_cleanup_failure
+
+# =============================================================================
+# Request Validators (composable validation for HTTP handler)
+# =============================================================================
+
+# Prompt must be str, dict, or list
+_prompt_validator: Validator[object] = Validator[object]().satisfies(
+    lambda x: isinstance(x, (str, dict, list)),
+    "Invalid prompt",
+)
+
+# Prompts must be a list
+_prompts_validator: Validator[object] = Validator[object]().is_type(list, "Invalid prompts")
+
+# Model must be None or string
+_model_validator: Validator[object] = Validator[object]().satisfies(
+    lambda x: x is None or isinstance(x, str),
+    "Invalid model",
+)
+
+# Correlation ID must be None or string
+_correlation_id_validator: Validator[object] = Validator[object]().satisfies(
+    lambda x: x is None or isinstance(x, str),
+    "Invalid correlation_id",
+)
+
+
+def _validate_request_fields(
+    body: dict[str, Any],
+    required_field: str,
+    required_validator: Validator[object],
+) -> dict[str, str] | None:
+    """
+    Validate common HTTP request fields.
+
+    Returns error dict if validation fails, None if all valid.
+    """
+    # Validate required field
+    result = required_validator.validate_to_result(body.get(required_field))
+    if isinstance(result, Err):
+        return {"error": str(result.error)}
+
+    # Validate optional model field
+    result = _model_validator.validate_to_result(body.get("model"))
+    if isinstance(result, Err):
+        return {"error": str(result.error)}
+
+    # Validate optional correlation_id field
+    result = _correlation_id_validator.validate_to_result(body.get("correlation_id"))
+    if isinstance(result, Err):
+        return {"error": str(result.error)}
+
+    return None
 
 
 def _use_host_network() -> bool:
@@ -66,11 +123,15 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
     lock: threading.Lock = threading.Lock()
     timeout_s: float = DEFAULT_DOCKER_PROXY_HTTP_TIMEOUT_S
 
-    # Silence noisy default logging.
-    def log_message(self, *_args: object) -> None:  # noqa: D401 - BaseHTTPRequestHandler API
-        return None
+    # Silence noisy default logging - must match BaseHTTPRequestHandler signature
+    def log_message(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        format: str,  # noqa: A002  # Must shadow builtin to match base class
+        *args: object,
+    ) -> None:
+        pass
 
-    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+    def do_POST(self) -> None:
         try:
             raw_len = self.headers.get("Content-Length")
             if raw_len is None:
@@ -84,17 +145,19 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
             if content_length <= 0:
                 self._respond(400, {"error": "Missing request body"})
                 return
-            body = json.loads(self.rfile.read(content_length))
+            body_raw: Any = json.loads(self.rfile.read(content_length))
         except json.JSONDecodeError:
             self._respond(400, {"error": "Invalid JSON payload"})
             return
-        except Exception as exc:  # noqa: BLE001 - proxy boundary
+        except Exception as exc:
             self._respond(400, {"error": str(exc)})
             return
 
-        if not isinstance(body, dict):
+        if not isinstance(body_raw, dict):
             self._respond(400, {"error": "Request body must be a JSON object"})
             return
+
+        body: dict[str, Any] = cast("dict[str, Any]", body_raw)
 
         if self.path == "/llm_query":
             result = self._handle_single(body)
@@ -117,16 +180,15 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def _handle_single(self, body: dict[str, Any]) -> dict[str, Any]:
-        prompt = body.get("prompt")
-        model = body.get("model")
-        correlation_id = body.get("correlation_id")  # reserved for later phases
+        # Validate request fields using composable validators
+        validation_error = _validate_request_fields(body, "prompt", _prompt_validator)
+        if validation_error is not None:
+            return validation_error
 
-        if not isinstance(prompt, (str, dict, list)):
-            return {"error": "Invalid prompt"}
-        if model is not None and not isinstance(model, str):
-            return {"error": "Invalid model"}
-        if correlation_id is not None and not isinstance(correlation_id, str):
-            return {"error": "Invalid correlation_id"}
+        # After validation, we know prompt matches the Prompt type
+        prompt: Prompt = cast("Prompt", body["prompt"])
+        model = body.get("model")
+        correlation_id = body.get("correlation_id")
 
         try:
             broker = getattr(self, "broker", None)
@@ -143,7 +205,7 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
                     correlation_id=correlation_id,
                     timeout_s=self.timeout_s,
                 )
-        except Exception as exc:  # noqa: BLE001 - proxy boundary
+        except Exception as exc:
             return {"error": str(exc)}
 
         with self.lock:
@@ -153,28 +215,28 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
         return {"response": cc.response}
 
     def _handle_batched(self, body: dict[str, Any]) -> dict[str, Any]:
+        # Validate request fields using composable validators
+        validation_error = _validate_request_fields(body, "prompts", _prompts_validator)
+        if validation_error is not None:
+            return validation_error
+
         prompts = body.get("prompts", [])
         model = body.get("model")
-        correlation_id = body.get("correlation_id")  # reserved for later phases
-
-        if not isinstance(prompts, list):
-            return {"error": "Invalid prompts"}
-        if model is not None and not isinstance(model, str):
-            return {"error": "Invalid model"}
-        if correlation_id is not None and not isinstance(correlation_id, str):
-            return {"error": "Invalid correlation_id"}
+        correlation_id = body.get("correlation_id")
 
         # Preferred: in-process broker with per-item error semantics (legacy-compatible).
         broker = getattr(self, "broker", None)
         if broker is not None:
             results: list[str] = []
             for p in prompts:
-                if not isinstance(p, (str, dict, list)):
-                    results.append("Error: Invalid prompt")
+                # Validate each prompt using the prompt validator
+                prompt_result = _prompt_validator.validate_to_result(p)
+                if isinstance(prompt_result, Err):
+                    results.append(f"Error: {prompt_result.error}")
                     continue
                 try:
                     cc = broker.complete(LLMRequest(prompt=p, model=model))
-                except Exception as exc:  # noqa: BLE001 - per-item boundary
+                except Exception as exc:
                     results.append(f"Error: {exc}")
                     continue
                 with self.lock:
@@ -194,18 +256,18 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
                 correlation_id=correlation_id,
                 timeout_s=self.timeout_s,
             )
-        except Exception as exc:  # noqa: BLE001 - proxy boundary
+        except Exception as exc:
             return {"error": str(exc)}
 
         wire_responses: list[str] = []
         for r in wire_results:
-            if r.error is not None:
-                wire_responses.append(f"Error: {r.error}")
+            cc = r.chat_completion
+            if r.error is not None or cc is None:
+                wire_responses.append(f"Error: {r.error or 'No completion returned'}")
                 continue
-            assert r.chat_completion is not None
             with self.lock:
-                self.pending_calls.append(r.chat_completion)
-            wire_responses.append(r.chat_completion.response)
+                self.pending_calls.append(cc)
+            wire_responses.append(cc.response)
         return {"responses": wire_responses}
 
 
@@ -227,7 +289,6 @@ def _build_exec_script(
     - persists locals back to state.pkl (dropping unpickleable values)
     - prints a final JSON object containing stdout/stderr/locals
     """
-
     code_b64 = base64.b64encode(code.encode()).decode()
     # When using host network mode, the container shares the host's network namespace,
     # so we use localhost. Otherwise, use Docker's special DNS name.
@@ -344,7 +405,7 @@ print(
         ensure_ascii=False,
     )
 )
-"""
+""",
     )
 
 
@@ -425,7 +486,6 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         payload to a file in the mounted workspace and load it from within the
         container.
         """
-
         if isinstance(context_payload, str):
             host_path = os.path.join(self._host_workspace, "context.txt")
             container_path = "/workspace/context.txt"
@@ -433,7 +493,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                 f.write(context_payload)
             self.execute_code(
                 f"with open({container_path!r}, 'r', encoding='utf-8') as f:\n"
-                "    context = f.read()"
+                "    context = f.read()",
             )
             return
 
@@ -444,7 +504,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         self.execute_code(
             "import json\n"
             f"with open({container_path!r}, 'r', encoding='utf-8') as f:\n"
-            "    context = json.load(f)"
+            "    context = json.load(f)",
         )
 
     def execute_code(self, code: str, /) -> ReplResult:
@@ -472,6 +532,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         try:
             result = subprocess.run(  # nosec B603 - safe list-form command, no shell injection risk
                 cmd,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=self._subprocess_timeout_s,
@@ -483,7 +544,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                 self._pending_calls.clear()
             try:
                 self.cleanup()
-            except Exception as cleanup_exc:  # noqa: BLE001  # nosec B110
+            except Exception as cleanup_exc:  # nosec B110
                 warn_cleanup_failure("DockerEnvironment.execute_timeout", cleanup_exc)
 
             raw_stderr = exc.stderr or b""
@@ -507,7 +568,11 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         elapsed = time.perf_counter() - start
         try:
             lines = result.stdout.strip().split("\n")
-            data = json.loads(lines[-1]) if lines else {}
+            data_raw: Any = json.loads(lines[-1]) if lines else {}
+            data: dict[str, Any] = cast(
+                "dict[str, Any]",
+                data_raw if isinstance(data_raw, dict) else {},
+            )
             return ReplResult(
                 stdout=str(data.get("stdout", "")),
                 stderr=str(data.get("stderr", "")) + (result.stderr or ""),
@@ -543,6 +608,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                         str(getattr(self, "_stop_grace_s", DEFAULT_DOCKER_STOP_GRACE_S)),
                         container_id,
                     ],
+                    check=False,
                     capture_output=True,
                     timeout=getattr(
                         self,
@@ -550,7 +616,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                         DEFAULT_DOCKER_CLEANUP_SUBPROCESS_TIMEOUT_S,
                     ),
                 )
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_container_stop", exc)
         finally:
             try:
@@ -562,7 +628,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
             if proxy_server is not None:
                 proxy_server.shutdown()
                 proxy_server.server_close()
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_proxy_server", exc)
         finally:
             try:
@@ -577,9 +643,9 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                         self,
                         "_thread_join_timeout_s",
                         DEFAULT_DOCKER_THREAD_JOIN_TIMEOUT_S,
-                    )
+                    ),
                 )
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_proxy_thread", exc)
         finally:
             try:
@@ -591,13 +657,13 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
             if calls_lock is not None and pending_calls is not None:
                 with calls_lock:
                     pending_calls.clear()
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_pending_calls", exc)
 
         try:
             if tmp is not None and hasattr(tmp, "cleanup"):
                 tmp.cleanup()
-        except Exception as exc:  # noqa: BLE001  # nosec B110
+        except Exception as exc:  # nosec B110
             warn_cleanup_failure("DockerEnvironment.cleanup_tmp", exc)
 
     # ------------------------------------------------------------------
@@ -605,7 +671,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
     # ------------------------------------------------------------------
 
     def _start_proxy(self) -> None:
-        handler = type(
+        handler: type[DockerLLMProxyHandler] = type(
             "DockerProxyHandler",
             (DockerLLMProxyHandler,),
             {
@@ -649,6 +715,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
 
         result = subprocess.run(  # nosec B603 B607 - safe list-form command, Docker CLI is standard
             cmd,
+            check=False,
             capture_output=True,
             text=True,
             timeout=self._subprocess_timeout_s,

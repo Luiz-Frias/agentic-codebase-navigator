@@ -21,10 +21,10 @@ def test_console_logger_disabled_is_noop(capsys: pytest.CaptureFixture[str]) -> 
             environment_kwargs={},
             other_backends=None,
             correlation_id="cid-1",
-        )
+        ),
     )
     logger.log_iteration(
-        Iteration(prompt="p", response="r", iteration_time=0.0, correlation_id="cid-1")
+        Iteration(prompt="p", response="r", iteration_time=0.0, correlation_id="cid-1"),
     )
     out = capsys.readouterr().out
     assert out == ""
@@ -46,10 +46,10 @@ def test_console_logger_enabled_prints_metadata_and_iteration(
             environment_kwargs={},
             other_backends=None,
             correlation_id="cid-1",
-        )
+        ),
     )
     logger.log_iteration(
-        Iteration(prompt="p", response="r", iteration_time=0.1, correlation_id="cid-1")
+        Iteration(prompt="p", response="r", iteration_time=0.1, correlation_id="cid-1"),
     )
     out = capsys.readouterr().out
     assert "cid=cid-1" in out
@@ -70,7 +70,7 @@ def test_noop_logger_accepts_calls() -> None:
             environment_kwargs={},
             other_backends=None,
             correlation_id=None,
-        )
+        ),
     )
     logger.log_iteration(Iteration(prompt="p", response="r", iteration_time=0.0))
 

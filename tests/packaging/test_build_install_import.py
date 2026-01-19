@@ -22,7 +22,10 @@ def _venv_python(venv_dir: Path) -> Path:
 
 
 def _run(
-    cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    cmd: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
@@ -136,6 +139,8 @@ assert cc.response == "ok"
             "mock",
             "--final",
             "ok",
+            "--environment",
+            "local",
         ],
         cwd=repo_root,
     )

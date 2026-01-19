@@ -10,59 +10,19 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
-import types
-import typing
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, get_type_hints
 
 from rlm.adapters.base import BaseToolAdapter
 from rlm.domain.agent_ports import ToolDefinition
+from rlm.domain.models.json_schema_mapper import JsonSchemaMapper
+from rlm.domain.models.result import try_call
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
-def _python_type_to_json_schema(python_type: type) -> dict[str, Any]:
-    """Convert a Python type to JSON Schema."""
-    # Handle None/NoneType
-    if python_type is type(None):
-        return {"type": "null"}
-
-    # Basic type mappings
-    type_map: dict[type, dict[str, Any]] = {
-        str: {"type": "string"},
-        int: {"type": "integer"},
-        float: {"type": "number"},
-        bool: {"type": "boolean"},
-        list: {"type": "array"},
-        dict: {"type": "object"},
-    }
-
-    if python_type in type_map:
-        return type_map[python_type]
-
-    # Handle Optional (Union with None) and parameterized collections
-    origin = get_origin(python_type)
-    args = get_args(python_type)
-
-    if origin is list and args:
-        return {"type": "array", "items": _python_type_to_json_schema(args[0])}
-
-    if origin is dict and len(args) >= 2:  # noqa: PLR2004
-        value_type = args[1]  # type: ignore[misc]
-        return {
-            "type": "object",
-            "additionalProperties": _python_type_to_json_schema(value_type),
-        }
-
-    # Union types (including Optional)
-    if origin in (types.UnionType, typing.Union):
-        non_none = [a for a in args if a is not type(None)]
-        if len(non_none) == 1:
-            # Optional[X] -> X (nullable handled implicitly by most LLMs)
-            return _python_type_to_json_schema(non_none[0])
-        return {"anyOf": [_python_type_to_json_schema(a) for a in args]}
-
-    # Fallback to string for complex types
-    return {"type": "string"}
+# Module-level mapper instance (stateless, thread-safe)
+_schema_mapper = JsonSchemaMapper()
 
 
 def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
@@ -82,7 +42,9 @@ def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
     if google_match:
         args_section = google_match.group(1)
         for match in re.finditer(
-            r"(\w+)\s*(?:\([^)]*\))?:\s*(.+?)(?=\n\s+\w+|\n\n|$)", args_section, re.DOTALL
+            r"(\w+)\s*(?:\([^)]*\))?:\s*(.+?)(?=\n\s+\w+|\n\n|$)",
+            args_section,
+            re.DOTALL,
         ):
             params[match.group(1)] = match.group(2).strip()
 
@@ -92,7 +54,9 @@ def _parse_docstring_params(docstring: str | None) -> dict[str, str]:
     if numpy_match and not params:
         params_section = numpy_match.group(1)
         for match in re.finditer(
-            r"(\w+)\s*:\s*\w+.*?\n\s+(.+?)(?=\n\w+\s*:|\n\n|$)", params_section, re.DOTALL
+            r"(\w+)\s*:\s*\w+.*?\n\s+(.+?)(?=\n\w+\s*:|\n\n|$)",
+            params_section,
+            re.DOTALL,
         ):
             params[match.group(1)] = match.group(2).strip()
 
@@ -120,7 +84,7 @@ class NativeToolAdapter(BaseToolAdapter):
         def get_weather(city: str, unit: str = "celsius") -> str:
             '''Get the current weather for a city.
 
-            Args:
+    Args:
                 city: The city name to look up
                 unit: Temperature unit (celsius or fahrenheit)
             '''
@@ -128,6 +92,7 @@ class NativeToolAdapter(BaseToolAdapter):
 
         tool = NativeToolAdapter(get_weather)
         # tool.definition will have the proper JSON schema
+
     """
 
     func: Callable[..., Any]
@@ -156,11 +121,8 @@ class NativeToolAdapter(BaseToolAdapter):
         # Parse docstring for parameter descriptions
         param_docs = _parse_docstring_params(docstring)
 
-        # Get type hints
-        try:
-            hints = get_type_hints(self.func)
-        except Exception:
-            hints = {}
+        # Get type hints safely using Result pattern
+        hints: dict[str, type] = try_call(lambda: get_type_hints(self.func)).unwrap_or({})
 
         # Get function signature
         sig = inspect.signature(self.func)
@@ -179,9 +141,9 @@ class NativeToolAdapter(BaseToolAdapter):
             if param_name in ("self", "cls"):
                 continue
 
-            # Get type from hints
-            param_type = hints.get(param_name, str)
-            param_schema = _python_type_to_json_schema(param_type)
+            # Get type from hints and convert to JSON schema
+            param_type: type = hints.get(param_name, str)
+            param_schema = _schema_mapper.map(param_type)
 
             # Add description if available
             if param_name in param_docs:
@@ -214,7 +176,7 @@ class NativeToolAdapter(BaseToolAdapter):
             result.close()
             raise TypeError(
                 "Tool function returned a coroutine in sync execution. "
-                "Declare the tool as async or call it via aexecute()."
+                "Declare the tool as async or call it via aexecute().",
             )
         return result
 
@@ -228,6 +190,6 @@ class NativeToolAdapter(BaseToolAdapter):
             result.close()
             raise TypeError(
                 "Tool function returned a coroutine from a sync implementation. "
-                "Declare the tool as async instead."
+                "Declare the tool as async instead.",
             )
         return result

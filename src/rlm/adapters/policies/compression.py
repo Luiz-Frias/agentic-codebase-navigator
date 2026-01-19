@@ -35,6 +35,7 @@ class NoOpContextCompressor:
         # max_tokens hint is ignored
         compressed = compressor.compress(result, max_tokens=100)
         assert compressed == result
+
     """
 
     def compress(self, result: str, _max_tokens: int | None = None) -> str:
@@ -47,6 +48,7 @@ class NoOpContextCompressor:
 
         Returns:
             The result string unchanged.
+
         """
         # Default policy: passthrough without compression
         return result

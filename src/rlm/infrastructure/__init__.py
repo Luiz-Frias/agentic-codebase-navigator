@@ -9,6 +9,6 @@ from __future__ import annotations
 
 from rlm.infrastructure.logging import warn_cleanup_failure
 
-__all__: list[str] = [
+__all__ = [
     "warn_cleanup_failure",
 ]

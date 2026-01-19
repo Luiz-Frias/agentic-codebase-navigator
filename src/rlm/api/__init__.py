@@ -12,11 +12,11 @@ from rlm.application.config import EnvironmentConfig, LLMConfig, LoggerConfig, R
 from rlm.domain.models import ChatCompletion
 
 __all__ = [
+    "RLM",
     "ChatCompletion",
     "EnvironmentConfig",
     "LLMConfig",
     "LoggerConfig",
-    "RLM",
     "RLMConfig",
     "create_rlm",
     "create_rlm_from_config",

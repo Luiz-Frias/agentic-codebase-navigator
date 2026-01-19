@@ -101,12 +101,12 @@ def test_create_rlm_from_config_builds_default_llm_registry_when_llm_passed_and_
                 backend="mock",
                 model_name="other",
                 backend_kwargs={"script": ["FINAL(x)"]},
-            )
+            ),
         ],
         env=EnvironmentConfig(environment="local"),
         max_iterations=1,
         verbose=False,
     )
     rlm = create_rlm_from_config(cfg, llm=_DummyLLM(), llm_registry=None)
-    assert len(rlm._other_llms) == 1  # noqa: SLF001 - intentional: verify factory wiring
-    assert rlm._other_llms[0].model_name == "other"  # noqa: SLF001
+    assert len(rlm._other_llms) == 1
+    assert rlm._other_llms[0].model_name == "other"

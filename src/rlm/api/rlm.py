@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from rlm.application.config import EnvironmentConfig, EnvironmentName
+from rlm.adapters.broker.tcp import TcpBrokerAdapter
+from rlm.adapters.tools import InMemoryToolRegistry
+from rlm.api.registries import DefaultEnvironmentRegistry
+from rlm.application.config import EnvironmentConfig
 from rlm.application.use_cases.run_completion import (
-    EnvironmentFactory,
     RunCompletionDeps,
     RunCompletionRequest,
     arun_completion,
     run_completion,
 )
 from rlm.domain.errors import ValidationError
-from rlm.domain.models import ChatCompletion
-from rlm.domain.models.llm_request import ToolChoice
-from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
-from rlm.domain.services.rlm_orchestrator import AgentMode
-from rlm.domain.types import Prompt
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from rlm.application.config import EnvironmentName
+    from rlm.application.use_cases.run_completion import EnvironmentFactory
     from rlm.domain.agent_ports import (
         ContextCompressor,
         NestedCallPolicy,
@@ -26,6 +26,13 @@ if TYPE_CHECKING:
         ToolPort,
         ToolRegistryPort,
     )
+    from rlm.domain.models import ChatCompletion
+    from rlm.domain.models.llm_request import ToolChoice
+    from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
+    from rlm.domain.services.rlm_orchestrator import AgentMode
+    from rlm.domain.types import Prompt
+
+__all__ = ["RLM"]
 
 
 class RLM:
@@ -55,6 +62,7 @@ class RLM:
     Note:
         Tool calling mode (agent_mode="tools") is infrastructure-ready but not
         yet implemented. Use the default "code" mode for now.
+
     """
 
     def __init__(
@@ -63,7 +71,7 @@ class RLM:
         *,
         other_llms: list[LLMPort] | None = None,
         environment: EnvironmentName = "local",
-        environment_kwargs: dict[str, Any] | None = None,
+        environment_kwargs: dict[str, object] | None = None,
         max_depth: int = 1,
         max_iterations: int = 30,
         verbose: bool = False,
@@ -72,7 +80,7 @@ class RLM:
         logger: LoggerPort | None = None,
         system_prompt: str | None = None,
         # Agent capability extensions (Phase 1 - Core)
-        tools: list[ToolPort | Callable[..., Any]] | None = None,
+        tools: list[ToolPort | Callable[..., object]] | None = None,
         output_type: type | None = None,
         agent_mode: AgentMode = "code",
         # Extension protocols (Phase 2.7-2.8)
@@ -100,8 +108,6 @@ class RLM:
 
         # Build tool registry if tools provided
         if tools:
-            from rlm.adapters.tools import InMemoryToolRegistry
-
             registry = InMemoryToolRegistry()
             for tool in tools:
                 registry.register(tool)
@@ -109,12 +115,11 @@ class RLM:
 
         self._broker_factory = broker_factory or _default_tcp_broker_factory
         if environment_factory is None:
-            from rlm.api.registries import DefaultEnvironmentRegistry
-
             environment_factory = DefaultEnvironmentRegistry().build(
                 EnvironmentConfig(
-                    environment=environment, environment_kwargs=environment_kwargs or {}
-                )
+                    environment=environment,
+                    environment_kwargs=environment_kwargs or {},
+                ),
             )
         self._environment_factory = environment_factory
         self._system_prompt = system_prompt
@@ -230,6 +235,4 @@ def _default_tcp_broker_factory(llm: LLMPort, /) -> BrokerPort:
 
     This is used so environments can call `llm_query()` during code execution.
     """
-    from rlm.adapters.broker.tcp import TcpBrokerAdapter
-
     return TcpBrokerAdapter(llm)

@@ -1,0 +1,105 @@
+name: ✨ Feature Request
+description: Suggest an idea for a new feature or improvement
+labels: ["enhancement", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature! Help us understand your request by providing details below.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: "What problem does this solve? Why would this be useful?"
+      placeholder: |
+        I want to be able to limit the depth of nested llm_query() calls because...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution
+      description: "How do you envision this feature working?"
+      placeholder: |
+        ```python
+        rlm = create_rlm(
+            llm,
+            max_nesting_depth=2,  # New parameter
+        )
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: "What other approaches did you consider?"
+      placeholder: |
+        - Alternative 1: ...
+        - Alternative 2: ...
+
+  - type: dropdown
+    id: layer_impact
+    attributes:
+      label: Which Layer Would This Change?
+      description: "Where in the hexagonal architecture would this change?"
+      options:
+        - API (public facade, factories)
+        - Application (use cases, configuration)
+        - Domain (core logic, ports)
+        - Infrastructure (wire protocol, utilities)
+        - Adapters (LLM providers, environments, tools)
+        - Multiple layers
+        - Unsure
+      validations:
+        required: true
+
+  - type: dropdown
+    id: breaking_change
+    attributes:
+      label: Breaking Change?
+      description: "Would this require breaking changes to the API?"
+      options:
+        - "No, fully backward compatible"
+        - "Yes, would require API changes"
+        - "Maybe, depends on implementation"
+      validations:
+        required: true
+
+  - type: dropdown
+    id: willing_to_implement
+    attributes:
+      label: Are You Willing to Implement This?
+      description: "Would you be open to implementing this feature?"
+      options:
+        - "Yes, I can implement this"
+        - "No, just suggesting an idea"
+        - "Maybe, with guidance from maintainers"
+      validations:
+        required: true
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: "Any other relevant information?"
+      placeholder: |
+        - Related issues or discussions: #123
+        - Real-world examples of similar features in other projects
+        - Performance or scalability considerations
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: "I have searched the [existing issues](https://github.com/Luiz-Frias/agentic-codebase-navigator/issues) for similar requests"
+          required: true
+        - label: "I have read the [documentation](https://github.com/Luiz-Frias/agentic-codebase-navigator#readme)"
+          required: true
+        - label: "I have reviewed the [architecture](docs/architecture.md) to understand how this might fit"

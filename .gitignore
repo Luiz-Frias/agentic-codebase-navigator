@@ -52,3 +52,18 @@ htmlcov/
 # Benchmarks
 .benchmarks/
 .uv-cache/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets baseline (internal)
+.secrets.baseline
+
+# Dev environment configs (internal)
+.envrc
+.coderabbit.yaml
+
+# Cursor plans/commands (internal)
+.cursor/

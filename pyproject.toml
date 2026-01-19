@@ -1,6 +1,6 @@
 [project]
 name = "agentic-codebase-navigator"
-version = "1.1.0"
+version = "1.2.0"
 description = "Agentic codebase navigator built on Recursive Language Model (RLM) patterns."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -45,6 +45,10 @@ env-modal = ["modal>=0.73.0"]
 # Docker uses the local Docker CLI; no Python dependency is required, but we keep an explicit extra.
 env-docker = []
 
+# Enhanced type validation and schema generation (optional, ADR-001)
+# Enables TypeAdapter fallback in JsonSchemaMapper for better edge case handling
+pydantic = ["pydantic>=2.0.0"]
+
 [project.scripts]
 rlm = "rlm.cli:main"
 
@@ -64,7 +68,7 @@ dev = [
     "ruff>=0.14.10",
     "ty>=0.0.7",
     "mypy>=1.14.1",
-    "pyright>=1.1.406",
+    "basedpyright>=1.22.0",
     "bandit>=1.8.6",
     "pre-commit>=4.5.1",
     "detect-secrets>=1.5.0",
@@ -75,6 +79,8 @@ test = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
     "pytest-benchmark>=4.0.0",
+    "pytest-watcher>=0.4.0",
+    "pytest-xdist>=3.5.0",
 ]
 
 [tool.pytest.ini_options]
@@ -98,18 +104,231 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Focus lint discipline on src/rlm/** only - tests have legitimate patterns
+# that lint rules flag (unused fixtures, magic values, etc.)
+exclude = ["tests/**"]
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
+    "ALL", # All rules
 ]
 ignore = [
+    # Style rules - disable globally for now
+    "D100",   # Missing docstring in public module
+    "D101",   # Missing docstring in public class
+    "D102",   # Missing docstring in public method
+    "D103",   # Missing docstring in public function
+    "D104",   # Missing docstring in public package
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in __init__
+    "D200",   # One-line docstring should fit on one line
+    "D203",   # 1 blank line required between summary line and description
+    "D205",   # 1 blank line required between summary line and description
+    "D212",   # No blank lines allowed after function docstring
+    "D400",   # First line should end with a period
+    "D401",   # First line should be in imperative mood
+    "D415",   # First line should end with a period, question mark, or exclamation point
+    # Complexity rules - disable globally for now
+    "COM812", # Use f-string for string formatting
+    # Formatting handled by ruff format
     "E501",   # line too long (handled by formatter)
+    # Overly pedantic
+    "EM101",  # Exception must not use a string literal
+    "EM102",  # Exception must not use an f-string literal
+    "TRY003", # Avoid specifying long messages outside the exception class
+    "TRY004", # Prefer TypeError exception for invalid type
+]
+
+[tool.ruff.lint.per-file-ignores]
+# CLI module: print() is legitimate for CLI output
+"src/rlm/cli.py" = [
+    "PLC0415", # Lazy import of rlm package to avoid circular dependency
+    "T201",    # print() found (legitimate for CLI output)
+]
+
+# ============================================================================
+# ADAPTER LAYER - Hexagonal boundary justifications
+# ============================================================================
+# Adapters are the translation layer between external systems and domain.
+# PLC0415/E402: Lazy imports for OPTIONAL dependencies (anthropic, gemini, etc.)
+#         that may not be installed. Import happens inside functions.
+# ============================================================================
+
+# LLM provider adapters - external SDK boundaries
+"src/rlm/adapters/llm/openai.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: openai is optional dependency
+    "E402",     # Module import after lazy check
+    "ANN401",   # OpenAI SDK has no type stubs
+]
+"src/rlm/adapters/llm/anthropic.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: anthropic is optional
+    "E402",     # Module import after lazy check
+    "ANN401",   # Anthropic SDK has no complete stubs
+]
+"src/rlm/adapters/llm/gemini.py" = [
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: google-genai is optional
+    "E402",     # Module import after lazy check
+    "ANN401",   # Gemini SDK typing incomplete
+]
+"src/rlm/adapters/llm/azure_openai.py" = [
+    "ANN401",   # OpenAI SDK has no type stubs for Azure variant
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: openai is optional
+    "E402",     # Module import after lazy check
+]
+"src/rlm/adapters/llm/litellm.py" = [
+    "ANN401",   # LiteLLM SDK proxies multiple backends with Any types
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: litellm is optional
+    "E402",     # Module import after lazy check
+]
+"src/rlm/adapters/llm/portkey.py" = [
+    "ANN401",   # Portkey SDK lacks complete type stubs
+    "BLE001",   # Boundary: catch SDK errors → raise LLMError
+    "PLC0415",  # Lazy import: portkey-ai is optional
+    "E402",     # Module import after lazy check
+]
+"src/rlm/adapters/llm/provider_base.py" = [
+    "ANN401",   # Base adapter handles Any from multiple SDKs
+    "BLE001",   # Tiktoken import/usage can fail in various ways (optional dependency)
+    "PLC0415",  # Lazy import: tiktoken is optional
+]
+"src/rlm/adapters/llm/mock.py" = [
+    "BLE001",   # Defensive fallback when accessing prompt[-1] fails
+]
+
+# Base adapters - abstract protocol definitions
+"src/rlm/adapters/base.py" = [
+    "ARG002",   # Protocol stubs: unused args in default implementations
+    "ANN401",   # ToolPort.execute(**kwargs: Any) is inherently dynamic by design
+]
+
+# TCP Broker adapter - wire protocol boundary
+"src/rlm/adapters/broker/tcp.py" = [
+    "BLE001",   # Wire boundary: catch all exceptions for error sanitization
+    "S101",     # Type narrowing asserts after parse validation
+    "SLF001",   # Internal broker._handle_wire_request access (same module)
+]
+
+# Environment adapters - execution boundaries
+"src/rlm/adapters/environments/docker.py" = [
+    "BLE001",   # Execution boundary: container/HTTP errors can fail in any way
+    "RUF012",   # HTTP handler pattern: mutable class attrs for shared state
+    "PLR0911",  # HTTP handler do_POST has many response paths
+    "PLR0912",  # Container lifecycle has inherent branching
+    "PLR0913",  # __init__ DI: timeout, port, image, broker, cleanup params
+    "PLR0915",  # Container setup requires many statements
+    "C901",     # Container lifecycle complexity (subprocess + HTTP + cleanup)
+    "ANN202",   # Internal helper return types inferred
+    "PTH109",   # os.getcwd() required for container working directory
+    "PTH118",   # os.path.join for container path construction
+    "PTH123",   # open() for container file operations
+    "S603",     # Docker subprocess: validated inputs from controlled sources
+    "S607",     # Docker CLI: intentional PATH lookup after availability check
+    "S104",     # Bind 0.0.0.0: intentional for container communication
+]
+"src/rlm/adapters/environments/local.py" = [
+    "BLE001",   # Execution boundary: user code can raise any exception
+    "S102",     # exec() is the core feature (secured by namespace policy)
+    "S104",     # Bind 0.0.0.0: intentional for broker communication
+    "PLR0911",  # REPL execution has multiple return paths
+    "PLR0912",  # Namespace setup has inherent branching
+    "PLR0913",  # __init__ DI: timeout, broker, namespace policy params
+    "PLR0915",  # REPL setup requires many statements
+    "C901",     # REPL execution complexity (timeouts + signals + cleanup)
+    "ANN202",   # Internal helper return types inferred
+]
+
+# Logger adapters
+"src/rlm/adapters/logger/console.py" = [
+    "T201",     # print() is the intended output for ConsoleLoggerAdapter
+]
+"src/rlm/adapters/logger/jsonl.py" = [
+    "S101",     # Type narrowing assert after _start_new_run()
+]
+"src/rlm/adapters/logger/noop.py" = [
+    "ARG002",   # NoopLoggerAdapter: intentionally ignores all arguments
+]
+
+# Tool adapters - introspection boundaries
+# Note: BLE001, PLR0911, C901 removed after Phase 6 refactor (JsonSchemaMapper + Result pattern)
+"src/rlm/adapters/tools/native.py" = [
+    "ANN401",   # Tool execute(**kwargs: Any) is inherently dynamic
+]
+# pydantic_output.py: All ignores removed after Phase 6 refactor
+
+# ============================================================================
+# DOMAIN MODELS - SDK BOUNDARY ABSTRACTIONS
+# ============================================================================
+"src/rlm/domain/models/safe_accessor.py" = [
+    "ANN401",   # SafeAccessor is designed to handle untyped SDK responses (Any in, Any out)
+]
+
+# ============================================================================
+# DOMAIN SERVICES - Event Sources (SDK boundaries for user-defined tools)
+# ============================================================================
+# ToolsModeEventSource executes user-defined tools that can:
+# 1. Raise any exception type (BLE001 for tool execution)
+# 2. Return arbitrary types for JSON serialization (BLE001 for serialization)
+# These are SDK boundaries where we catch all exceptions to report errors to LLM.
+"src/rlm/domain/services/tools_mode_event_source.py" = [
+    "BLE001",   # SDK boundary: user tools can raise any exception; serialization can fail
+]
+# RLMOrchestrator: The main orchestration entry point with justified ignores:
+# - E402: Backwards-compat alias import after TYPE_CHECKING block
+# - S101: Type narrowing asserts for tool_registry (caller contract enforcement)
+# - BLE001: SDK boundaries - tool execution and token counting can fail in any way
+# - PLR0913: Public API completion() / acompletion() need many keyword args
+"src/rlm/domain/services/rlm_orchestrator.py" = [
+    "E402",     # Backwards-compat alias import after TYPE_CHECKING block
+    "S101",     # Type narrowing asserts (caller contract enforcement)
+    "BLE001",   # SDK boundary: tool execution + token counting
+    "PLR0913",  # Public API needs many keyword arguments
+]
+
+# ============================================================================
+# INFRASTRUCTURE LAYER
+# ============================================================================
+"src/rlm/infrastructure/execution_namespace_policy.py" = [
+    "A002",     # Matches stdlib __import__(globals, locals) signature exactly
+    "ANN001",   # Signature must match builtins.__import__
+    "ANN202",   # _controlled_import/_restricted_open match stdlib signatures (no return annotation)
+    "PLR0913",  # _restricted_open matches builtins.open() signature (8 params)
+    "FBT002",   # _restricted_open matches builtins.open(closefd=True) signature
+]
+"src/rlm/infrastructure/logging.py" = [
+    "PLW0603",  # Global _configured flag for one-time setup (loguru pattern)
+    "ERA001",   # Comments documenting loguru configuration options
+]
+# Wire protocol: broker communication boundary
+# - BLE001: Intentional broad catches for client error sanitization (prevents stack trace leakage)
+# - PLR0913: Convenience client functions need address + prompt + optional params
+"src/rlm/infrastructure/comms/protocol.py" = [
+    "BLE001",   # Boundary: sanitize ALL exceptions before sending to broker clients
+    "PLR0913",  # Convenience API: address + prompt + model + correlation_id + timeout + max_bytes
+]
+
+# ============================================================================
+# API LAYER - Public APIs and registry patterns
+# ============================================================================
+# Factory functions: Dependency injection requires many parameters
+"src/rlm/api/factory.py" = [
+    "PLR0913",  # Public API: create_rlm() / create_rlm_from_config() need DI params
+]
+# RLM class: Main entry point with full dependency injection
+"src/rlm/api/rlm.py" = [
+    "PLR0913",  # Public API: RLM.__init__() aggregates all dependencies
+]
+# Registry modules: Lazy imports for optional backends (idiomatic Python pattern)
+"src/rlm/api/registries.py" = [
+    "PLC0415",  # Lazy imports for optional backends (openai, anthropic, etc.)
+    "PLR0912",  # Many branches for different backends
+    "PLR0911",  # Multiple return paths for config combinations
+    "C901",     # Registry build() methods: match/case for optional deps with lazy imports
+    "S607",     # Docker subprocess: intentional PATH lookup after which("docker") check
 ]
 
 [tool.ruff.format]
@@ -163,3 +382,70 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "modal"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tiktoken"
+ignore_missing_imports = true
+
+# Optional LLM SDK dependencies (lazy-loaded at adapter boundaries)
+[[tool.mypy.overrides]]
+module = "openai"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "openai.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "anthropic"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "anthropic.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "litellm"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "litellm.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "portkey_ai"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "portkey_ai.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "google.genai"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "google.genai.*"
+ignore_missing_imports = true
+
+[tool.basedpyright]
+# basedpyright unlocks Pylance features without VSCode lock-in
+pythonVersion = "3.12"
+typeCheckingMode = "standard"  # Options: off, basic, standard, strict, all
+include = ["src/rlm"]
+exclude = ["src/rlm/_legacy", "references", "tests", "build", "**/__pycache__"]
+
+# Relax some strict checks for pragmatic development
+reportAny = false                      # Allow 'Any' usage (too noisy for mixed codebase)
+reportMissingImports = false           # Handled by import resolution
+reportMissingTypeStubs = false         # Don't require stubs for all packages
+reportUnusedImport = false             # Let Ruff handle unused imports
+reportUnusedVariable = false           # Let Ruff handle unused variables
+
+[tool.pytest-watcher]
+# pytest-watcher configuration for "bacon-style" feedback loop
+now = true                              # Run immediately on start
+runner = "pytest"
+runner_args = ["-n", "auto", "-q", "--tb=short"]  # Parallel + quiet + short tracebacks
+patterns = ["*.py"]
+ignore_patterns = [".*", "__pycache__", "*.pyc", ".venv", "build", "dist"]

@@ -48,7 +48,7 @@ class _BarrierAsyncLLM(LLMPort):
         await self._all_started.wait()
 
         self._usage = UsageSummary(
-            model_usage_summaries={self._model_name: ModelUsageSummary(1, 0, 0)}
+            model_usage_summaries={self._model_name: ModelUsageSummary(1, 0, 0)},
         )
         return ChatCompletion(
             root_model=request.model or self._model_name,
