@@ -18,6 +18,153 @@ if TYPE_CHECKING:
     from rlm.domain.types import Prompt
 
 
+# =============================================================================
+# Pydantic TypeAdapter Integration (ADR-001 - Adapter Layer)
+# =============================================================================
+# Uses Pydantic BaseModel + TypeAdapter for SDK response validation when available.
+# Falls back to SafeAccessor when Pydantic not installed. This is an adapter-layer
+# concern - domain remains Pydantic-free per hexagonal discipline.
+#
+# Lazy class definition preserves optional dependency (pip install rlm[pydantic]).
+
+_PYDANTIC_MODELS_LOADED: bool = False
+_OpenAIFunctionModel: type | None = None
+_OpenAIToolCallModel: type | None = None
+_OpenAIToolCallsAdapter: object | None = None
+
+
+def _load_pydantic_models() -> bool:
+    """
+    Lazily load Pydantic BaseModel classes for SDK response validation.
+
+    Returns True if Pydantic is available and models were loaded.
+    Models are defined inside this function to preserve optional dependency.
+    """
+    global _PYDANTIC_MODELS_LOADED, _OpenAIFunctionModel, _OpenAIToolCallModel  # noqa: PLW0603
+    global _OpenAIToolCallsAdapter  # noqa: PLW0603
+
+    if _PYDANTIC_MODELS_LOADED:
+        return _OpenAIToolCallModel is not None
+
+    _PYDANTIC_MODELS_LOADED = True
+
+    try:
+        from pydantic import BaseModel, TypeAdapter
+
+        class OpenAIFunction(BaseModel):
+            """OpenAI function call shape within tool_calls."""
+
+            name: str
+            arguments: str  # JSON string to be parsed
+
+        class OpenAIToolCall(BaseModel):
+            """OpenAI tool_call response shape."""
+
+            id: str
+            type: str = "function"
+            function: OpenAIFunction
+
+        _OpenAIFunctionModel = OpenAIFunction
+        _OpenAIToolCallModel = OpenAIToolCall
+        _OpenAIToolCallsAdapter = TypeAdapter(list[OpenAIToolCall])
+
+    except ImportError:
+        return False
+
+    else:
+        return True
+
+
+def _validate_openai_tool_calls(
+    raw_tool_calls: list[object],
+) -> Ok[list[ToolCallRequest]] | Err[LLMError] | None:
+    """
+    Validate OpenAI tool calls using Pydantic TypeAdapter if available.
+
+    Returns:
+        Ok(list) - Pydantic validation succeeded, returns domain ToolCallRequest list
+        Err - Pydantic validation failed with clear error
+        None - Pydantic not available, caller should use SafeAccessor fallback
+
+    """
+    if not _load_pydantic_models() or _OpenAIToolCallsAdapter is None:
+        return None  # Signal: use SafeAccessor fallback
+
+    try:
+        # TypeAdapter.validate_python() - runtime validation with coercion
+        # pyright: ignore - TypeAdapter is dynamically imported
+        validated = _OpenAIToolCallsAdapter.validate_python(raw_tool_calls)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportAny]
+
+        result: list[ToolCallRequest] = []
+        for tc in validated:  # pyright: ignore[reportAny]
+            # Parse arguments JSON
+            args_str: str = tc.function.arguments  # pyright: ignore[reportAny]
+            arguments: dict[str, object] = {}
+            if args_str:
+                try:
+                    parsed = json.loads(args_str)
+                except json.JSONDecodeError as e:
+                    return Err(LLMError(f"Invalid JSON in tool call arguments: {e}"))
+                if not isinstance(parsed, dict):
+                    return Err(
+                        LLMError(f"Tool call arguments must be dict, got {type(parsed).__name__}")
+                    )
+                arguments = parsed
+
+            result.append(
+                {
+                    "id": tc.id,  # pyright: ignore[reportAny]
+                    "name": tc.function.name,  # pyright: ignore[reportAny]
+                    "arguments": arguments,
+                }
+            )
+
+        return Ok(result)
+
+    except Exception as e:
+        return Err(LLMError(f"Tool call validation failed: {e}"))
+
+
+def _extract_tool_calls_manual(
+    tool_calls_raw: list[object],
+) -> Ok[list[ToolCallRequest] | None] | Err[LLMError]:
+    """
+    Extract OpenAI tool calls using SafeAccessor (fallback when Pydantic unavailable).
+
+    This is the manual parsing path that works without Pydantic installed.
+
+    """
+    result: list[ToolCallRequest] = []
+    for tc in tool_calls_raw:
+        tc_acc = SafeAccessor(tc)
+        tc_id = tc_acc.get_str_or("id", "")
+
+        func = tc_acc.get("function")
+        if func is None:
+            continue
+
+        func_acc = SafeAccessor(func)
+        name = func_acc.get_str_or("name", "")
+        args_str = func_acc.get_str_or("arguments", "")
+
+        # Parse arguments JSON with Result pattern
+        arguments: dict[str, object] = {}
+        if args_str:
+            try:
+                parsed = json.loads(args_str)
+            except json.JSONDecodeError as e:
+                return Err(LLMError(f"Invalid JSON in tool call arguments: {e}"))
+            if not isinstance(parsed, dict):
+                return Err(
+                    LLMError(f"Tool call arguments must be dict, got {type(parsed).__name__}")
+                )
+            arguments = parsed
+
+        result.append({"id": tc_id, "name": name, "arguments": arguments})
+
+    return Ok(result if result else None)
+
+
 _GEMINI_CALL_COUNTER = count(1)
 _GEMINI_CALL_LOCK = Lock()
 
@@ -356,8 +503,10 @@ def extract_tool_calls_openai(response: Any, /) -> Ok[list[ToolCallRequest] | No
         Ok(None) - no tool calls present (not an error)
         Err(LLMError) - malformed response data
 
-    Note:
-        Uses SafeAccessor for unified SDK/dict access pattern.
+    Strategy (ADR-001):
+        1. Use SafeAccessor to navigate to tool_calls (works with SDK objects or dicts)
+        2. Try Pydantic TypeAdapter validation when available (better errors, type coercion)
+        3. Fall back to SafeAccessor manual parsing when Pydantic unavailable
 
     """
     accessor = SafeAccessor(response)
@@ -376,35 +525,17 @@ def extract_tool_calls_openai(response: Any, /) -> Ok[list[ToolCallRequest] | No
     if not tool_calls_raw or not isinstance(tool_calls_raw, list):
         return Ok(None)
 
-    result: list[ToolCallRequest] = []
-    for tc in tool_calls_raw:
-        tc_acc = SafeAccessor(tc)
-        tc_id = tc_acc.get_str_or("id", "")
+    # Try Pydantic TypeAdapter validation (ADR-001: better errors when available)
+    pydantic_result = _validate_openai_tool_calls(list(tool_calls_raw))
+    if pydantic_result is not None:
+        # Pydantic handled it - convert empty list to None per API contract
+        if isinstance(pydantic_result, Err):
+            return pydantic_result
+        tool_calls = pydantic_result.unwrap()
+        return Ok(tool_calls if tool_calls else None)
 
-        func = tc_acc.get("function")
-        if func is None:
-            continue
-
-        func_acc = SafeAccessor(func)
-        name = func_acc.get_str_or("name", "")
-        args_str = func_acc.get_str_or("arguments", "")
-
-        # Parse arguments JSON with Result pattern
-        arguments: dict[str, object] = {}
-        if args_str:
-            try:
-                parsed = json.loads(args_str)
-            except json.JSONDecodeError as e:
-                return Err(LLMError(f"Invalid JSON in tool call arguments: {e}"))
-            if not isinstance(parsed, dict):
-                return Err(
-                    LLMError(f"Tool call arguments must be dict, got {type(parsed).__name__}")
-                )
-            arguments = parsed
-
-        result.append({"id": tc_id, "name": name, "arguments": arguments})
-
-    return Ok(result if result else None)
+    # Fallback: SafeAccessor manual parsing (no Pydantic)
+    return _extract_tool_calls_manual(list(tool_calls_raw))
 
 
 def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | None:
