@@ -36,11 +36,14 @@ def test_default_environment_registry_does_not_import_modal_when_building_local(
 
 
 @pytest.mark.unit
-def test_selecting_modal_yields_helpful_not_implemented_error() -> None:
-    """Selecting modal environment should fail with a helpful 'not implemented' message.
+def test_selecting_modal_yields_helpful_error() -> None:
+    """Selecting modal environment should fail with a helpful message.
 
-    Note: modal was originally planned as an optional dependency. In Phase 05,
-    it's marked as "not implemented yet" alongside other planned environments.
+    The modal adapter has two error paths:
+    1. If modal package is NOT installed → "not installed" error with install instructions
+    2. If modal IS installed but not implemented → "not implemented" error with alternatives
+
+    This test accepts either path since the local dev environment may have modal installed.
     """
     rlm = create_rlm(
         QueueLLM(model_name="dummy", responses=[]),
@@ -54,7 +57,8 @@ def test_selecting_modal_yields_helpful_not_implemented_error() -> None:
     assert cause is not None
     msg = str(cause).lower()
     assert "modal" in msg
-    assert "not implemented" in msg
+    # Accept either error path: missing dependency OR not implemented
+    assert "not installed" in msg or "not implemented" in msg
 
 
 @pytest.mark.unit
