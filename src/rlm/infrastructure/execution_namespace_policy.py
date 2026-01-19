@@ -138,6 +138,7 @@ class ExecutionNamespacePolicy:
             "type": type,
             "isinstance": isinstance,
             "issubclass": issubclass,
+            "__build_class__": builtins.__build_class__,
             "enumerate": enumerate,
             "zip": zip,
             "map": map,

@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import math
 import subprocess  # nosec B404 - required for Docker daemon health check
 from dataclasses import dataclass
 from shutil import which
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, TypeGuard
 
 from rlm.adapters.tools import InMemoryToolRegistry
 from rlm.domain.models.result import Err
 from rlm.domain.models.validation import Validator
-from rlm.domain.policies.timeouts import DEFAULT_DOCKER_DAEMON_PROBE_TIMEOUT_S
+from rlm.domain.policies.timeouts import (
+    DEFAULT_DOCKER_DAEMON_PROBE_TIMEOUT_S,
+    DEFAULT_LOCAL_EXECUTE_TIMEOUT_CAP_S,
+    DEFAULT_LOCAL_EXECUTE_TIMEOUT_S,
+    MAX_LOCAL_EXECUTE_TIMEOUT_CAP_S,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -26,9 +32,14 @@ if TYPE_CHECKING:
 # Each schema defines: allowed_keys, per-key validators, and transformers.
 
 
-def _is_positive_number(v: object) -> bool:
+def _is_positive_number(v: object) -> TypeGuard[int | float]:
     """Check if value is a positive number (int or float, not bool)."""
-    return not isinstance(v, bool) and isinstance(v, (int, float)) and float(v) > 0
+    return (
+        not isinstance(v, bool)
+        and isinstance(v, (int, float))
+        and math.isfinite(float(v))
+        and float(v) > 0
+    )
 
 
 def _is_non_negative_int(v: object) -> bool:
@@ -58,6 +69,13 @@ def _is_import_roots(v: object) -> bool:
     return all(isinstance(x, str) and x.strip() for x in v)
 
 
+def _is_local_execute_timeout_cap(v: object) -> bool:
+    """Check if local execute timeout cap is within the allowed max."""
+    if not _is_positive_number(v):
+        return False
+    return float(v) <= MAX_LOCAL_EXECUTE_TIMEOUT_CAP_S
+
+
 # Pre-built validators for common environment kwargs patterns
 # Error messages complete the sentence: "{env} environment requires '{key}' {message}"
 _positive_float_validator: Validator[object] = Validator[object]().satisfies(
@@ -78,6 +96,10 @@ _context_payload_validator: Validator[object] = Validator[object]().satisfies(
 _import_roots_validator: Validator[object] = Validator[object]().satisfies(
     _is_import_roots, "to be a set/list/tuple of non-empty strings"
 )
+_local_execute_timeout_cap_validator: Validator[object] = Validator[object]().satisfies(
+    _is_local_execute_timeout_cap,
+    f"to be a number > 0 and <= {MAX_LOCAL_EXECUTE_TIMEOUT_CAP_S}",
+)
 
 
 # Environment kwargs schemas: {env_name: {allowed_keys, validators, transformers}}
@@ -85,6 +107,7 @@ _ENV_KWARGS_SCHEMAS: dict[str, dict[str, object]] = {
     "local": {
         "allowed_keys": {
             "execute_timeout_s",
+            "execute_timeout_cap_s",
             "broker_timeout_s",
             "allowed_import_roots",
             "context_payload",
@@ -92,6 +115,7 @@ _ENV_KWARGS_SCHEMAS: dict[str, dict[str, object]] = {
         },
         "validators": {
             "execute_timeout_s": _positive_float_validator,
+            "execute_timeout_cap_s": _local_execute_timeout_cap_validator,
             "broker_timeout_s": _positive_float_validator,
             "allowed_import_roots": _import_roots_validator,
             "context_payload": _context_payload_validator,
@@ -374,11 +398,6 @@ def _validate_environment_kwargs(
     # Validate and transform each provided kwarg
     out: dict[str, object] = {}
     for key, value in kwargs.items():
-        # None values are skipped - let adapter defaults apply
-        # This prevents None from overriding required fields with invalid values
-        if value is None:
-            continue
-
         # Validate using schema validator if present
         validator = validators.get(key)
         if validator is not None and isinstance(validator, Validator):
@@ -396,6 +415,19 @@ def _validate_environment_kwargs(
         )
 
         out[key] = transformed_value
+
+    if env == "local":
+        effective_execute_timeout = out.get("execute_timeout_s", DEFAULT_LOCAL_EXECUTE_TIMEOUT_S)
+        effective_cap = out.get("execute_timeout_cap_s", DEFAULT_LOCAL_EXECUTE_TIMEOUT_CAP_S)
+        if (
+            isinstance(effective_execute_timeout, (int, float))
+            and isinstance(effective_cap, (int, float))
+            and float(effective_execute_timeout) > float(effective_cap)
+        ):
+            raise ValueError(
+                "local environment requires 'execute_timeout_s' to be <= "
+                f"'execute_timeout_cap_s' ({effective_cap}s)",
+            )
 
     return out
 
