@@ -121,3 +121,21 @@ class TypeMapper[In, Out]:
             return True
 
         return any(isinstance(value, type_) for type_ in self._handlers)
+
+    def has_registered_handler(self, value: In) -> bool:
+        """
+        Check if there's a registered handler (not default) for this value's type.
+
+        Args:
+            value: The value to check
+
+        Returns:
+            True if a specific type handler is registered for this value
+
+        Note:
+            Unlike can_handle(), this does NOT consider the default handler.
+            Use this when you need to check if a value has explicit type support
+            vs. falling through to a generic default.
+
+        """
+        return any(isinstance(value, type_) for type_ in self._handlers)

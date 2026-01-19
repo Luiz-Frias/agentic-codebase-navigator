@@ -122,7 +122,7 @@ def test_openai_adapter_complete_success_and_error_paths(
     dummy_openai3 = SimpleNamespace(OpenAI=OpenAI3, AsyncOpenAI=None)
     monkeypatch.setattr(openai_mod, "_require_openai", lambda: dummy_openai3)
 
-    with pytest.raises(LLMError, match="response invalid"):
+    with pytest.raises(LLMError, match="missing choices"):
         OpenAIAdapter(model="m").complete(LLMRequest(prompt="hi"))
 
 
@@ -208,7 +208,7 @@ async def test_openai_adapter_acomplete_error_invalid_response_and_client_cache(
     dummy_openai_bad = SimpleNamespace(OpenAI=None, AsyncOpenAI=_AsyncClientBad)
     monkeypatch.setattr(openai_mod, "_require_openai", lambda: dummy_openai_bad)
 
-    with pytest.raises(LLMError, match="response invalid"):
+    with pytest.raises(LLMError, match="missing choices"):
         await OpenAIAdapter(model="m").acomplete(LLMRequest(prompt="hi"))
 
 

@@ -374,9 +374,9 @@ def _validate_environment_kwargs(
     # Validate and transform each provided kwarg
     out: dict[str, object] = {}
     for key, value in kwargs.items():
-        # None values pass through without validation (allow_none pattern)
+        # None values are skipped - let adapter defaults apply
+        # This prevents None from overriding required fields with invalid values
         if value is None:
-            out[key] = None
             continue
 
         # Validate using schema validator if present

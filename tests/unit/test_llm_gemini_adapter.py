@@ -135,6 +135,8 @@ def test_gemini_adapter_complete_success_error_and_client_cache(
             self.models = _Models(
                 resp={
                     "text": "ok",
+                    # Include candidates structure for stricter validation
+                    "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
                     "usage_metadata": {
                         "prompt_token_count": 1,
                         "candidates_token_count": 2,
@@ -163,15 +165,15 @@ def test_gemini_adapter_complete_success_error_and_client_cache(
     with pytest.raises(LLMError, match="Gemini request timed out"):
         GeminiAdapter(model="m").complete(LLMRequest(prompt="hi"))
 
-    class ClientBadText:
+    class ClientBadResponse:
         def __init__(self, **_kwargs):
             self.models = _Models(resp={})
 
-    dummy_genai3 = SimpleNamespace(Client=ClientBadText)
+    dummy_genai3 = SimpleNamespace(Client=ClientBadResponse)
     monkeypatch.setattr(gemini_mod, "_require_google_genai", lambda: dummy_genai3)
 
-    with pytest.raises(ValueError, match="missing text"):
-        # _extract_text raises ValueError; adapter does not wrap it (intentional).
+    with pytest.raises(LLMError, match="missing candidates"):
+        # Empty response missing candidates triggers stricter validation
         GeminiAdapter(model="m").complete(LLMRequest(prompt="hi"))
 
 
@@ -189,7 +191,10 @@ async def test_gemini_adapter_acomplete_runs_sync_path_in_thread(
     class Client:
         def __init__(self, **_kwargs):
             self.models = SimpleNamespace(
-                generate_content=lambda **_k: {"text": "ok"},
+                generate_content=lambda **_k: {
+                    "text": "ok",
+                    "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
+                },
             )
 
     dummy_genai = SimpleNamespace(Client=Client)
@@ -225,6 +230,7 @@ def test_gemini_adapter_complete_with_tools_passes_to_api(
             captured_kwargs.append(kwargs)
             return {
                 "text": "Hello!",
+                "candidates": [{"content": {"parts": [{"text": "Hello!"}]}}],
                 "usage_metadata": {"prompt_token_count": 10, "candidates_token_count": 5},
             }
 
@@ -410,7 +416,10 @@ async def test_gemini_adapter_acomplete_with_tools(
     class _Models:
         def generate_content(self, **kwargs):
             captured_kwargs.append(kwargs)
-            return {"text": "Async response!"}
+            return {
+                "text": "Async response!",
+                "candidates": [{"content": {"parts": [{"text": "Async response!"}]}}],
+            }
 
     class Client:
         def __init__(self, **_kwargs):

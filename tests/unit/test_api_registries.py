@@ -67,12 +67,13 @@ def test_validate_environment_kwargs_local_validations() -> None:
     )
     assert out_roots["allowed_import_roots"] == {"math"}
 
+    # None values are skipped (not included) - lets adapter defaults apply
     out = _validate_environment_kwargs(
         "local",
         {"execute_timeout_s": None},
         allow_legacy_keys=False,
     )
-    assert out["execute_timeout_s"] is None
+    assert "execute_timeout_s" not in out
 
     with pytest.raises(ValueError, match="broker_timeout_s.*number"):
         _validate_environment_kwargs("local", {"broker_timeout_s": True}, allow_legacy_keys=False)

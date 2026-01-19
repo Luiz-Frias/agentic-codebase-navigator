@@ -118,8 +118,10 @@ def serialize_value(value: object) -> SerializedValue:
     Known types dispatch through TypeMapper. Unknown types get string fallback.
     """
     # Special case: callables that aren't in the mapper (functions, lambdas, etc.)
-    # Check this before TypeMapper since callable() catches more than we register
-    if callable(value) and not _serializer.can_handle(value):
+    # Use has_registered_handler() to check for explicit type support, not can_handle()
+    # which always returns True when a default handler exists.
+    # This ensures callables get stable "<function 'name'>" format instead of repr().
+    if callable(value) and not _serializer.has_registered_handler(value):
         return _serialize_callable(value)
 
     return _serializer.map(value)

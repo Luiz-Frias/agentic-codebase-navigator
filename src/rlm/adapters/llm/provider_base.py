@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ModelUsageSummary, UsageSummary
-from rlm.domain.models.result import Err, Ok
+from rlm.domain.models.result import Err, Ok, Result
 from rlm.domain.models.safe_accessor import SafeAccessor
 
 if TYPE_CHECKING:
@@ -77,7 +77,7 @@ def _load_pydantic_models() -> bool:
 
 def _validate_openai_tool_calls(
     raw_tool_calls: list[object],
-) -> Ok[list[ToolCallRequest]] | Err[LLMError] | None:
+) -> Result[list[ToolCallRequest], LLMError] | None:
     """
     Validate OpenAI tool calls using Pydantic TypeAdapter if available.
 
@@ -127,7 +127,7 @@ def _validate_openai_tool_calls(
 
 def _extract_tool_calls_manual(
     tool_calls_raw: list[object],
-) -> Ok[list[ToolCallRequest] | None] | Err[LLMError]:
+) -> Result[list[ToolCallRequest] | None, LLMError]:
     """
     Extract OpenAI tool calls using SafeAccessor (fallback when Pydantic unavailable).
 
@@ -491,7 +491,7 @@ def tool_choice_to_gemini_function_calling_config(
     return {"mode": "ANY", "allowed_function_names": [tool_choice]}
 
 
-def extract_tool_calls_openai(response: Any, /) -> Ok[list[ToolCallRequest] | None] | Err[LLMError]:
+def extract_tool_calls_openai(response: Any, /) -> Result[list[ToolCallRequest] | None, LLMError]:
     """
     Extract tool calls from an OpenAI-style chat completion response.
 
@@ -500,25 +500,29 @@ def extract_tool_calls_openai(response: Any, /) -> Ok[list[ToolCallRequest] | No
 
     Returns:
         Ok(list) - tool calls found
-        Ok(None) - no tool calls present (not an error)
-        Err(LLMError) - malformed response data
+        Ok(None) - no tool calls present (valid response, model didn't call tools)
+        Err(LLMError) - malformed response (missing required structural fields)
 
     Strategy (ADR-001):
         1. Use SafeAccessor to navigate to tool_calls (works with SDK objects or dicts)
         2. Try Pydantic TypeAdapter validation when available (better errors, type coercion)
         3. Fall back to SafeAccessor manual parsing when Pydantic unavailable
 
+    Note:
+        Missing `choices` or `message` indicates a malformed response and returns Err.
+        Missing `tool_calls` is valid (model responded with text only) and returns Ok(None).
+
     """
     accessor = SafeAccessor(response)
 
     choices = accessor.get("choices")
     if not choices or not isinstance(choices, list):
-        return Ok(None)
+        return Err(LLMError("Provider response missing choices"))
 
     first_acc = SafeAccessor(choices[0])
     message = first_acc.get("message")
     if message is None:
-        return Ok(None)
+        return Err(LLMError("Provider response missing message"))
 
     msg_acc = SafeAccessor(message)
     tool_calls_raw = msg_acc.get("tool_calls")
@@ -571,7 +575,7 @@ def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | No
     return result if result else None
 
 
-def extract_tool_calls_gemini(response: Any, /) -> Ok[list[ToolCallRequest] | None] | Err[LLMError]:
+def extract_tool_calls_gemini(response: Any, /) -> Result[list[ToolCallRequest] | None, LLMError]:
     """
     Extract tool calls from a Google Gemini response.
 
@@ -580,23 +584,25 @@ def extract_tool_calls_gemini(response: Any, /) -> Ok[list[ToolCallRequest] | No
 
     Returns:
         Ok(list) - tool calls found
-        Ok(None) - no tool calls present (not an error)
-        Err(LLMError) - malformed response data
+        Ok(None) - no tool calls present (valid response, model didn't call tools)
+        Err(LLMError) - malformed response (missing required structural fields)
 
     Note:
         Uses SafeAccessor for unified SDK/dict access pattern.
+        Missing `candidates` or `content` indicates a malformed response and returns Err.
+        Missing `parts` or parts without `function_call` is valid and returns Ok(None).
 
     """
     accessor = SafeAccessor(response)
 
     candidates = accessor.get("candidates")
     if not candidates or not isinstance(candidates, list):
-        return Ok(None)
+        return Err(LLMError("Provider response missing candidates"))
 
     first_acc = SafeAccessor(candidates[0])
     content = first_acc.get("content")
     if content is None:
-        return Ok(None)
+        return Err(LLMError("Provider response missing content"))
 
     content_acc = SafeAccessor(content)
     parts = content_acc.get("parts")

@@ -153,7 +153,7 @@ Result = Ok[T] | Err[E]
 def try_call[T, E: Exception](
     fn: Callable[[], T],
     error_type: type[E] = Exception,  # type: ignore[assignment]
-) -> Ok[T] | Err[E]:
+) -> Result[T, E]:
     """
     Execute a function and wrap the result in Ok/Err.
 

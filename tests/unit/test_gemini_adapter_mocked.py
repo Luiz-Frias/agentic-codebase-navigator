@@ -17,6 +17,8 @@ class _UsageMetadata:
 class _Response:
     def __init__(self, text: str, *, prompt_tokens: int = 0, output_tokens: int = 0):
         self.text = text
+        # Include candidates structure for stricter validation in extract_tool_calls_gemini
+        self.candidates = [{"content": {"parts": [{"text": text}]}}]
         self.usage_metadata = _UsageMetadata(prompt_tokens, output_tokens)
 
 
