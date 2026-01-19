@@ -14,7 +14,6 @@ def test_default_install_can_run_with_mock_llm_without_provider_deps() -> None:
     The mock LLM is dependency-free and supports scripting so the orchestrator
     can complete deterministically.
     """
-
     cfg = RLMConfig(
         llm=LLMConfig(
             backend="mock",

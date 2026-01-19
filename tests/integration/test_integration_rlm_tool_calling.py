@@ -21,11 +21,13 @@ def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolC
 
 
 def get_weather(city: str, unit: str = "celsius") -> str:
-    """Get the current weather for a city.
+    """
+    Get the current weather for a city.
 
     Args:
         city: The city name
         unit: Temperature unit (celsius or fahrenheit)
+
     """
     # Mock implementation
     temps = {"london": 15, "tokyo": 22, "new_york": 18}
@@ -36,12 +38,14 @@ def get_weather(city: str, unit: str = "celsius") -> str:
 
 
 def calculate(operation: str, a: float, b: float) -> float:
-    """Perform a mathematical operation.
+    """
+    Perform a mathematical operation.
 
     Args:
         operation: The operation (add, subtract, multiply, divide)
         a: First operand
         b: Second operand
+
     """
     ops = {
         "add": lambda x, y: x + y,
@@ -62,7 +66,7 @@ def test_rlm_tool_calling_single_tool_happy_path() -> None:
             # First call: LLM requests tool call
             {
                 "tool_calls": [
-                    _make_tool_call("call_1", "get_weather", {"city": "Tokyo", "unit": "celsius"})
+                    _make_tool_call("call_1", "get_weather", {"city": "Tokyo", "unit": "celsius"}),
                 ],
                 "response": "",
                 "finish_reason": "tool_calls",
@@ -125,8 +129,10 @@ def test_rlm_tool_calling_multiple_tools() -> None:
             {
                 "tool_calls": [
                     _make_tool_call(
-                        "call_1", "calculate", {"operation": "multiply", "a": 5, "b": 3}
-                    )
+                        "call_1",
+                        "calculate",
+                        {"operation": "multiply", "a": 5, "b": 3},
+                    ),
                 ],
             },
             # Final answer
@@ -205,7 +211,7 @@ async def test_rlm_tool_calling_async_path() -> None:
         script=[
             {
                 "tool_calls": [
-                    _make_tool_call("call_1", "calculate", {"operation": "add", "a": 10, "b": 5})
+                    _make_tool_call("call_1", "calculate", {"operation": "add", "a": 10, "b": 5}),
                 ],
             },
             "10 + 5 = 15",

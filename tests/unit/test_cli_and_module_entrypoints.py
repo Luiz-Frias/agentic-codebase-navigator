@@ -36,7 +36,7 @@ def test_cli_completion_mock_prints_final_answer(
             "local",
             "--max-iterations",
             "2",
-        ]
+        ],
     )
     assert code == 0
     out = capsys.readouterr().out.strip()
@@ -62,7 +62,7 @@ def test_cli_completion_mock_json_outputs_chat_completion_dict(
             "--max-iterations",
             "2",
             "--json",
-        ]
+        ],
     )
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
@@ -72,7 +72,8 @@ def test_cli_completion_mock_json_outputs_chat_completion_dict(
 
 @pytest.mark.unit
 def test_cli_completion_mock_jsonl_log_dir_writes_log(
-    tmp_path, capsys: pytest.CaptureFixture[str]
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -93,7 +94,7 @@ def test_cli_completion_mock_jsonl_log_dir_writes_log(
             "2",
             "--jsonl-log-dir",
             str(log_dir),
-        ]
+        ],
     )
     assert code == 0
     assert capsys.readouterr().out.strip() == "ok"

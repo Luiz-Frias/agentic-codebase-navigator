@@ -19,6 +19,7 @@ def _scan_forbidden_imports(
     Notes:
     - We scan both `import x.y` and `from x import y` forms.
     - `from rlm import adapters` is handled via `forbidden_rlm_children`.
+
     """
     allowlist_files = allowlist_files or set()
 

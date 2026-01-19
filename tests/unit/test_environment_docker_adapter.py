@@ -37,18 +37,19 @@ def _make_env(tmp_path: Path) -> DockerEnvironmentAdapter:
 
 @pytest.mark.unit
 def test_docker_environment_start_container_sets_container_id_and_raises_on_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     env = _make_env(tmp_path)
 
-    def _ok_run(cmd, **_kwargs):  # noqa: ANN001
+    def _ok_run(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, 0, stdout="abc\n", stderr="")
 
     monkeypatch.setattr(subprocess, "run", _ok_run)
     env._start_container()
     assert env._container_id == "abc"
 
-    def _bad_run(cmd, **_kwargs):  # noqa: ANN001
+    def _bad_run(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom")
 
     monkeypatch.setattr(subprocess, "run", _bad_run)
@@ -86,14 +87,15 @@ def test_docker_environment_execute_code_requires_container_id(tmp_path: Path) -
 
 @pytest.mark.unit
 def test_docker_environment_execute_code_timeout_returns_repl_result_and_calls_cleanup(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     env = _make_env(tmp_path)
 
     cleaned: list[bool] = []
     env.cleanup = lambda: cleaned.append(True)  # type: ignore[method-assign]
 
-    def _timeout_run(cmd, **_kwargs):  # noqa: ANN001
+    def _timeout_run(cmd, **_kwargs):
         # Simulate the in-flight proxy recording a nested call before the subprocess times out.
         with env._calls_lock:
             env._pending_calls.append(
@@ -103,7 +105,7 @@ def test_docker_environment_execute_code_timeout_returns_repl_result_and_calls_c
                     response="r",
                     usage_summary=UsageSummary(model_usage_summaries={}),
                     execution_time=0.0,
-                )
+                ),
             )
         raise subprocess.TimeoutExpired(cmd=cmd, timeout=1.0, output="OUT", stderr="ERR")
 
@@ -119,14 +121,15 @@ def test_docker_environment_execute_code_timeout_returns_repl_result_and_calls_c
 
 @pytest.mark.unit
 def test_docker_environment_execute_code_parses_last_json_line_and_parse_error_fallback(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     env = _make_env(tmp_path)
 
     ok_payload = {"stdout": "SO", "stderr": "SE1", "locals": {"x": "1"}}
     ok_out = "noise\n" + json.dumps(ok_payload)
 
-    def _ok_run(cmd, **_kwargs):  # noqa: ANN001
+    def _ok_run(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, 0, stdout=ok_out, stderr="SE2")
 
     monkeypatch.setattr(subprocess, "run", _ok_run)
@@ -135,7 +138,7 @@ def test_docker_environment_execute_code_parses_last_json_line_and_parse_error_f
     assert rr.stderr == "SE1SE2"
     assert rr.locals == {"x": "1"}
 
-    def _bad_json(cmd, **_kwargs):  # noqa: ANN001
+    def _bad_json(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, 0, stdout="not-json", stderr="")
 
     monkeypatch.setattr(subprocess, "run", _bad_json)
@@ -146,7 +149,8 @@ def test_docker_environment_execute_code_parses_last_json_line_and_parse_error_f
 
 @pytest.mark.unit
 def test_docker_environment_cleanup_is_idempotent_and_best_effort(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     env = _make_env(tmp_path)
 
@@ -167,12 +171,14 @@ def test_docker_environment_cleanup_is_idempotent_and_best_effort(
                     response="r",
                     usage_summary=UsageSummary(model_usage_summaries={}),
                     execution_time=0.0,
-                )
-            ]
+                ),
+            ],
         )
 
     monkeypatch.setattr(
-        subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom"))
+        subprocess,
+        "run",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
     env.cleanup()  # must not raise
@@ -188,10 +194,10 @@ def test_docker_environment_init_calls_cleanup_on_partial_failure(
 ) -> None:
     cleaned: list[bool] = []
 
-    def _boom(self) -> None:  # noqa: ANN001
+    def _boom(self) -> None:
         raise RuntimeError("boom")
 
-    def _cleanup(self) -> None:  # noqa: ANN001
+    def _cleanup(self) -> None:
         cleaned.append(True)
 
     monkeypatch.setattr(DockerEnvironmentAdapter, "_start_proxy", _boom)

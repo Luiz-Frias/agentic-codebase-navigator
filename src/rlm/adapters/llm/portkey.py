@@ -28,13 +28,12 @@ def _require_portkey() -> Any:
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-portkey]`.
     """
-
     try:
         import portkey_ai  # type: ignore[import-not-found]
-    except Exception as e:  # noqa: BLE001 - dependency boundary
+    except Exception as e:
         raise ImportError(
             "Portkey adapter selected but the 'portkey-ai' package is not installed. "
-            "Install the optional extra: `agentic-codebase-navigator[llm-portkey]`."
+            "Install the optional extra: `agentic-codebase-navigator[llm-portkey]`.",
         ) from e
     return portkey_ai
 
@@ -83,18 +82,18 @@ class PortkeyAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = client.chat.completions.create(model=model, messages=messages, **api_kwargs)
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_openai(resp)
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_openai(resp).unwrap()
         finish_reason = extract_finish_reason_openai(resp)
 
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:  # noqa: BLE001
+        except Exception:
             if tool_calls:
                 text = ""
             else:
@@ -132,20 +131,22 @@ class PortkeyAdapter(BaseLLMAdapter):
         start = time.perf_counter()
         try:
             resp = await client.chat.completions.create(
-                model=model, messages=messages, **api_kwargs
+                model=model,
+                messages=messages,
+                **api_kwargs,
             )
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
         end = time.perf_counter()
 
-        # Extract tool calls (may be None if no tools called)
-        tool_calls = extract_tool_calls_openai(resp)
+        # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
+        tool_calls = extract_tool_calls_openai(resp).unwrap()
         finish_reason = extract_finish_reason_openai(resp)
 
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:  # noqa: BLE001
+        except Exception:
             if tool_calls:
                 text = ""
             else:
@@ -181,7 +182,7 @@ class PortkeyAdapter(BaseLLMAdapter):
             if client_cls is None:
                 raise ImportError(
                     "Portkey SDK API mismatch: expected `portkey_ai.Portkey` class. "
-                    "Please upgrade `portkey-ai` (install `agentic-codebase-navigator[llm-portkey]`)."
+                    "Please upgrade `portkey-ai` (install `agentic-codebase-navigator[llm-portkey]`).",
                 )
 
             kwargs: dict[str, Any] = {}
@@ -202,7 +203,7 @@ class PortkeyAdapter(BaseLLMAdapter):
             if client_cls is None:
                 raise ImportError(
                     "Portkey SDK API mismatch: expected `portkey_ai.AsyncPortkey` class. "
-                    "Please upgrade `portkey-ai` (install `agentic-codebase-navigator[llm-portkey]`)."
+                    "Please upgrade `portkey-ai` (install `agentic-codebase-navigator[llm-portkey]`).",
                 )
 
             kwargs: dict[str, Any] = {}
@@ -216,7 +217,10 @@ class PortkeyAdapter(BaseLLMAdapter):
 
 
 def build_portkey_adapter(
-    *, model: str, api_key: str | None = None, **kwargs: Any
+    *,
+    model: str,
+    api_key: str | None = None,
+    **kwargs: Any,
 ) -> PortkeyAdapter:
     if not isinstance(model, str) or not model.strip():
         raise ValueError("PortkeyAdapter requires a non-empty 'model'")

@@ -1,0 +1,89 @@
+version: 2
+updates:
+  # Python dependencies (uv + pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "America/New_York"
+
+    # Version update strategy
+    open-pull-requests-limit: 5
+    pull-request-branch-name:
+      separator: "/"
+
+    # Commit & PR customization
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+
+    # Group dependencies intelligently
+    groups:
+      # Development dependencies
+      dev-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "basedpyright"
+          - "bandit"
+          - "pre-commit"
+          - "detect-secrets"
+          - "semgrep"
+
+      # Testing dependencies
+      test-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "pytest*"
+          - "coverage"
+
+      # Production dependencies (core)
+      core-dependencies:
+        patterns:
+          - "openai"
+          - "loguru"
+
+      # LLM provider adapters
+      llm-providers:
+        dependency-type: "development"
+        patterns:
+          - "anthropic"
+          - "google-*"
+          - "portkey-ai"
+          - "litellm"
+          - "tiktoken"
+
+      # Environment adapters
+      environment-adapters:
+        dependency-type: "development"
+        patterns:
+          - "modal"
+
+    # Rebase strategy
+    rebase-strategy: "auto"
+
+    # Allow updates
+    allow:
+      - dependency-type: "all"
+
+  # GitHub Actions updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "03:00"
+      timezone: "America/New_York"
+
+    open-pull-requests-limit: 3
+
+    commit-message:
+      prefix: "ci(actions)"
+      include: "scope"
+
+    # Rebase strategy
+    rebase-strategy: "auto"

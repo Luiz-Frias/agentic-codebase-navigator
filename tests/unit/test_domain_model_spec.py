@@ -31,7 +31,7 @@ def test_model_routing_rules_validations_and_resolution() -> None:
             [
                 ModelSpec(name="m1", aliases=("m2",), is_default=True),
                 ModelSpec(name="m2"),
-            ]
+            ],
         )
 
     with pytest.raises(ValidationError, match="ambiguous"):
@@ -39,7 +39,7 @@ def test_model_routing_rules_validations_and_resolution() -> None:
             [
                 ModelSpec(name="m1", aliases=("x",), is_default=True),
                 ModelSpec(name="m2", aliases=("x",), is_default=False),
-            ]
+            ],
         )
 
     with pytest.raises(ValidationError, match="Exactly one ModelSpec"):
@@ -47,7 +47,7 @@ def test_model_routing_rules_validations_and_resolution() -> None:
             [
                 ModelSpec(name="m1", is_default=True),
                 ModelSpec(name="m2", is_default=True),
-            ]
+            ],
         )
 
     with pytest.raises(ValidationError, match="requires exactly one default"):
@@ -60,7 +60,8 @@ def test_model_routing_rules_validations_and_resolution() -> None:
         build_routing_rules([ModelSpec(name="m1", is_default=True)], fallback_model="m2")
 
     rules = build_routing_rules(
-        [ModelSpec(name="m1", aliases=("alias",), is_default=True)], fallback_model="m1"
+        [ModelSpec(name="m1", aliases=("alias",), is_default=True)],
+        fallback_model="m1",
     )
     assert rules.default_model == "m1"
     assert rules.resolve(None) == "m1"

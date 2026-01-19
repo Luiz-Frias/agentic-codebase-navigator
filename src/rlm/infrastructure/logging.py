@@ -23,13 +23,9 @@ Usage:
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING
 
 import loguru
 from loguru import logger
-
-if TYPE_CHECKING:
-    pass
 
 # ---------------------------------------------------------------------------
 # Logger Configuration
@@ -109,6 +105,7 @@ def warn_cleanup_failure(
             self._container.stop()
         except Exception as exc:
             warn_cleanup_failure("DockerEnvironment.cleanup", exc)
+
     """
     bound_logger = logger.bind(
         component=component,
@@ -133,5 +130,6 @@ def get_infrastructure_logger() -> loguru.Logger:
 
     Returns:
         The configured loguru logger instance
+
     """
     return logger

@@ -32,7 +32,7 @@ def test_default_environment_registry_docker_defaults_image(
                     "correlation_id": correlation_id,
                     "subprocess_timeout_s": subprocess_timeout_s,
                     "kwargs": kwargs,
-                }
+                },
             )
 
         def load_context(self, _payload):
@@ -89,7 +89,7 @@ def test_default_environment_registry_docker_passes_through_kwargs(
                     "correlation_id": correlation_id,
                     "subprocess_timeout_s": subprocess_timeout_s,
                     "kwargs": kwargs,
-                }
+                },
             )
 
         def load_context(self, _payload):
@@ -116,7 +116,7 @@ def test_default_environment_registry_docker_passes_through_kwargs(
                 "image": "python:3.12-alpine",
                 "subprocess_timeout_s": 12.34,
             },
-        )
+        ),
     )
     broker = InMemoryBroker(default_llm=QueueLLM())
     env = factory.build(broker, ("127.0.0.1", 12345))

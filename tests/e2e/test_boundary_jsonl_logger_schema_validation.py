@@ -19,7 +19,6 @@ def test_jsonl_logger_emits_schema_versioned_metadata_and_iteration(
 
     This validates the *artifact contract* a PyPI/uv consumer relies on.
     """
-
     logger = JsonlLoggerAdapter(log_dir=tmp_path)
     rlm = create_rlm(
         MockLLMAdapter(model="root", script=["FINAL(ok)"]),

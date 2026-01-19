@@ -58,7 +58,7 @@ def test_usage_totals_accumulation_fast(benchmark) -> None:
                 total_output_tokens=50,
             )
             for model in models
-        }
+        },
     )
 
     iterations = 1000
