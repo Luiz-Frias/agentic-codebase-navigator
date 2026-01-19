@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from rlm.adapters.broker.tcp import TcpBrokerAdapter
 from rlm.adapters.tools import InMemoryToolRegistry
@@ -71,7 +71,7 @@ class RLM:
         *,
         other_llms: list[LLMPort] | None = None,
         environment: EnvironmentName = "local",
-        environment_kwargs: dict[str, Any] | None = None,
+        environment_kwargs: dict[str, object] | None = None,
         max_depth: int = 1,
         max_iterations: int = 30,
         verbose: bool = False,
@@ -80,7 +80,7 @@ class RLM:
         logger: LoggerPort | None = None,
         system_prompt: str | None = None,
         # Agent capability extensions (Phase 1 - Core)
-        tools: list[ToolPort | Callable[..., Any]] | None = None,
+        tools: list[ToolPort | Callable[..., object]] | None = None,
         output_type: type | None = None,
         agent_mode: AgentMode = "code",
         # Extension protocols (Phase 2.7-2.8)

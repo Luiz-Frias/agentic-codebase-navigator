@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from rlm.api.registries import (
     DefaultEnvironmentRegistry,
@@ -26,7 +26,7 @@ def create_rlm(
     *,
     other_llms: list[LLMPort] | None = None,
     environment: EnvironmentName = "local",
-    environment_kwargs: dict[str, Any] | None = None,
+    environment_kwargs: dict[str, object] | None = None,
     max_depth: int = 1,
     max_iterations: int = 30,
     verbose: bool = False,
@@ -35,7 +35,7 @@ def create_rlm(
     logger: LoggerPort | None = None,
     system_prompt: str | None = None,
     # Agent capability extensions
-    tools: list[ToolPort | Callable[..., Any]] | None = None,
+    tools: list[ToolPort | Callable[..., object]] | None = None,
     agent_mode: AgentModeName = "code",
 ) -> RLM:
     """
@@ -85,7 +85,7 @@ def create_rlm_from_config(
     environment_registry: EnvironmentRegistry | None = None,
     logger_registry: LoggerRegistry | None = None,
     # Runtime tool injection (tools cannot be serialized to config)
-    tools: list[ToolPort | Callable[..., Any]] | None = None,
+    tools: list[ToolPort | Callable[..., object]] | None = None,
 ) -> RLM:
     """
     Construct an `RLM` from config.
