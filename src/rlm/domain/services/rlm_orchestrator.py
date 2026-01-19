@@ -462,7 +462,7 @@ class RLMOrchestrator:
             if final_ctx.iteration >= final_ctx.max_iterations:
                 finish_reason = "max_iterations"
             # Check if policy stopped us
-            elif final_ctx.last_response == "[Stopped by custom policy]":
+            elif final_ctx.policy_stop or final_ctx.last_response == "[Stopped by custom policy]":
                 finish_reason = "policy_stop"
             else:
                 # Normal completion - LLM returned final answer without tool calls
@@ -545,7 +545,7 @@ class RLMOrchestrator:
             if final_ctx.iteration >= final_ctx.max_iterations:
                 finish_reason = "max_iterations"
             # Check if policy stopped us
-            elif final_ctx.last_response == "[Stopped by custom policy]":
+            elif final_ctx.policy_stop or final_ctx.last_response == "[Stopped by custom policy]":
                 finish_reason = "policy_stop"
             else:
                 # Normal completion - LLM returned final answer without tool calls

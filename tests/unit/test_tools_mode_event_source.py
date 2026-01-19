@@ -262,6 +262,8 @@ class TestToolsModeEventSourcePROMPTINGState:
         event = source(ToolsModeState.PROMPTING, ctx)
 
         assert isinstance(event, PolicyStop)
+        assert ctx.policy_stop is True
+        assert ctx.last_response == "[Stopped by custom policy]"
 
 
 # ============================================================================
@@ -334,6 +336,31 @@ class TestToolsModeEventSourceEXECUTINGTOOLSState:
         assert isinstance(event, ToolsExecuted)
         # Error should be captured in result
         assert event.results[0]["error"] is not None
+
+    def test_executing_tools_marks_policy_stop_when_policy_triggers(self) -> None:
+        """EXECUTING_TOOLS marks policy stop before returning PolicyStop."""
+        from rlm.domain.services.tools_mode_event_source import ToolsModeEventSource
+
+        search_tool = MockTool(name="search", result="found it")
+        llm = MockLLM()
+        registry = MockToolRegistry(tools={"search": search_tool})
+        policy = MockStoppingPolicy(should_stop=True)
+        source = ToolsModeEventSource(
+            llm=llm,
+            tool_registry=registry,
+            stopping_policy=policy,
+        )
+
+        ctx = ToolsModeContext(prompt="Test")
+        ctx.pending_tool_calls = [
+            {"id": "call_1", "name": "search", "arguments": {"q": "test"}},
+        ]
+
+        event = source(ToolsModeState.EXECUTING_TOOLS, ctx)
+
+        assert isinstance(event, PolicyStop)
+        assert ctx.policy_stop is True
+        assert ctx.last_response == "[Stopped by custom policy]"
 
 
 # ============================================================================
@@ -468,6 +495,8 @@ class TestToolsModeEventSourceStateMachineIntegration:
         machine = build_tools_mode_machine()
         ctx = ToolsModeContext(prompt="Test")
 
-        final_state, _ = machine.run(ToolsModeState.INIT, ctx, source)
+        final_state, final_ctx = machine.run(ToolsModeState.INIT, ctx, source)
 
         assert final_state == ToolsModeState.DONE
+        assert final_ctx.policy_stop is True
+        assert final_ctx.last_response == "[Stopped by custom policy]"

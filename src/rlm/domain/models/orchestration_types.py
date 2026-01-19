@@ -348,6 +348,9 @@ class ToolsModeContext:
     """Tool calls awaiting execution."""
 
     # Policy context
+    policy_stop: bool = False
+    """True when a StoppingPolicy requested early termination."""
+
     policy_context: dict[str, Any] = field(default_factory=dict)
     """Context dict for StoppingPolicy callbacks."""
 

@@ -60,6 +60,14 @@ if TYPE_CHECKING:
     ]
 
 
+_POLICY_STOP_RESPONSE = "[Stopped by custom policy]"
+
+
+def _mark_policy_stop(ctx: ToolsModeContext) -> None:
+    ctx.policy_stop = True
+    ctx.last_response = _POLICY_STOP_RESPONSE
+
+
 @dataclass
 class ToolsModeEventSource:
     """
@@ -191,6 +199,7 @@ class ToolsModeEventSource:
         """
         # Check stopping policy first
         if self._should_stop(ctx):
+            _mark_policy_stop(ctx)
             return PolicyStop()
 
         # Check for tool calls
@@ -240,6 +249,7 @@ class ToolsModeEventSource:
 
         # Check stopping policy BEFORE calling LLM (matches original _tool_calling_loop)
         if self._should_stop(ctx):
+            _mark_policy_stop(ctx)
             return PolicyStop()
 
         # Check if we've hit max iterations
@@ -548,6 +558,7 @@ class AsyncToolsModeEventSource:
         """
         # Check stopping policy first
         if self._should_stop(ctx):
+            _mark_policy_stop(ctx)
             return PolicyStop()
 
         # Check for tool calls
@@ -585,6 +596,7 @@ class AsyncToolsModeEventSource:
 
         # Check stopping policy BEFORE calling LLM (matches original _tool_calling_loop)
         if self._should_stop(ctx):
+            _mark_policy_stop(ctx)
             return PolicyStop()
 
         # Check if we've hit max iterations
