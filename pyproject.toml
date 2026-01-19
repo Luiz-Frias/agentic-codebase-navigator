@@ -188,9 +188,8 @@ ignore = [
     "E402",     # Module import after lazy check
 ]
 "src/rlm/adapters/llm/provider_base.py" = [
-    "BLE001",   # Boundary: response parsing can fail in many ways
     "ANN401",   # Base adapter handles Any from multiple SDKs
-    "C901",     # Response parsing logic has inherent complexity
+    "BLE001",   # Tiktoken import/usage can fail in various ways (optional dependency)
     "PLC0415",  # Lazy import: tiktoken is optional
 ]
 "src/rlm/adapters/llm/mock.py" = [

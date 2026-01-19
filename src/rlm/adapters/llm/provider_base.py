@@ -196,34 +196,23 @@ def extract_text_from_chat_response(response: Any, /) -> str:
     if isinstance(response, str):
         return response
 
-    try:
-        choices = response.choices  # SDK model
-    except Exception:
-        choices = None
-    if choices is None:
-        choices = response.get("choices") if isinstance(response, dict) else None
-    if not choices:
+    accessor = SafeAccessor(response)
+    choices = accessor.get("choices")
+    if not choices or not isinstance(choices, list):
         raise ValueError("Provider response missing choices")
 
-    first = choices[0]
-    message = None
-    try:
-        message = first.message
-    except Exception:
-        if isinstance(first, dict):
-            message = first.get("message")
+    first_acc = SafeAccessor(choices[0])
+
+    # Try message.content path (standard chat completion format)
+    message = first_acc.get("message")
     if message is not None:
-        try:
-            content = message.content
-        except Exception:
-            content = message.get("content") if isinstance(message, dict) else None
+        msg_acc = SafeAccessor(message)
+        content = msg_acc.get("content")
         if content is not None:
             return str(content)
 
-    try:
-        text = first.text  # type: ignore[union-attr]
-    except Exception:
-        text = first.get("text") if isinstance(first, dict) else None
+    # Try text path (some providers use this)
+    text = first_acc.get("text")
     if text is not None:
         return str(text)
 
@@ -427,41 +416,24 @@ def extract_tool_calls_anthropic(response: Any, /) -> list[ToolCallRequest] | No
 
     Returns None if no tool calls are present.
     """
-    content = None
-    try:
-        content = response.content
-    except Exception:
-        if isinstance(response, dict):
-            content = response.get("content")
-
-    if not content:
+    accessor = SafeAccessor(response)
+    content = accessor.get("content")
+    if not content or not isinstance(content, list):
         return None
 
     result: list[ToolCallRequest] = []
     for block in content:
-        block_type = None
-        try:
-            block_type = block.type
-        except Exception:
-            if isinstance(block, dict):
-                block_type = block.get("type")
+        block_acc = SafeAccessor(block)
+        block_type = block_acc.get_str_or("type", "")
 
         if block_type != "tool_use":
             continue
 
-        try:
-            # SDK model style (duck-typed attribute access)
-            tc_id = block.id  # type: ignore[union-attr]
-            name = block.name  # type: ignore[union-attr]
-            arguments = block.input  # type: ignore[union-attr]
-        except Exception:
-            # Dict style
-            if isinstance(block, dict):
-                tc_id = block.get("id", "")
-                name = block.get("name", "")
-                arguments = block.get("input", {})
-            else:
-                continue
+        tc_id = block_acc.get_str_or("id", "")
+        name = block_acc.get_str_or("name", "")
+        arguments = block_acc.get("input")
+        if not isinstance(arguments, dict):
+            arguments = {}
 
         result.append({"id": tc_id, "name": name, "arguments": arguments})
 
@@ -537,23 +509,14 @@ def extract_finish_reason_openai(response: Any, /) -> str | None:
 
     Returns: "stop", "tool_calls", "length", etc. or None if not available.
     """
-    try:
-        choices = response.choices
-    except Exception:
-        choices = response.get("choices") if isinstance(response, dict) else None
-
-    if not choices:
+    accessor = SafeAccessor(response)
+    choices = accessor.get("choices")
+    if not choices or not isinstance(choices, list):
         return None
 
-    first = choices[0]
-
-    try:
-        return first.finish_reason
-    except Exception:
-        if isinstance(first, dict):
-            return first.get("finish_reason")
-
-    return None
+    first_acc = SafeAccessor(choices[0])
+    finish_reason = first_acc.get("finish_reason")
+    return str(finish_reason) if finish_reason is not None else None
 
 
 def extract_finish_reason_anthropic(response: Any, /) -> str | None:
@@ -563,15 +526,12 @@ def extract_finish_reason_anthropic(response: Any, /) -> str | None:
     Anthropic uses "end_turn", "tool_use", "max_tokens" etc.
     We normalize to "stop", "tool_calls", "length" for consistency.
     """
-    stop_reason = None
-    try:
-        stop_reason = response.stop_reason
-    except Exception:
-        if isinstance(response, dict):
-            stop_reason = response.get("stop_reason")
-
+    accessor = SafeAccessor(response)
+    stop_reason = accessor.get("stop_reason")
     if stop_reason is None:
         return None
+
+    stop_reason_str = str(stop_reason)
 
     # Normalize Anthropic's stop reasons to OpenAI-style
     mapping = {
@@ -580,7 +540,7 @@ def extract_finish_reason_anthropic(response: Any, /) -> str | None:
         "max_tokens": "length",
         "stop_sequence": "stop",
     }
-    return mapping.get(stop_reason, stop_reason)
+    return mapping.get(stop_reason_str, stop_reason_str)
 
 
 def extract_finish_reason_gemini(response: Any, /) -> str | None:
@@ -590,31 +550,22 @@ def extract_finish_reason_gemini(response: Any, /) -> str | None:
     Gemini uses STOP, MAX_TOKENS, SAFETY, etc.
     We normalize to "stop", "length", etc. for consistency.
     """
-    candidates = None
-    try:
-        candidates = response.candidates
-    except Exception:
-        if isinstance(response, dict):
-            candidates = response.get("candidates")
-
-    if not candidates:
+    accessor = SafeAccessor(response)
+    candidates = accessor.get("candidates")
+    if not candidates or not isinstance(candidates, list):
         return None
 
-    first = candidates[0]
+    first_acc = SafeAccessor(candidates[0])
 
-    finish_reason = None
-    try:
-        finish_reason = first.finish_reason
-    except Exception:
-        if isinstance(first, dict):
-            finish_reason = first.get("finish_reason") or first.get("finishReason")
-
+    # Try both naming conventions (finish_reason and finishReason)
+    finish_reason = first_acc.get("finish_reason") or first_acc.get("finishReason")
     if finish_reason is None:
         return None
 
     # Handle enum values (Gemini SDK returns enums)
-    if hasattr(finish_reason, "name"):
-        finish_reason = finish_reason.name
+    finish_reason_name = getattr(finish_reason, "name", None)
+    if finish_reason_name is not None:
+        finish_reason = finish_reason_name
 
     # Normalize Gemini's finish reasons to OpenAI-style
     mapping = {
@@ -634,32 +585,30 @@ def extract_openai_style_token_usage(response: Any, /) -> tuple[int, int]:
     Supports both the classic (prompt_tokens/completion_tokens) and newer
     (input_tokens/output_tokens) key names.
     """
-    usage: Any | None
-    try:
-        usage = response.usage
-    except Exception:
-        usage = response.get("usage") if isinstance(response, dict) else None
-
+    accessor = SafeAccessor(response)
+    usage = accessor.get("usage")
     if usage is None:
         return (0, 0)
 
-    def _int(value: Any | None) -> int:
+    def _coerce_int(value: object) -> int:
+        """Coerce value to int, returning 0 on failure."""
         if value is None:
             return 0
         try:
-            return int(value)
-        except Exception:
+            return int(value)  # type: ignore[arg-type,call-overload]
+        except (ValueError, TypeError):
             return 0
 
-    if isinstance(usage, dict):
-        in_tokens = _int(usage.get("prompt_tokens") or usage.get("input_tokens"))
-        out_tokens = _int(usage.get("completion_tokens") or usage.get("output_tokens"))
-        return (in_tokens, out_tokens)
+    usage_acc = SafeAccessor(usage)
 
-    in_tokens = _int(getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", None))
-    out_tokens = _int(
-        getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None),
+    # Try both naming conventions (classic and newer)
+    in_tokens = _coerce_int(usage_acc.get("prompt_tokens")) or _coerce_int(
+        usage_acc.get("input_tokens")
     )
+    out_tokens = _coerce_int(usage_acc.get("completion_tokens")) or _coerce_int(
+        usage_acc.get("output_tokens")
+    )
+
     return (in_tokens, out_tokens)
 
 
