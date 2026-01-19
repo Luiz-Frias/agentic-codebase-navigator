@@ -9,6 +9,13 @@ Design notes:
 - Uses get_origin/get_args for parameterized generics
 - Recursively handles nested types
 - Falls back to {"type": "string"} for unknown types
+- When Pydantic is available (optional dep), uses TypeAdapter for better edge case handling
+
+Pydantic Integration (ADR-001):
+- Pydantic is an optional dependency (`pip install rlm[pydantic]`)
+- When available, TypeAdapter provides battle-tested schema generation
+- When unavailable, manual implementation provides equivalent functionality
+- Import is lazy-loaded and cached for performance
 
 Example:
     mapper = JsonSchemaMapper()
@@ -26,6 +33,36 @@ import typing
 from typing import Any, get_args, get_origin
 
 from rlm.domain.models.result import try_call
+
+# =============================================================================
+# Pydantic Optional Integration (ADR-001)
+# =============================================================================
+
+# Lazy import cache for Pydantic TypeAdapter
+_PYDANTIC_CHECKED: bool = False
+_TYPE_ADAPTER: type | None = None
+
+
+def _get_pydantic_type_adapter() -> type | None:
+    """
+    Get Pydantic's TypeAdapter class if available.
+
+    Uses lazy loading with caching - import check happens once per process.
+    Returns None if pydantic is not installed.
+    """
+    global _PYDANTIC_CHECKED, _TYPE_ADAPTER  # noqa: PLW0603
+
+    if not _PYDANTIC_CHECKED:
+        try:
+            from pydantic import TypeAdapter  # noqa: PLC0415 - Lazy import for optional dep
+
+            _TYPE_ADAPTER = TypeAdapter
+        except ImportError:
+            _TYPE_ADAPTER = None
+        _PYDANTIC_CHECKED = True
+
+    return _TYPE_ADAPTER
+
 
 # Basic type to JSON schema mapping (identity-based lookup)
 _BASIC_TYPE_SCHEMAS: dict[type, dict[str, str]] = {
@@ -53,10 +90,34 @@ class JsonSchemaMapper:
     - Dataclasses (generates object schema from fields)
     - Pydantic models (delegates to model_json_schema)
 
+    Pydantic Integration (ADR-001):
+    - By default, uses manual implementation for backward compatibility
+    - Set `prefer_pydantic=True` to use Pydantic TypeAdapter when available
+    - Pydantic schemas are more explicit (e.g., Optional[int] → anyOf vs unwrapped int)
+    - When Pydantic unavailable, falls back to manual implementation regardless of setting
+
     Thread safety:
-    - Thread-safe (stateless, all methods are pure functions)
+    - Thread-safe (stateless after construction)
+
+    Args:
+        prefer_pydantic: If True (default), try Pydantic TypeAdapter first when available.
+                        If False, always use manual implementation (useful for testing,
+                        backward compatibility, or deterministic schema output).
 
     """
+
+    def __init__(self, *, prefer_pydantic: bool = False) -> None:
+        """
+        Initialize the mapper.
+
+        Args:
+            prefer_pydantic: Whether to prefer Pydantic TypeAdapter when available.
+                            Defaults to False for backward compatibility.
+                            Set to True to get Pydantic's more explicit schemas
+                            (e.g., Optional[int] → anyOf instead of unwrapped int).
+
+        """
+        self._prefer_pydantic = prefer_pydantic
 
     def map(self, python_type: type) -> dict[str, Any]:
         """
@@ -68,6 +129,46 @@ class JsonSchemaMapper:
         Returns:
             JSON Schema dictionary
 
+        Strategy (ADR-001):
+            1. Try Pydantic TypeAdapter first (if pydantic installed)
+            2. Fall back to manual implementation if Pydantic unavailable or fails
+
+        """
+        # Try Pydantic TypeAdapter first if preferred (optional dependency, ADR-001)
+        if self._prefer_pydantic:
+            type_adapter_cls = _get_pydantic_type_adapter()
+            if type_adapter_cls is not None:
+                pydantic_result = self._try_pydantic_schema(type_adapter_cls, python_type)
+                if pydantic_result is not None:
+                    return pydantic_result
+
+        # Manual implementation (fallback when Pydantic unavailable, fails, or not preferred)
+        return self._map_manual(python_type)
+
+    def _try_pydantic_schema(
+        self, type_adapter_cls: type, python_type: type
+    ) -> dict[str, Any] | None:
+        """
+        Try to generate schema using Pydantic TypeAdapter.
+
+        Returns None if schema generation fails for any reason.
+        This allows graceful fallback to manual implementation.
+        """
+        try:
+            # TypeAdapter is dynamically imported - pyright can't know its type
+            adapter = type_adapter_cls(python_type)  # pyright: ignore[reportAny]
+            schema = adapter.json_schema()  # pyright: ignore[reportAny]
+            return dict(schema)  # pyright: ignore[reportAny]
+        except Exception:  # noqa: BLE001 - Pydantic can raise various exceptions
+            # Fall back to manual implementation
+            return None
+
+    def _map_manual(self, python_type: type) -> dict[str, Any]:
+        """
+        Manual JSON schema generation (no Pydantic dependency).
+
+        This is the fallback implementation when Pydantic is not installed
+        or when Pydantic fails to generate a schema for a given type.
         """
         # Handle None/NoneType
         if python_type is type(None):
@@ -89,7 +190,7 @@ class JsonSchemaMapper:
         if dataclasses.is_dataclass(python_type):
             return self._map_dataclass(python_type)
 
-        # Handle Pydantic models (duck typing)
+        # Handle Pydantic models (duck typing - works even without pydantic import)
         if hasattr(python_type, "model_json_schema"):
             return dict(python_type.model_json_schema())
 
@@ -164,3 +265,28 @@ class JsonSchemaMapper:
             schema["required"] = required
 
         return schema
+
+
+# =============================================================================
+# Testing Utilities
+# =============================================================================
+
+
+def has_pydantic() -> bool:
+    """
+    Check if Pydantic is available.
+
+    Useful for conditional test logic and documentation.
+    """
+    return _get_pydantic_type_adapter() is not None
+
+
+def _reset_pydantic_cache() -> None:
+    """
+    Reset the Pydantic import cache (for testing only).
+
+    This allows tests to simulate Pydantic being unavailable.
+    """
+    global _PYDANTIC_CHECKED, _TYPE_ADAPTER  # noqa: PLW0603
+    _PYDANTIC_CHECKED = False
+    _TYPE_ADAPTER = None

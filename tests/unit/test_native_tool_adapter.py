@@ -13,6 +13,7 @@ def test_json_schema_mapper_handles_optional_and_union() -> None:
     """Test that JsonSchemaMapper handles Optional and Union types correctly.
 
     This test was migrated from testing the removed _python_type_to_json_schema function.
+    Uses default prefer_pydantic=False (backward compat, manual implementation).
     """
     mapper = JsonSchemaMapper()
     assert mapper.map(typing.Optional[int]) == {"type": "integer"}  # noqa: UP045

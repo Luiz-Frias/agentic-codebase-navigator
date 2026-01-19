@@ -45,6 +45,10 @@ env-modal = ["modal>=0.73.0"]
 # Docker uses the local Docker CLI; no Python dependency is required, but we keep an explicit extra.
 env-docker = []
 
+# Enhanced type validation and schema generation (optional, ADR-001)
+# Enables TypeAdapter fallback in JsonSchemaMapper for better edge case handling
+pydantic = ["pydantic>=2.0.0"]
+
 [project.scripts]
 rlm = "rlm.cli:main"
 
@@ -188,9 +192,8 @@ ignore = [
     "E402",     # Module import after lazy check
 ]
 "src/rlm/adapters/llm/provider_base.py" = [
-    "BLE001",   # Boundary: response parsing can fail in many ways
     "ANN401",   # Base adapter handles Any from multiple SDKs
-    "C901",     # Response parsing logic has inherent complexity
+    "BLE001",   # Tiktoken import/usage can fail in various ways (optional dependency)
     "PLC0415",  # Lazy import: tiktoken is optional
 ]
 "src/rlm/adapters/llm/mock.py" = [
@@ -382,6 +385,47 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "tiktoken"
+ignore_missing_imports = true
+
+# Optional LLM SDK dependencies (lazy-loaded at adapter boundaries)
+[[tool.mypy.overrides]]
+module = "openai"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "openai.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "anthropic"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "anthropic.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "litellm"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "litellm.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "portkey_ai"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "portkey_ai.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "google.genai"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "google.genai.*"
 ignore_missing_imports = true
 
 [tool.basedpyright]
