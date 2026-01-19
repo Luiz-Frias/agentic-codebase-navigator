@@ -8,7 +8,7 @@ resolution-markers = [
 
 [[package]]
 name = "agentic-codebase-navigator"
-version = "1.1.0"
+version = "1.2.0rc2"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
@@ -38,6 +38,9 @@ llm-openai = [
 ]
 llm-portkey = [
     { name = "portkey-ai" },
+]
+pydantic = [
+    { name = "pydantic" },
 ]
 
 [package.dev-dependencies]
@@ -71,10 +74,11 @@ requires-dist = [
     { name = "openai", marker = "extra == 'llm-azure-openai'", specifier = ">=2.14.0" },
     { name = "openai", marker = "extra == 'llm-openai'", specifier = ">=2.14.0" },
     { name = "portkey-ai", marker = "extra == 'llm-portkey'", specifier = ">=2.1.0" },
+    { name = "pydantic", marker = "extra == 'pydantic'", specifier = ">=2.0.0" },
     { name = "tiktoken", marker = "extra == 'llm-azure-openai'", specifier = ">=0.10.0" },
     { name = "tiktoken", marker = "extra == 'llm-openai'", specifier = ">=0.7.0" },
 ]
-provides-extras = ["llm-openai", "llm-anthropic", "llm-gemini", "llm-portkey", "llm-litellm", "llm-azure-openai", "env-modal", "env-docker"]
+provides-extras = ["llm-openai", "llm-anthropic", "llm-gemini", "llm-portkey", "llm-litellm", "llm-azure-openai", "env-modal", "env-docker", "pydantic"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -21,7 +21,7 @@ def test_facade_uses_domain_orchestrator_and_can_run_with_fake_local_env(
             self.executed_code: list[str] = []
             self.cleaned = False
             self._results: list[ReplResult] = [
-                ReplResult(stdout="HELLO_FROM_FAKE\n", stderr="", locals={}, execution_time=0.0)
+                ReplResult(stdout="HELLO_FROM_FAKE\n", stderr="", locals={}, execution_time=0.0),
             ]
 
         def load_context(self, context_payload) -> None:

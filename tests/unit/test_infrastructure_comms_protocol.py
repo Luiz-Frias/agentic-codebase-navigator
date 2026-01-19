@@ -85,7 +85,9 @@ def test_request_completions_batched_preserves_order_and_returns_per_item_result
     monkeypatch.setattr(proto, "request_response", _stub_request_response)
 
     results = request_completions_batched(
-        ("127.0.0.1", 1234), ["p1", "p2", "p3"], correlation_id="cid"
+        ("127.0.0.1", 1234),
+        ["p1", "p2", "p3"],
+        correlation_id="cid",
     )
     assert [r.error for r in results] == [None, "oops", None]
     assert results[0].chat_completion is not None and results[0].chat_completion.response == "r1"
@@ -123,7 +125,9 @@ def test_request_completions_batched_raises_on_length_mismatch(
     ],
 )
 def test_request_completion_maps_transport_errors_to_safe_broker_errors(
-    monkeypatch: pytest.MonkeyPatch, exc: BaseException, msg: str
+    monkeypatch: pytest.MonkeyPatch,
+    exc: BaseException,
+    msg: str,
 ) -> None:
     def _stub_request_response(*args, **kwargs):
         raise exc

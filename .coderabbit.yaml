@@ -96,9 +96,6 @@ reviews:
     markdownlint:
       enabled: true
 
-    # Language-specific tools run via pre-commit (not duplicated here)
-    # ruff, mypy, clippy, prettier, eslint handled by .pre-commit-config.yaml
-
   # Path-specific instructions
   path_instructions:
     - path: "scripts/**"

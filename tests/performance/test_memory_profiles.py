@@ -200,7 +200,7 @@ def test_code_block_accumulation_memory() -> None:
                         llm_calls=[],
                         execution_time=0.001,
                     ),
-                )
+                ),
             )
 
     # 100 code blocks should be manageable (< 1MB)
@@ -227,7 +227,7 @@ def test_usage_summary_memory_scaling() -> None:
                     total_output_tokens=25000,
                 )
                 for i in range(num_models)
-            }
+            },
         )
         sizes.append((num_models, measure_object_size(summary)))
 

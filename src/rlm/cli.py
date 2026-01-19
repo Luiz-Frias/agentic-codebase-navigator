@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any
+from dataclasses import dataclass
+from typing import Literal, cast
 
 from rlm.api import (
     EnvironmentConfig,
@@ -11,6 +12,58 @@ from rlm.api import (
     RLMConfig,
     create_rlm_from_config,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class CompletionArgs:
+    """Typed arguments for the completion subcommand."""
+
+    prompt: str
+    backend: str
+    model_name: str
+    final: str
+    environment: Literal["local", "docker", "modal", "prime"]
+    max_iterations: int
+    max_depth: int
+    jsonl_log_dir: str | None
+    json_output: bool
+
+
+EnvironmentType = Literal["local", "docker", "modal", "prime"]
+
+
+def _extract_completion_args(ns: argparse.Namespace) -> CompletionArgs:
+    """
+    Extract and validate completion args from Namespace with explicit types.
+
+    Uses cast() for type-safe extraction from argparse.Namespace which
+    returns dict[str, Any] via vars(). The casts are safe because argparse
+    guarantees the types based on add_argument() configuration.
+    """
+    raw: dict[str, object] = vars(ns)
+
+    # Extract with defaults, then cast to target types
+    prompt = cast("str", raw.get("prompt") or "")
+    backend = cast("str", raw.get("backend") or "openai")
+    model_name = cast("str", raw.get("model_name") or "gpt-5-nano")
+    final = cast("str", raw.get("final") or "ok")
+    environment = cast("EnvironmentType", raw.get("environment") or "docker")
+    max_iterations = cast("int", raw.get("max_iterations") or 30)
+    max_depth = cast("int", raw.get("max_depth") or 1)
+    jsonl_log_dir = cast("str | None", raw.get("jsonl_log_dir"))
+    json_output = cast("bool", raw.get("json") or False)
+
+    return CompletionArgs(
+        prompt=prompt,
+        backend=backend,
+        model_name=model_name,
+        final=final,
+        environment=environment,
+        max_iterations=max_iterations,
+        max_depth=max_depth,
+        jsonl_log_dir=jsonl_log_dir,
+        json_output=json_output,
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -67,8 +120,10 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _completion(args: argparse.Namespace) -> int:
-    backend_kwargs: dict[str, Any] = {}
+def _completion(ns: argparse.Namespace) -> int:
+    args = _extract_completion_args(ns)
+
+    backend_kwargs: dict[str, str | list[str]] = {}
     if args.backend == "mock":
         backend_kwargs = {"script": [f"FINAL({args.final})"]}
 
@@ -93,7 +148,8 @@ def _completion(args: argparse.Namespace) -> int:
     )
     rlm = create_rlm_from_config(cfg)
     cc = rlm.completion(args.prompt)
-    if args.json:
+
+    if args.json_output:
         print(json.dumps(cc.to_dict(), ensure_ascii=False, sort_keys=True))
     else:
         print(cc.response)
@@ -102,16 +158,19 @@ def _completion(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    ns = parser.parse_args(argv)
+    raw: dict[str, object] = vars(ns)
 
-    if args.version:
-        import rlm
+    if cast("bool", raw.get("version") or False):
+        # Lazy import to avoid circular dependency at module load time
+        import rlm as rlm_pkg
 
-        print(rlm.__version__)
+        print(rlm_pkg.__version__)
         return 0
 
-    if args.command == "completion":
-        return _completion(args)
+    command = cast("str | None", raw.get("command"))
+    if command == "completion":
+        return _completion(ns)
 
     parser.print_help()
     return 0

@@ -5,7 +5,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rlm.adapters.base import BaseLLMAdapter
 from rlm.adapters.llm.provider_base import (
@@ -19,7 +19,9 @@ from rlm.adapters.llm.provider_base import (
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
-from rlm.domain.types import Prompt
+
+if TYPE_CHECKING:
+    from rlm.domain.types import Prompt
 
 
 def _require_anthropic() -> Any:
@@ -28,13 +30,12 @@ def _require_anthropic() -> Any:
 
     Installed via the optional extra: `agentic-codebase-navigator[llm-anthropic]`.
     """
-
     try:
         import anthropic  # type: ignore[import-not-found]
-    except Exception as e:  # noqa: BLE001 - dependency boundary
+    except Exception as e:
         raise ImportError(
             "Anthropic adapter selected but the 'anthropic' package is not installed. "
-            "Install the optional extra: `agentic-codebase-navigator[llm-anthropic]`."
+            "Install the optional extra: `agentic-codebase-navigator[llm-anthropic]`.",
         ) from e
     return anthropic
 
@@ -48,7 +49,8 @@ def _normalize_anthropic_content(content: Any, /) -> str | list[dict[str, Any]]:
 
 
 def _openai_tool_calls_to_anthropic_blocks(
-    tool_calls: list[dict[str, Any]], /
+    tool_calls: list[dict[str, Any]],
+    /,
 ) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     for tc in tool_calls:
@@ -78,7 +80,6 @@ def _messages_and_system(prompt: Prompt, /) -> tuple[list[dict[str, Any]], str |
     Anthropic uses a dedicated `system` parameter; OpenAI-style "system" messages
     are stripped and mapped into that field.
     """
-
     messages = prompt_to_messages(prompt)
     system: str | None = None
 
@@ -98,7 +99,7 @@ def _messages_and_system(prompt: Prompt, /) -> tuple[list[dict[str, Any]], str |
             tool_call_id = str(m.get("tool_call_id", "") or "")
             content = _normalize_anthropic_content(m.get("content"))
             pending_tool_results.append(
-                {"type": "tool_result", "tool_use_id": tool_call_id, "content": content}
+                {"type": "tool_result", "tool_use_id": tool_call_id, "content": content},
             )
             continue
 
@@ -267,9 +268,12 @@ class AnthropicAdapter(BaseLLMAdapter):
                 )
             else:
                 resp = client.messages.create(
-                    model=model, messages=messages, max_tokens=max_tokens, **kwargs
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    **kwargs,
                 )
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("Anthropic", e)) from None
         end = time.perf_counter()
 
@@ -309,7 +313,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         # avoid blocking the event loop if the SDK surface differs.
         try:
             client = self._get_async_client(anthropic)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return await asyncio.to_thread(self.complete, request)
 
         model = request.model or self.model
@@ -336,9 +340,12 @@ class AnthropicAdapter(BaseLLMAdapter):
                 )
             else:
                 resp = await client.messages.create(
-                    model=model, messages=messages, max_tokens=max_tokens, **kwargs
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    **kwargs,
                 )
-        except Exception as e:  # noqa: BLE001 - provider boundary
+        except Exception as e:
             raise LLMError(safe_provider_error_message("Anthropic", e)) from None
         end = time.perf_counter()
 
@@ -386,7 +393,7 @@ class AnthropicAdapter(BaseLLMAdapter):
             if client_cls is None:
                 raise ImportError(
                     "Anthropic SDK API mismatch: expected `anthropic.Anthropic` class. "
-                    "Please upgrade `anthropic` (install `agentic-codebase-navigator[llm-anthropic]`)."
+                    "Please upgrade `anthropic` (install `agentic-codebase-navigator[llm-anthropic]`).",
                 )
 
             kwargs: dict[str, Any] = {}
@@ -405,7 +412,7 @@ class AnthropicAdapter(BaseLLMAdapter):
             if client_cls is None:
                 raise ImportError(
                     "Anthropic SDK API mismatch: expected `anthropic.AsyncAnthropic` class. "
-                    "Please upgrade `anthropic` (install `agentic-codebase-navigator[llm-anthropic]`)."
+                    "Please upgrade `anthropic` (install `agentic-codebase-navigator[llm-anthropic]`).",
                 )
 
             kwargs: dict[str, Any] = {}
@@ -417,7 +424,10 @@ class AnthropicAdapter(BaseLLMAdapter):
 
 
 def build_anthropic_adapter(
-    *, model: str, api_key: str | None = None, **kwargs: Any
+    *,
+    model: str,
+    api_key: str | None = None,
+    **kwargs: Any,
 ) -> AnthropicAdapter:
     if not isinstance(model, str) or not model.strip():
         raise ValueError("AnthropicAdapter requires a non-empty 'model'")

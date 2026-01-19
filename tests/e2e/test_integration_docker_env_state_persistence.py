@@ -18,7 +18,6 @@ def test_docker_env_state_persists_across_execute_code_calls() -> None:
     - Iteration 0: set `x = 1` in a code block (no FINAL)
     - Iteration 1: return `FINAL_VAR('x')` without redefining `x`
     """
-
     try:
         ensure_docker_available(timeout_s=0.5)
     except RuntimeError as exc:

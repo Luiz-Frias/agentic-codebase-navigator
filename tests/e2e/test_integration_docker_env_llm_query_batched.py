@@ -11,10 +11,7 @@ from tests.fakes_ports import CollectingLogger, QueueLLM
 @pytest.mark.e2e
 @pytest.mark.docker
 def test_docker_env_llm_query_batched_preserves_order() -> None:
-    """
-    Integration: docker env nested llm_query_batched should preserve prompt ordering.
-    """
-
+    """Integration: docker env nested llm_query_batched should preserve prompt ordering."""
     try:
         ensure_docker_available(timeout_s=0.5)
     except RuntimeError as exc:

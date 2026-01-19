@@ -48,7 +48,7 @@ def test_recv_frame_handles_partial_length_prefix_reads() -> None:
             payload[:1],
             payload[1:5],
             payload[5:],
-        ]
+        ],
     )
 
     assert recv_frame(sock) == msg

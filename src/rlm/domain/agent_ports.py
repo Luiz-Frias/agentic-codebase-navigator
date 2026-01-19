@@ -44,7 +44,7 @@ class ToolCallRequest(TypedDict):
 
     id: str  # Unique ID for this tool call (for correlation)
     name: str  # Tool name to invoke
-    arguments: dict[str, Any]  # Parsed arguments
+    arguments: dict[str, object]  # Parsed arguments (JSON-compatible values)
 
 
 class ToolCallResult(TypedDict):
@@ -56,7 +56,7 @@ class ToolCallResult(TypedDict):
 
     id: str  # Correlation ID from the request
     name: str  # Tool that was called
-    result: Any  # Return value (will be JSON serialized)
+    result: object  # Return value (will be JSON serialized)
     error: str | None  # Error message if execution failed
 
 
@@ -73,6 +73,7 @@ class ToolMessage(TypedDict):
             "tool_call_id": "call_abc123",
             "content": '{"temperature": 72, "unit": "fahrenheit"}'
         }
+
     """
 
     role: str  # Always "tool"
@@ -90,17 +91,14 @@ class ToolPort(Protocol):
     """
 
     @property
-    def definition(self) -> ToolDefinition:
+    def definition(self) -> ToolDefinition:  # pyright: ignore[reportReturnType]
         """Return the tool's schema for LLM consumption."""
-        ...
 
-    def execute(self, **kwargs: Any) -> Any:
+    def execute(self, **kwargs: object) -> object:  # pyright: ignore[reportReturnType]
         """Execute the tool synchronously with the given arguments."""
-        ...
 
-    async def aexecute(self, **kwargs: Any) -> Any:
+    async def aexecute(self, **kwargs: object) -> object:  # pyright: ignore[reportReturnType]
         """Execute the tool asynchronously with the given arguments."""
-        ...
 
 
 class ToolRegistryPort(Protocol):
@@ -112,17 +110,14 @@ class ToolRegistryPort(Protocol):
     a tool call.
     """
 
-    def register(self, tool: ToolPort, /) -> None:
+    def register(self, tool: ToolPort, /) -> None:  # pyright: ignore[reportReturnType]
         """Register a tool in the registry."""
-        ...
 
-    def get(self, name: str, /) -> ToolPort | None:
+    def get(self, name: str, /) -> ToolPort | None:  # pyright: ignore[reportReturnType]
         """Look up a tool by name. Returns None if not found."""
-        ...
 
-    def list_definitions(self) -> list[ToolDefinition]:
+    def list_definitions(self) -> list[ToolDefinition]:  # pyright: ignore[reportReturnType]
         """Return schemas for all registered tools (for LLM context)."""
-        ...
 
 
 class StructuredOutputPort[T](Protocol):
@@ -134,7 +129,7 @@ class StructuredOutputPort[T](Protocol):
     uses Pydantic for validation.
     """
 
-    def validate(self, response: str, output_type: type[T], /) -> T:
+    def validate(self, response: str, output_type: type[T], /) -> T:  # pyright: ignore[reportReturnType]
         """
         Validate and parse an LLM response into the target type.
 
@@ -147,16 +142,15 @@ class StructuredOutputPort[T](Protocol):
 
         Raises:
             ValidationError: If the response doesn't match the expected schema
-        """
-        ...
 
-    def get_schema(self, output_type: type[T], /) -> dict[str, Any]:
+        """
+
+    def get_schema(self, output_type: type[T], /) -> dict[str, Any]:  # pyright: ignore[reportReturnType]
         """
         Get the JSON schema for an output type.
 
         This schema can be provided to the LLM to guide its output format.
         """
-        ...
 
 
 # =============================================================================
@@ -224,9 +218,10 @@ class StoppingPolicy(Protocol):
             ) -> None:
                 # Update EIG based on what was learned
                 self.current_eig = compute_eig(context, result)
+
     """
 
-    def should_stop(self, context: dict[str, Any]) -> bool:
+    def should_stop(self, context: dict[str, Any]) -> bool:  # pyright: ignore[reportReturnType]
         """
         Return True to stop the iteration loop early.
 
@@ -244,10 +239,10 @@ class StoppingPolicy(Protocol):
 
         Returns:
             True to stop immediately, False to continue.
-        """
-        ...
 
-    def on_iteration_complete(
+        """
+
+    def on_iteration_complete(  # pyright: ignore[reportReturnType]
         self,
         context: dict[str, Any],
         result: ChatCompletion,
@@ -261,8 +256,8 @@ class StoppingPolicy(Protocol):
         Args:
             context: Mutable orchestrator state dict.
             result: The ChatCompletion from this iteration.
+
         """
-        ...
 
 
 @runtime_checkable
@@ -290,9 +285,10 @@ class ContextCompressor(Protocol):
                 # Use LLM to summarize
                 summary = self.llm.complete(f"Summarize: {result}")
                 return summary.response[:limit * 4]
+
     """
 
-    def compress(self, result: str, max_tokens: int | None = None) -> str:
+    def compress(self, result: str, max_tokens: int | None = None) -> str:  # pyright: ignore[reportReturnType]
         """
         Compress a nested call result before returning to parent.
 
@@ -303,8 +299,8 @@ class ContextCompressor(Protocol):
 
         Returns:
             Compressed result string suitable for parent context.
+
         """
-        ...
 
 
 @runtime_checkable
@@ -335,9 +331,10 @@ class NestedCallPolicy(Protocol):
 
             def get_nested_config(self) -> NestedConfig:
                 return self._config
+
     """
 
-    def should_orchestrate(self, prompt: str, depth: int) -> bool:
+    def should_orchestrate(self, prompt: str, depth: int) -> bool:  # pyright: ignore[reportReturnType]
         """
         Return True to spawn a nested orchestrator for this call.
 
@@ -347,10 +344,10 @@ class NestedCallPolicy(Protocol):
 
         Returns:
             True to spawn a nested orchestrator, False for simple LLM call.
-        """
-        ...
 
-    def get_nested_config(self) -> NestedConfig:
+        """
+
+    def get_nested_config(self) -> NestedConfig:  # pyright: ignore[reportReturnType]
         """
         Return configuration for nested orchestrator.
 
@@ -359,5 +356,5 @@ class NestedCallPolicy(Protocol):
 
         Returns:
             Configuration dict for nested orchestrator.
+
         """
-        ...

@@ -13,10 +13,10 @@ from rlm.domain.models import (
     ModelUsageSummary,
     UsageSummary,
 )
-from rlm.domain.types import Prompt
 
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolCallRequest
+    from rlm.domain.types import Prompt
 
 
 def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
@@ -26,7 +26,6 @@ def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
     Avoids depending on provider-specific message formats while keeping behavior
     stable across test runs.
     """
-
     match prompt:
         case str():
             text = prompt
@@ -43,10 +42,7 @@ def _prompt_preview(prompt: Prompt, /, *, max_chars: int = 50) -> str:
                     text = repr(prompt)
         case dict():
             # Common legacy shape: {"prompt": "..."} or {"messages": [...]}
-            if "prompt" in prompt:
-                text = str(prompt.get("prompt"))
-            else:
-                text = repr(prompt)
+            text = str(prompt.get("prompt")) if "prompt" in prompt else repr(prompt)
         case _:
             text = repr(prompt)
 
@@ -60,7 +56,6 @@ def _estimate_input_tokens(prompt: Prompt, /) -> int:
 
     We intentionally avoid any external tokenizer dependency.
     """
-
     preview = _prompt_preview(prompt, max_chars=10_000)
     # Count whitespace-separated chunks as an extremely rough proxy.
     return 0 if not preview.strip() else len(preview.split())
@@ -166,8 +161,8 @@ class MockLLMAdapter(BaseLLMAdapter):
                         total_calls=1,
                         total_input_tokens=in_tokens,
                         total_output_tokens=out_tokens,
-                    )
-                }
+                    ),
+                },
             )
 
         return ChatCompletion(
@@ -196,7 +191,7 @@ class MockLLMAdapter(BaseLLMAdapter):
                         total_output_tokens=mus.total_output_tokens,
                     )
                     for model, mus in self._usage.model_usage_summaries.items()
-                }
+                },
             )
 
     def get_last_usage(self) -> UsageSummary:
@@ -209,7 +204,7 @@ class MockLLMAdapter(BaseLLMAdapter):
                         total_output_tokens=mus.total_output_tokens,
                     )
                     for model, mus in self._last_usage.model_usage_summaries.items()
-                }
+                },
             )
 
     # ---------------------------------------------------------------------
@@ -227,6 +222,7 @@ class MockLLMAdapter(BaseLLMAdapter):
         Raises:
             Exception: if the script item is an Exception
             LLMError: if the script is exhausted
+
         """
         with self._lock:
             script = self.script

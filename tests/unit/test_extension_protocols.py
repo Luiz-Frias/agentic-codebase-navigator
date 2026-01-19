@@ -1,4 +1,5 @@
-"""Unit tests for extension protocols and default implementations (Phase 2.7).
+"""
+Unit tests for extension protocols and default implementations (Phase 2.7).
 
 Tests cover:
 - Protocol contract verification (runtime_checkable)

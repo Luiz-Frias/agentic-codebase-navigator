@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
 from rlm.adapters.base import BaseLoggerAdapter
-from rlm.domain.models import Iteration, RunMetadata
+
+if TYPE_CHECKING:
+    from rlm.domain.models import CodeBlock, Iteration, RunMetadata
 
 
 class ConsoleLoggerAdapter(BaseLoggerAdapter):
@@ -25,7 +29,7 @@ class ConsoleLoggerAdapter(BaseLoggerAdapter):
             f"root_model={metadata.root_model} "
             f"env={metadata.environment_type} "
             f"max_depth={metadata.max_depth} "
-            f"max_iterations={metadata.max_iterations}"
+            f"max_iterations={metadata.max_iterations}",
         )
 
     def log_iteration(self, iteration: Iteration, /) -> None:
@@ -33,7 +37,7 @@ class ConsoleLoggerAdapter(BaseLoggerAdapter):
             return
 
         cid = iteration.correlation_id or "-"
-        code_blocks = iteration.code_blocks or []
+        code_blocks = cast("list[CodeBlock]", iteration.code_blocks or [])
         subcalls = sum(len(cb.result.llm_calls) for cb in code_blocks)
         has_final = iteration.final_answer is not None
         print(
@@ -42,5 +46,5 @@ class ConsoleLoggerAdapter(BaseLoggerAdapter):
             f"iteration_time={iteration.iteration_time:.3f}s "
             f"code_blocks={len(code_blocks)} "
             f"subcalls={subcalls} "
-            f"final={has_final}"
+            f"final={has_final}",
         )

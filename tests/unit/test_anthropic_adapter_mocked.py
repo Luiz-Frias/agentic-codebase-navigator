@@ -76,7 +76,7 @@ def test_anthropic_adapter_complete_maps_prompt_and_extracts_text_and_usage(
     resp = _Response("hi", input_tokens=3, output_tokens=5)
     created: list[_FakeClient] = []
 
-    class Anthropic:  # noqa: N801 - matches SDK naming
+    class Anthropic:
         def __init__(self, **kwargs):
             client = _FakeClient(response=resp, **kwargs)
             created.append(client)
@@ -96,8 +96,8 @@ def test_anthropic_adapter_complete_maps_prompt_and_extracts_text_and_usage(
             prompt=[
                 {"role": "system", "content": "sys"},
                 {"role": "user", "content": "hello"},
-            ]
-        )
+            ],
+        ),
     )
 
     assert cc.root_model == "claude-test"
@@ -124,7 +124,7 @@ async def test_anthropic_adapter_acomplete_maps_prompt_and_extracts_text_and_usa
     resp = _Response("ahi", input_tokens=1, output_tokens=2)
     created: list[_FakeAsyncClient] = []
 
-    class AsyncAnthropic:  # noqa: N801 - matches SDK naming
+    class AsyncAnthropic:
         def __init__(self, **kwargs):
             client = _FakeAsyncClient(response=resp, **kwargs)
             created.append(client)
@@ -174,7 +174,7 @@ def test_anthropic_adapter_helpers_and_validations() -> None:
             {"role": "user", "content": "u"},
             {"role": "system", "content": "ignored"},
             {"role": "assistant", "content": "a"},
-        ]
+        ],
     )
     assert system == "sys"
     assert msgs == [
@@ -193,11 +193,11 @@ def test_anthropic_adapter_helpers_and_validations() -> None:
                         "id": "call_1",
                         "type": "function",
                         "function": {"name": "get_weather", "arguments": '{"city": "Boston"}'},
-                    }
+                    },
                 ],
             },
             {"role": "tool", "tool_call_id": "call_1", "content": '{"temp": 72}'},
-        ]
+        ],
     )
     assert tool_system == "sys"
     assert tool_msgs[0]["role"] == "assistant"
@@ -247,7 +247,7 @@ def test_anthropic_adapter_complete_error_mapping_and_client_cache(
 
     created: list[_FakeClient] = []
 
-    class Anthropic:  # noqa: N801 - matches SDK naming
+    class Anthropic:
         def __init__(self, **kwargs):
             client = _FakeClient(response=_Response("ok"), **kwargs)
             created.append(client)
@@ -269,7 +269,7 @@ def test_anthropic_adapter_complete_error_mapping_and_client_cache(
     # Client is cached.
     assert len(created) == 1
 
-    class AnthropicTimeout:  # noqa: N801 - matches SDK naming
+    class AnthropicTimeout:
         def __init__(self, **_kwargs):
             self._messages = _FakeMessages(_Response("unused"))
             self._messages.create = lambda **_k: (_ for _ in ()).throw(TimeoutError())  # type: ignore[method-assign]
@@ -295,7 +295,7 @@ async def test_anthropic_adapter_acomplete_falls_back_to_thread_when_async_clien
 
     created: list[_FakeClient] = []
 
-    class Anthropic:  # noqa: N801 - matches SDK naming
+    class Anthropic:
         def __init__(self, **kwargs):
             client = _FakeClient(response=_Response("ok"), **kwargs)
             created.append(client)

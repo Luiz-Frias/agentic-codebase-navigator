@@ -37,6 +37,7 @@ class SimpleNestedCallPolicy:
         # Config is empty since orchestration is never triggered
         config = policy.get_nested_config()
         assert config == {}
+
     """
 
     def should_orchestrate(self, _prompt: str, _depth: int) -> bool:
@@ -49,6 +50,7 @@ class SimpleNestedCallPolicy:
 
         Returns:
             False - nested calls should not spawn orchestrators.
+
         """
         # Default: never spawn nested orchestrators
         return False
@@ -63,6 +65,7 @@ class SimpleNestedCallPolicy:
 
         Returns:
             Empty NestedConfig dict.
+
         """
         # Return empty config - this should never be called
         return NestedConfig()

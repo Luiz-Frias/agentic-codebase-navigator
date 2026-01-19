@@ -19,7 +19,7 @@ def test_model_usage_summary_rejects_negative_values() -> None:
 @pytest.mark.unit
 def test_model_usage_summary_from_dict_casts_and_validates() -> None:
     s = ModelUsageSummary.from_dict(
-        {"total_calls": "2", "total_input_tokens": None, "total_output_tokens": 3}
+        {"total_calls": "2", "total_input_tokens": None, "total_output_tokens": 3},
     )
     assert (s.total_calls, s.total_input_tokens, s.total_output_tokens) == (2, 0, 3)
 
@@ -51,7 +51,7 @@ def test_usage_summary_total_properties_sum_across_models() -> None:
         model_usage_summaries={
             "a": ModelUsageSummary(total_calls=1, total_input_tokens=2, total_output_tokens=3),
             "b": ModelUsageSummary(total_calls=4, total_input_tokens=5, total_output_tokens=6),
-        }
+        },
     )
     assert s.total_calls == 5
     assert s.total_input_tokens == 7

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rlm.adapters.base import BaseEnvironmentAdapter
-from rlm.domain.models import ReplResult
-from rlm.domain.types import ContextPayload
+
+if TYPE_CHECKING:
+    from rlm.domain.models import ReplResult
+    from rlm.domain.types import ContextPayload
 
 
 class PrimeEnvironmentAdapter(BaseEnvironmentAdapter):
@@ -19,7 +23,7 @@ class PrimeEnvironmentAdapter(BaseEnvironmentAdapter):
     def __init__(self, **_kwargs: object) -> None:
         raise NotImplementedError(
             "Environment 'prime' is not implemented yet. "
-            "Use environment='local' or environment='docker' instead."
+            "Use environment='local' or environment='docker' instead.",
         )
 
     def load_context(self, context_payload: ContextPayload, /) -> None:  # pragma: no cover
