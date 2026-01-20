@@ -4,23 +4,23 @@ RLM implements a **hexagonal modular monolith** (ports & adapters) architecture 
 
 ## Overview
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────┐
-│                         API Layer                                │
+│                         API Layer                               │
 │                  (RLM, create_rlm, factories)                   │
-│                    Composition Root                              │
+│                    Composition Root                             │
 ├─────────────────────────────────────────────────────────────────┤
-│                     Application Layer                            │
-│              (use cases, configuration DTOs)                     │
+│                     Application Layer                           │
+│              (use cases, configuration DTOs)                    │
 ├─────────────────────────────────────────────────────────────────┤
-│                       Domain Layer                               │
-│        (orchestrator, ports, models — zero dependencies)         │
+│                       Domain Layer                              │
+│        (orchestrator, ports, models — zero dependencies)        │
 ├─────────────────────────────────────────────────────────────────┤
-│                      Adapters Layer                              │
-│     (LLM providers, environments, tools, broker, logger)         │
+│                      Adapters Layer                             │
+│     (LLM providers, environments, tools, broker, logger)        │
 ├─────────────────────────────────────────────────────────────────┤
-│                    Infrastructure Layer                          │
-│            (wire protocol, comms, execution policy)              │
+│                    Infrastructure Layer                         │
+│            (wire protocol, comms, execution policy)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -94,7 +94,7 @@ Dependencies **must point inward**:
 **Purpose**: Concrete implementations of domain ports.
 
 **Structure**:
-```
+```bash
 adapters/
 ├── llm/              # LLM provider adapters
 │   ├── openai.py
@@ -156,14 +156,15 @@ RLM supports two agent paradigms:
 
 LLM generates Python code in ` ```repl ` blocks:
 
-```
+```bash
 User: What is 6 * 7?
 
 LLM: Let me calculate that.
-```repl
-result = 6 * 7
-print(f"The answer is {result}")
-```
+
+# ```repl
+# result = 6 * 7
+# print(f"The answer is {result}")
+# ```
 
 LLM: FINAL(42)
 ```
@@ -178,7 +179,7 @@ LLM: FINAL(42)
 
 LLM invokes registered tools via function calling:
 
-```
+```bash
 User: What's the weather in Tokyo?
 
 LLM: [calls get_weather(city="Tokyo")]
@@ -233,7 +234,7 @@ class NestedCallPolicy(Protocol):
 
 ## Request Flow
 
-```
+```bash
 ┌──────────┐    ┌─────────┐    ┌─────────────┐    ┌─────────────┐
 │  User    │───▶│   RLM   │───▶│  Use Case   │───▶│ Orchestrator│
 │          │    │ (Facade)│    │             │    │             │
@@ -289,7 +290,7 @@ The architecture enables comprehensive testing:
 
 ## Directory Structure
 
-```
+```bash
 src/rlm/
 ├── __init__.py              # Public exports
 ├── _meta.py                 # Version info

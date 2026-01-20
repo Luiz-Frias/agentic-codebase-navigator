@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Phase 06)
+Accepted
 
 ## Context
 

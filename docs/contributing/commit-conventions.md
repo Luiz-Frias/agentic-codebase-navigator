@@ -4,7 +4,7 @@ RLM follows [Conventional Commits](https://www.conventionalcommits.org/) for con
 
 ## Format
 
-```
+```bash
 type(scope): subject
 
 - Bullet point explaining what and why

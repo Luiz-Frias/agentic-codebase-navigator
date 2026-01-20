@@ -1,4 +1,4 @@
-# Logging (Phase 06)
+# Logging
 
 RLM supports **optional run logging** through the domain `LoggerPort`.
 

@@ -21,7 +21,7 @@ Welcome to the documentation for **agentic-codebase-navigator** (`rlm`) — an a
 
 ## Documentation Structure
 
-```
+```bash
 docs/
 ├── README.md                    # This file (navigation)
 ├── getting-started.md           # Quick start tutorial
@@ -83,7 +83,7 @@ RLM supports two agent modes:
 
 RLM uses a **hexagonal (ports & adapters) architecture**:
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────┐
 │                      API Layer                          │
 │              (RLM, create_rlm, factories)               │
@@ -104,7 +104,7 @@ RLM uses a **hexagonal (ports & adapters) architecture**:
 
 ## Version
 
-Current version: **1.1.0**
+Current version: **1.2.0**
 
 See [CHANGELOG.md](../CHANGELOG.md) for release history.
 

@@ -1,4 +1,4 @@
-# Public API (Phase 06)
+# Public API
 
 This document defines the **stable user-facing Python API** for the refactored `rlm` package.
 
@@ -197,8 +197,3 @@ Tool calling is supported across multiple LLM providers:
 - **Anthropic**: Tool use via content blocks
 - **Gemini**: FunctionDeclaration format
 - **LiteLLM** / **Portkey**: Passthrough to underlying provider
-
-## Migration notes
-
-The upstream snapshot remains available under `references/rlm/**` for reference only.
-Runtime code lives under `src/rlm/**`. Legacy has been fully removed.
