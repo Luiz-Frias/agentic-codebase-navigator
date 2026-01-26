@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 from rlm.domain.errors import ValidationError
 from rlm.domain.relay.baton import Baton
+from rlm.domain.relay.validation import validate_pipeline
 
 if TYPE_CHECKING:
     from rlm.domain.relay.state import StateSpec
@@ -26,6 +27,8 @@ class Pipeline:
         self._states: dict[str, StateSpec[object, object]] = {}
         self._edges: list[Edge[object, object, object]] = []
         self._entry_state: StateSpec[object, object] | None = None
+        self._allow_cycles = False
+        self._max_cycle_iterations: int | None = None
 
     @property
     def entry_state(self) -> StateSpec[object, object] | None:
@@ -43,6 +46,18 @@ class Pipeline:
     def terminal_states(self) -> tuple[StateSpec[object, object], ...]:
         outgoing = {edge.from_state.name for edge in self._edges}
         return tuple(state for state in self._states.values() if state.name not in outgoing)
+
+    @property
+    def allow_cycles(self) -> bool:
+        return self._allow_cycles
+
+    @property
+    def max_cycle_iterations(self) -> int | None:
+        return self._max_cycle_iterations
+
+    def set_cycle_policy(self, *, allow_cycles: bool, max_iterations: int | None) -> None:
+        self._allow_cycles = allow_cycles
+        self._max_cycle_iterations = max_iterations
 
     def add_state[InputT, OutputT](self, state: StateSpec[InputT, OutputT]) -> Pipeline:
         if state.name in self._states:
@@ -72,6 +87,9 @@ class Pipeline:
             )
         )
         return self
+
+    def validate(self) -> None:
+        validate_pipeline(self)
 
 
 class ConditionalPipeline[InputT, OutputT, NextT](Pipeline):

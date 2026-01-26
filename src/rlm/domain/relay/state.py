@@ -46,3 +46,8 @@ class StateSpec[InputT, OutputT]:
         self, predicate: Callable[[Baton[OutputT]], bool]
     ) -> ConditionalBuilder[InputT, OutputT]:
         return ConditionalBuilder(from_state=self, guard=predicate)
+
+    def validate(self) -> None:
+        pipeline = Pipeline()
+        pipeline.add_state(self)
+        pipeline.validate()
