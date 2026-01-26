@@ -16,7 +16,7 @@ default_install_hook_types:
   - prepare-commit-msg
 default_stages:
   - pre-commit
-fail_fast: false
+fail_fast: true
 ci:
   autofix_prs: false
   autoupdate_schedule: monthly
