@@ -1,19 +1,22 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Literal
 
 ErrorType = Literal["transient", "fatal"]
 
 
-@dataclass(frozen=True, slots=True)
 class StateError(Exception):
-    error_type: ErrorType
-    message: str
-    retry_hint: str | None = None
-
-    def __post_init__(self) -> None:
-        super().__init__(self.message)
+    def __init__(
+        self,
+        *,
+        error_type: ErrorType,
+        message: str,
+        retry_hint: str | None = None,
+    ) -> None:
+        self.error_type = error_type
+        self.message = message
+        self.retry_hint = retry_hint
+        super().__init__(message)
 
 
 class PipelineDefinitionError(Exception):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, Protocol, TypeVar, cast, get_origin
 from uuid import uuid4
 
 from rlm.domain.errors import ValidationError
@@ -48,6 +48,12 @@ def _validate_payload[T](expected_type: type[T], payload: object) -> Result[T, V
         return Err(
             ValidationError("Pydantic is required for baton validation. Install rlm[pydantic].")
         )
+
+    origin = get_origin(expected_type)
+    if origin is not None and isinstance(payload, origin):
+        return Ok(cast("T", payload))
+    if isinstance(expected_type, type) and isinstance(payload, expected_type):
+        return Ok(cast("T", payload))  # type: ignore[redundant-cast]
 
     try:
         adapter = type_adapter_cls(expected_type)
