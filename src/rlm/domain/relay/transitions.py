@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeVar
 
 from rlm.domain.relay.join import JoinMode, JoinSpec
-from rlm.domain.relay.pipeline import ConditionalPipeline, Guard
+from rlm.domain.relay.pipeline import ConditionalPipeline, Guard, Pipeline
 
 if TYPE_CHECKING:
     from rlm.domain.relay.state import StateSpec
@@ -44,3 +44,8 @@ class ParallelGroup[InputT, OutputT]:
             states=self.states,
             join_spec=JoinSpec(mode=mode, timeout_seconds=timeout_seconds),
         )
+
+    def __rshift__[NextT](self, other: StateSpec[OutputT, NextT]) -> Pipeline:
+        pipeline = Pipeline()
+        pipeline.add_join_group(self.states, other, self.join_spec)
+        return pipeline

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -9,6 +8,9 @@ from rlm.domain.relay.baton import Baton
 from rlm.domain.relay.validation import validate_pipeline
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from rlm.domain.relay.join import JoinSpec
     from rlm.domain.relay.state import StateSpec
 
 
@@ -22,11 +24,19 @@ class Edge[InputT, OutputT, NextT]:
     guard: Guard[OutputT] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class JoinGroup[InputT, OutputT, NextT]:
+    sources: tuple[StateSpec[InputT, OutputT], ...]
+    target: StateSpec[OutputT, NextT]
+    join_spec: JoinSpec
+
+
 class Pipeline:
     def __init__(self) -> None:
         self._states: dict[str, StateSpec[object, object]] = {}
         self._edges: list[Edge[object, object, object]] = []
         self._entry_state: StateSpec[object, object] | None = None
+        self._join_groups: list[JoinGroup[object, object, object]] = []
         self._allow_cycles = False
         self._max_cycle_iterations: int | None = None
 
@@ -41,6 +51,10 @@ class Pipeline:
     @property
     def edges(self) -> tuple[Edge[object, object, object], ...]:
         return tuple(self._edges)
+
+    @property
+    def join_groups(self) -> tuple[JoinGroup[object, object, object], ...]:
+        return tuple(self._join_groups)
 
     @property
     def terminal_states(self) -> tuple[StateSpec[object, object], ...]:
@@ -83,6 +97,26 @@ class Pipeline:
                     from_state=cast("StateSpec[object, object]", from_state),
                     to_state=cast("StateSpec[object, object]", to_state),
                     guard=cast("Guard[object]", guard),
+                ),
+            )
+        )
+        return self
+
+    def add_join_group[InputT, OutputT, NextT](
+        self,
+        sources: tuple[StateSpec[InputT, OutputT], ...],
+        target: StateSpec[OutputT, NextT],
+        join_spec: JoinSpec,
+    ) -> Pipeline:
+        for source in sources:
+            self.add_edge(source, target)
+        self._join_groups.append(
+            cast(
+                "JoinGroup[object, object, object]",
+                JoinGroup(
+                    sources=cast("tuple[StateSpec[object, object], ...]", sources),
+                    target=cast("StateSpec[object, object]", target),
+                    join_spec=join_spec,
                 ),
             )
         )
