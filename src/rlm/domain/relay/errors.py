@@ -14,3 +14,9 @@ class StateError(Exception):
 
     def __post_init__(self) -> None:
         super().__init__(self.message)
+
+
+class PipelineDefinitionError(Exception):
+    def __init__(self, errors: tuple[str, ...]) -> None:
+        self.errors = errors
+        super().__init__("\n".join(errors))
