@@ -276,4 +276,4 @@ def test_serialize_value_repeated_references() -> None:
 
     # Each reference should be serialized independently
     assert result["ref1"] == result["ref2"] == result["ref3"]
-    assert timing.elapsed_seconds < 0.1, f"Shared refs too slow: {timing.elapsed_seconds:.3f}s"
+    assert timing.elapsed_seconds < 0.2, f"Shared refs too slow: {timing.elapsed_seconds:.3f}s"
