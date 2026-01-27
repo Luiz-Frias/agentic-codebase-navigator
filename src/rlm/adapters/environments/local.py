@@ -411,6 +411,9 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         except Exception as exc:  # nosec B110
             warn_cleanup_failure("LocalEnvironment.cleanup_tmp", exc)
         self._pending_llm_calls.clear()
+        # Release references to potentially large payloads.
+        self._context_payload = None
+        self._setup_code = None
 
     # ------------------------------------------------------------------
     # Helpers exposed to user code
