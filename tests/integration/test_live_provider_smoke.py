@@ -2,10 +2,23 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import time
+from urllib.parse import urlparse
 
 import pytest
 
+from rlm.adapters.llm.retry import RetryConfig, compute_retry_delay
 from rlm.domain.models import LLMRequest
+from rlm.domain.errors import LLMError
+from rlm.domain.ports import LLMPort
+from rlm.domain.models import ChatCompletion
+
+RETRY_CONFIG = RetryConfig(
+    max_attempts=3,
+    base_delay_seconds=0.5,
+    max_delay_seconds=4.0,
+    jitter_seconds=0.25,
+)
 
 
 @pytest.mark.integration
@@ -31,19 +44,38 @@ def test_live_openai_adapter_smoke() -> None:
 
     model = os.environ.get("OPENAI_MODEL") or "gpt-5-nano"
     base_url = os.environ.get("OPENAI_BASE_URL")
+    api_version = os.environ.get("OPENAI_API_VERSION")
 
-    from rlm.adapters.llm.openai import OpenAIAdapter
+    if _is_azure_endpoint(base_url):
+        if api_version is None:
+            pytest.skip("OPENAI_API_VERSION not set for Azure OpenAI endpoint")
+        from rlm.adapters.llm.azure_openai import AzureOpenAIAdapter
 
-    llm = OpenAIAdapter(
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        default_request_kwargs={
-            # Keep spend and latency low; be deterministic-ish.
-            "temperature": 0,
-            "max_tokens": 16,
-        },
-    )
+        llm = AzureOpenAIAdapter(
+            deployment=model,
+            api_key=api_key,
+            endpoint=base_url,
+            api_version=api_version,
+            retry_config=RETRY_CONFIG,
+            default_request_kwargs={
+                "temperature": 0,
+                "max_tokens": 16,
+            },
+        )
+    else:
+        from rlm.adapters.llm.openai import OpenAIAdapter
+
+        llm = OpenAIAdapter(
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            retry_config=RETRY_CONFIG,
+            default_request_kwargs={
+                # Keep spend and latency low; be deterministic-ish.
+                "temperature": 0,
+                "max_tokens": 16,
+            },
+        )
     cc = llm.complete(LLMRequest(prompt="Return exactly the word ok."))
 
     assert cc.root_model == model
@@ -80,8 +112,7 @@ def test_live_openai_adapter_tool_calling() -> None:
 
     model = os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
     base_url = os.environ.get("OPENAI_BASE_URL")
-
-    from rlm.adapters.llm.openai import OpenAIAdapter
+    api_version = os.environ.get("OPENAI_API_VERSION")
     from rlm.domain.agent_ports import ToolDefinition
 
     # Define a simple tool for the LLM to call
@@ -102,15 +133,35 @@ def test_live_openai_adapter_tool_calling() -> None:
         },
     ]
 
-    llm = OpenAIAdapter(
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        default_request_kwargs={
-            "temperature": 0,
-            "max_tokens": 100,
-        },
-    )
+    if _is_azure_endpoint(base_url):
+        if api_version is None:
+            pytest.skip("OPENAI_API_VERSION not set for Azure OpenAI endpoint")
+        from rlm.adapters.llm.azure_openai import AzureOpenAIAdapter
+
+        llm = AzureOpenAIAdapter(
+            deployment=model,
+            api_key=api_key,
+            endpoint=base_url,
+            api_version=api_version,
+            retry_config=RETRY_CONFIG,
+            default_request_kwargs={
+                "temperature": 0,
+                "max_tokens": 100,
+            },
+        )
+    else:
+        from rlm.adapters.llm.openai import OpenAIAdapter
+
+        llm = OpenAIAdapter(
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            retry_config=RETRY_CONFIG,
+            default_request_kwargs={
+                "temperature": 0,
+                "max_tokens": 100,
+            },
+        )
 
     # Request should trigger tool call
     cc = llm.complete(
@@ -118,7 +169,7 @@ def test_live_openai_adapter_tool_calling() -> None:
             prompt="What's the weather in Tokyo?",
             tools=tools,
             tool_choice="auto",
-        ),
+        )
     )
 
     assert cc.root_model == model
@@ -141,6 +192,14 @@ def test_live_openai_adapter_tool_calling() -> None:
     assert mus.total_calls == 1
     assert mus.total_input_tokens >= 0
     assert mus.total_output_tokens >= 0
+
+
+def _is_azure_endpoint(base_url: str | None) -> bool:
+    if not base_url:
+        return False
+    parsed = urlparse(base_url)
+    host = parsed.netloc.lower() if parsed.netloc else base_url.lower()
+    return "azure.com" in host or "cognitiveservices.azure.com" in host
 
 
 @pytest.mark.integration
@@ -175,7 +234,7 @@ def test_live_anthropic_adapter_smoke() -> None:
             "max_tokens": 16,
         },
     )
-    cc = llm.complete(LLMRequest(prompt="Return exactly the word ok."))
+    cc = _complete_with_retry(llm, LLMRequest(prompt="Return exactly the word ok."), RETRY_CONFIG)
 
     assert cc.root_model == model
     assert isinstance(cc.response, str) and cc.response.strip()
@@ -186,3 +245,20 @@ def test_live_anthropic_adapter_smoke() -> None:
     assert mus.total_calls == 1
     assert mus.total_input_tokens >= 0
     assert mus.total_output_tokens >= 0
+
+
+def _complete_with_retry(
+    llm: LLMPort,
+    request: LLMRequest,
+    retry_config: RetryConfig,
+) -> ChatCompletion:
+    for attempt in range(1, retry_config.max_attempts + 1):
+        try:
+            return llm.complete(request)
+        except LLMError as exc:
+            message = str(exc).lower()
+            if "rate limit" not in message or attempt >= retry_config.max_attempts:
+                raise
+            delay = compute_retry_delay(retry_config, attempt)
+            time.sleep(delay)
+    raise RuntimeError("Retry loop exhausted without raising")

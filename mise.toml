@@ -11,6 +11,9 @@ PYTHONUNBUFFERED = "1"
 # This replaces the need for `source .venv/bin/activate` in .envrc
 _.python.venv = { path = ".venv", create = true }
 
+# Load secrets from .env
+_.file = ".env"
+
 [tools]
 # Python 3.12+ (matches pyproject.toml requires-python)
 python = "3.12"

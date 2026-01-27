@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from threading import Lock
@@ -17,6 +18,11 @@ from rlm.adapters.llm.provider_base import (
     safe_provider_error_message,
     tool_choice_to_openai_format,
     tool_definition_to_openai_format,
+)
+from rlm.adapters.llm.retry import (
+    RetryConfig,
+    compute_retry_delay,
+    is_retryable_openai_error,
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
@@ -51,6 +57,7 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
     endpoint: str | None = None
     api_version: str | None = None
     default_request_kwargs: dict[str, Any] = field(default_factory=dict)
+    retry_config: RetryConfig = field(default_factory=RetryConfig)
 
     _client_lock: Lock = field(default_factory=Lock, init=False, repr=False)
     _client: Any | None = field(default=None, init=False, repr=False)
@@ -86,10 +93,22 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
             api_kwargs["tool_choice"] = tool_choice_to_openai_format(request.tool_choice)
 
         start = time.perf_counter()
-        try:
-            resp = client.chat.completions.create(model=deployment, messages=messages, **api_kwargs)
-        except Exception as e:
-            raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
+        resp: Any | None = None
+        for attempt in range(1, self.retry_config.max_attempts + 1):
+            try:
+                resp = client.chat.completions.create(
+                    model=deployment,
+                    messages=messages,
+                    **api_kwargs,
+                )
+                break
+            except Exception as e:
+                if attempt >= self.retry_config.max_attempts or not is_retryable_openai_error(e):
+                    raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
+                delay = compute_retry_delay(self.retry_config, attempt)
+                time.sleep(delay)
+        if resp is None:
+            raise LLMError("Azure OpenAI request failed")
         end = time.perf_counter()
 
         # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
@@ -140,14 +159,22 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
             api_kwargs["tool_choice"] = tool_choice_to_openai_format(request.tool_choice)
 
         start = time.perf_counter()
-        try:
-            resp = await client.chat.completions.create(
-                model=deployment,
-                messages=messages,
-                **api_kwargs,
-            )
-        except Exception as e:
-            raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
+        resp: Any | None = None
+        for attempt in range(1, self.retry_config.max_attempts + 1):
+            try:
+                resp = await client.chat.completions.create(
+                    model=deployment,
+                    messages=messages,
+                    **api_kwargs,
+                )
+                break
+            except Exception as e:
+                if attempt >= self.retry_config.max_attempts or not is_retryable_openai_error(e):
+                    raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
+                delay = compute_retry_delay(self.retry_config, attempt)
+                await asyncio.sleep(delay)
+        if resp is None:
+            raise LLMError("Azure OpenAI request failed")
         end = time.perf_counter()
 
         # Extract tool calls (may be None if no tools called) - unwrap() raises LLMError on malformed
