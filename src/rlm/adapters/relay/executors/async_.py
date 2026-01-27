@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import time
 from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from rlm.domain.models.result import Err
+from rlm.domain.relay.errors import StateError
 from rlm.domain.relay.execution import PipelineStep
+from rlm.domain.relay.trace import PipelineTrace, TraceEntry
 
 if TYPE_CHECKING:
     from rlm.domain.relay.baton import Baton
-    from rlm.domain.relay.errors import StateError
     from rlm.domain.relay.pipeline import Edge, JoinGroup, Pipeline
     from rlm.domain.relay.ports import StateResult
     from rlm.domain.relay.state import StateSpec
@@ -25,6 +27,7 @@ class AsyncPipelineExecutor:
     _completed_joins: set[int]
     _current_state: StateSpec[object, object] | None
     _current_baton: Baton[object] | None
+    _trace: PipelineTrace
 
     def __init__(self, pipeline: Pipeline, initial_baton: Baton[object]) -> None:
         self.pipeline = pipeline
@@ -46,6 +49,7 @@ class AsyncPipelineExecutor:
         self._completed_joins = set()
         self._current_state = None
         self._current_baton = None
+        self._trace = PipelineTrace()
 
     def __aiter__(self) -> AsyncPipelineExecutor:
         return self
@@ -59,6 +63,13 @@ class AsyncPipelineExecutor:
         if not self._queue:
             raise StopAsyncIteration
         state, baton = self._queue.popleft()
+        if not self._has_budget(state, baton):
+            self._failed = StateError(
+                error_type="fatal",
+                message="Token budget exhausted for state.",
+                retry_hint="Increase TokenBudget or adjust per-state estimate.",
+            )
+            raise StopAsyncIteration
         self._current_state = state
         self._current_baton = baton
         next_states = self._predict_next_states(state)
@@ -70,6 +81,10 @@ class AsyncPipelineExecutor:
     @property
     def failed(self) -> StateError | None:
         return self._failed
+
+    @property
+    def trace(self) -> PipelineTrace:
+        return self._trace
 
     def _record_and_route(self, state: StateSpec[object, object], baton: Baton[object]) -> None:
         join_targets = self._handle_join_groups(state, baton)
@@ -84,10 +99,25 @@ class AsyncPipelineExecutor:
     def _advance_from_result(self, result: StateResult[object]) -> None:
         if isinstance(result, Err):
             self._failed = result.error
+            self._trace = self._trace.add(
+                TraceEntry(
+                    state_name=self._current_state.name if self._current_state else "<unknown>",
+                    status="error",
+                    finished_at=time.time(),
+                    error=str(result.error),
+                )
+            )
             self._queue.clear()
             return
         if self._current_state is None:
             return
+        self._trace = self._trace.add(
+            TraceEntry(
+                state_name=self._current_state.name,
+                status="completed",
+                finished_at=time.time(),
+            )
+        )
         self._record_and_route(self._current_state, result.value)
         self._current_state = None
         self._current_baton = None
@@ -137,6 +167,12 @@ class AsyncPipelineExecutor:
         state: StateSpec[object, object],
     ) -> tuple[Edge[object, object, object], ...]:
         return tuple(edge for edge in self.pipeline.edges if edge.from_state.name == state.name)
+
+    def _has_budget(self, state: StateSpec[object, object], baton: Baton[object]) -> bool:
+        if baton.metadata.budget is None:
+            return True
+        estimate = baton.metadata.budget.estimate_for(state.name)
+        return baton.metadata.budget.can_consume(estimate)
 
     def _join_groups_for_state(
         self,

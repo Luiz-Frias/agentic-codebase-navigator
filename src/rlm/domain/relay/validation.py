@@ -28,6 +28,7 @@ def validate_pipeline(pipeline: Pipeline) -> None:
         errors.append("Pipeline must define an entry state.")
 
     errors.extend(_validate_edges(pipeline.edges))
+    errors.extend(_validate_joins(pipeline.join_groups))
 
     if pipeline.entry_state is not None:
         errors.extend(_validate_reachability(pipeline.entry_state, pipeline.states, pipeline.edges))
@@ -56,6 +57,22 @@ def _validate_edges(edges: tuple[Edge[object, object, object], ...]) -> list[str
                 f"{edge.from_state.name} outputs {output_type}, "
                 f"but {edge.to_state.name} expects {input_type}."
             )
+    return errors
+
+
+def _validate_joins(join_groups: tuple) -> list[str]:
+    errors: list[str] = []
+    for group in join_groups:
+        mismatches = [
+            (
+                "Type mismatch: "
+                f"{source.name} outputs {source.output_type}, "
+                f"but {group.target.name} expects {group.target.input_type}."
+            )
+            for source in group.sources
+            if not _is_type_compatible(source.output_type, group.target.input_type)
+        ]
+        errors.extend(mismatches)
     return errors
 
 
