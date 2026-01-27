@@ -10,6 +10,8 @@ from rlm.domain.models.result import Err, Ok, Result
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from rlm.domain.relay.budget import TokenBudget
+
 T = TypeVar("T")
 
 
@@ -67,6 +69,8 @@ def _validate_payload[T](expected_type: type[T], payload: object) -> Result[T, V
 class BatonMetadata:
     trace_id: str
     created_at: float | None = None
+    budget: TokenBudget | None = None
+    tokens_consumed: int = 0
 
     @classmethod
     def create(
@@ -74,8 +78,15 @@ class BatonMetadata:
         *,
         trace_id: str | None = None,
         created_at: float | None = None,
+        budget: TokenBudget | None = None,
+        tokens_consumed: int = 0,
     ) -> BatonMetadata:
-        return cls(trace_id=trace_id or uuid4().hex, created_at=created_at)
+        return cls(
+            trace_id=trace_id or uuid4().hex,
+            created_at=created_at,
+            budget=budget,
+            tokens_consumed=tokens_consumed,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,3 +123,6 @@ class Baton[T]:
             trace=tuple(trace or ()),
         )
         return Ok(baton)
+
+    def with_trace_event(self, event: BatonTraceEvent) -> Baton[T]:
+        return Baton(payload=self.payload, metadata=self.metadata, trace=(*self.trace, event))
