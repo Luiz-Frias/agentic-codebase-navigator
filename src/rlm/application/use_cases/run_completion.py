@@ -20,7 +20,13 @@ if TYPE_CHECKING:
         ToolRegistryPort,
     )
     from rlm.domain.models.llm_request import ToolChoice
-    from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
+    from rlm.domain.ports import (
+        BrokerPort,
+        EnvironmentPort,
+        LLMPort,
+        LoggerPort,
+        NestedCallHandlerPort,
+    )
     from rlm.domain.types import Prompt
 
 
@@ -48,6 +54,16 @@ class EnvironmentFactory(Protocol):
         /,
     ) -> EnvironmentPort: ...
 
+    @overload
+    def build(
+        self,
+        broker: BrokerPort,
+        broker_address: tuple[str, int],
+        correlation_id: str | None,
+        nested_call_handler: NestedCallHandlerPort | None,
+        /,
+    ) -> EnvironmentPort: ...
+
     def build(self, *args: object) -> EnvironmentPort: ...
 
 
@@ -57,6 +73,7 @@ class EnvironmentFactory(Protocol):
 # - PARTIAL_SIGNATURE (2): build(broker, broker_address)
 # - MINIMAL_SIGNATURE (1): build(broker_address)
 _FULL_SIGNATURE_PARAMS = 3
+_EXTENDED_SIGNATURE_PARAMS = 4
 _PARTIAL_SIGNATURE_PARAMS = 2
 
 
@@ -65,8 +82,19 @@ def _try_build_with_fallback(
     broker: BrokerPort,
     broker_address: tuple[str, int],
     correlation_id: str | None,
+    nested_call_handler: NestedCallHandlerPort | None = None,
 ) -> EnvironmentPort:
     """Try factory call shapes in order from richest to minimal."""
+    if nested_call_handler is not None:
+        try:
+            return factory.build(  # type: ignore[misc]
+                broker,
+                broker_address,
+                correlation_id,
+                nested_call_handler,
+            )
+        except TypeError:
+            pass
     try:
         return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
     except TypeError:
@@ -82,6 +110,7 @@ def _build_environment(
     broker: BrokerPort,
     broker_address: tuple[str, int],
     correlation_id: str | None,
+    nested_call_handler: NestedCallHandlerPort | None = None,
     /,
 ) -> EnvironmentPort:
     """
@@ -99,7 +128,13 @@ def _build_environment(
         sig = inspect.signature(factory.build)
     except (TypeError, ValueError):
         # Fallback: try call shapes in order from richest to minimal.
-        return _try_build_with_fallback(factory, broker, broker_address, correlation_id)
+        return _try_build_with_fallback(
+            factory,
+            broker,
+            broker_address,
+            correlation_id,
+            nested_call_handler,
+        )
 
     params = list(sig.parameters.values())
     has_var_positional = any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in params)
@@ -122,11 +157,22 @@ def _build_environment(
     # Varargs or 3+ params: use full signature with correlation_id for tracing.
     # 2 params: use broker + address.
     # Otherwise: minimal with just address.
-    if has_var_positional or required_count >= _FULL_SIGNATURE_PARAMS:
-        return factory.build(broker, broker_address, correlation_id)  # type: ignore[misc]
-    if required_count >= _PARTIAL_SIGNATURE_PARAMS:
-        return factory.build(broker, broker_address)  # type: ignore[misc]
-    return factory.build(broker_address)  # type: ignore[misc]
+    call_args: tuple[object, ...]
+    if has_var_positional:
+        call_args = (
+            (broker, broker_address, correlation_id, nested_call_handler)
+            if nested_call_handler is not None
+            else (broker, broker_address, correlation_id)
+        )
+    elif required_count >= _EXTENDED_SIGNATURE_PARAMS:
+        call_args = (broker, broker_address, correlation_id, nested_call_handler)
+    elif required_count >= _FULL_SIGNATURE_PARAMS:
+        call_args = (broker, broker_address, correlation_id)
+    elif required_count >= _PARTIAL_SIGNATURE_PARAMS:
+        call_args = (broker, broker_address)
+    else:
+        call_args = (broker_address,)
+    return factory.build(*call_args)  # type: ignore[misc]
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +209,7 @@ class RunCompletionDeps:
     stopping_policy: StoppingPolicy | None = None
     context_compressor: ContextCompressor | None = None
     nested_call_policy: NestedCallPolicy | None = None
+    nested_call_handler: NestedCallHandlerPort | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +262,7 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 deps.broker,
                 broker_addr,
                 correlation_id,
+                deps.nested_call_handler,
             )
         except Exception as e:
             raise ExecutionError("Failed to build environment") from e
@@ -308,6 +356,7 @@ async def arun_completion(
                 deps.broker,
                 broker_addr,
                 correlation_id,
+                deps.nested_call_handler,
             )
         except Exception as e:
             raise ExecutionError("Failed to build environment") from e

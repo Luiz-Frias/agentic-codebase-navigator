@@ -16,6 +16,7 @@ from rlm.domain.models.model_spec import (
     ModelSpec,
     build_routing_rules,
 )
+from rlm.domain.models.nested_call import NestedCallResponse
 from rlm.domain.models.query_metadata import QueryMetadata
 from rlm.domain.models.repl import ReplResult
 from rlm.domain.models.result import Err, Ok, Result, try_call
@@ -34,6 +35,7 @@ __all__ = [
     "ModelRoutingRules",
     "ModelSpec",
     "ModelUsageSummary",
+    "NestedCallResponse",
     "Ok",
     "QueryMetadata",
     "ReplResult",

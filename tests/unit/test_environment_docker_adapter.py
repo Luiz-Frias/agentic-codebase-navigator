@@ -28,6 +28,7 @@ def _make_env(tmp_path: Path) -> DockerEnvironmentAdapter:
     env._calls_lock = threading.Lock()
     env._pending_calls = []
     env._container_id = "container"
+    env._depth = None
     env._tmp = SimpleNamespace(cleanup=lambda: None)
     env._proxy_server = None
     env._proxy_thread = None

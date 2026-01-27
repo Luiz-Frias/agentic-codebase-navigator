@@ -8,11 +8,12 @@ if TYPE_CHECKING:
         ChatCompletion,
         Iteration,
         LLMRequest,
+        NestedCallResponse,
         ReplResult,
         RunMetadata,
         UsageSummary,
     )
-    from rlm.domain.types import ContextPayload
+    from rlm.domain.types import ContextPayload, Prompt
 
 
 class LLMPort(Protocol):
@@ -74,3 +75,17 @@ class IdGeneratorPort(Protocol):
     """Port for generating correlation/run IDs (injectable for deterministic tests)."""
 
     def new_id(self) -> str: ...
+
+
+class NestedCallHandlerPort(Protocol):
+    """Port for handling nested llm_query() calls (optional)."""
+
+    def handle(
+        self,
+        prompt: Prompt,
+        /,
+        *,
+        depth: int,
+        correlation_id: str | None,
+        model: str | None,
+    ) -> NestedCallResponse: ...
