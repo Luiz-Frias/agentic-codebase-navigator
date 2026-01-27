@@ -19,6 +19,9 @@ from rlm.adapters.llm.provider_base import (
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
+from rlm.infrastructure.logging import get_infrastructure_logger
+
+logger = get_infrastructure_logger()
 
 
 def _require_litellm() -> Any:
@@ -76,6 +79,11 @@ class LiteLLMAdapter(BaseLLMAdapter):
         try:
             resp = litellm.completion(model=model, messages=messages, **api_kwargs)
         except Exception as e:
+            logger.debug(
+                "LiteLLM request failed: {exc_type}: {exc}",
+                exc_type=type(e).__name__,
+                exc=str(e),
+            )
             raise LLMError(safe_provider_error_message("LiteLLM", e)) from None
         end = time.perf_counter()
 
@@ -86,10 +94,15 @@ class LiteLLMAdapter(BaseLLMAdapter):
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:
+        except Exception as e:
             if tool_calls:
                 text = ""
             else:
+                logger.debug(
+                    "LiteLLM response invalid: {exc_type}: {exc}",
+                    exc_type=type(e).__name__,
+                    exc=str(e),
+                )
                 raise LLMError("LiteLLM response invalid") from None
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
@@ -124,6 +137,11 @@ class LiteLLMAdapter(BaseLLMAdapter):
         try:
             resp = await litellm.acompletion(model=model, messages=messages, **api_kwargs)
         except Exception as e:
+            logger.debug(
+                "LiteLLM async request failed: {exc_type}: {exc}",
+                exc_type=type(e).__name__,
+                exc=str(e),
+            )
             raise LLMError(safe_provider_error_message("LiteLLM", e)) from None
         end = time.perf_counter()
 
@@ -134,10 +152,15 @@ class LiteLLMAdapter(BaseLLMAdapter):
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:
+        except Exception as e:
             if tool_calls:
                 text = ""
             else:
+                logger.debug(
+                    "LiteLLM async response invalid: {exc_type}: {exc}",
+                    exc_type=type(e).__name__,
+                    exc=str(e),
+                )
                 raise LLMError("LiteLLM response invalid") from None
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)

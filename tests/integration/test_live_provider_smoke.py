@@ -14,10 +14,10 @@ from rlm.domain.ports import LLMPort
 from rlm.domain.models import ChatCompletion
 
 RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    base_delay_seconds=0.5,
-    max_delay_seconds=4.0,
-    jitter_seconds=0.25,
+    max_attempts=5,
+    base_delay_seconds=5.0,
+    max_delay_seconds=60.0,
+    jitter_seconds=3.14,
 )
 
 
@@ -58,7 +58,7 @@ def test_live_openai_adapter_smoke() -> None:
             api_version=api_version,
             retry_config=RETRY_CONFIG,
             default_request_kwargs={
-                "temperature": 0,
+                "temperature": 1,
                 "max_tokens": 16,
             },
         )
@@ -72,7 +72,7 @@ def test_live_openai_adapter_smoke() -> None:
             retry_config=RETRY_CONFIG,
             default_request_kwargs={
                 # Keep spend and latency low; be deterministic-ish.
-                "temperature": 0,
+                "temperature": 1,
                 "max_tokens": 16,
             },
         )
@@ -145,7 +145,7 @@ def test_live_openai_adapter_tool_calling() -> None:
             api_version=api_version,
             retry_config=RETRY_CONFIG,
             default_request_kwargs={
-                "temperature": 0,
+                "temperature": 1,
                 "max_tokens": 100,
             },
         )
@@ -158,7 +158,7 @@ def test_live_openai_adapter_tool_calling() -> None:
             base_url=base_url,
             retry_config=RETRY_CONFIG,
             default_request_kwargs={
-                "temperature": 0,
+                "temperature": 1,
                 "max_tokens": 100,
             },
         )

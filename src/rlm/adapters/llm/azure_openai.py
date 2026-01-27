@@ -25,6 +25,9 @@ from rlm.adapters.llm.retry import (
     is_retryable_openai_error,
 )
 from rlm.domain.errors import LLMError
+from rlm.infrastructure.logging import get_infrastructure_logger
+
+logger = get_infrastructure_logger()
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
 
 
@@ -104,6 +107,11 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
                 break
             except Exception as e:
                 if attempt >= self.retry_config.max_attempts or not is_retryable_openai_error(e):
+                    logger.debug(
+                        "Azure OpenAI request failed: {exc_type}: {exc}",
+                        exc_type=type(e).__name__,
+                        exc=str(e),
+                    )
                     raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
                 delay = compute_retry_delay(self.retry_config, attempt)
                 time.sleep(delay)
@@ -170,6 +178,11 @@ class AzureOpenAIAdapter(BaseLLMAdapter):
                 break
             except Exception as e:
                 if attempt >= self.retry_config.max_attempts or not is_retryable_openai_error(e):
+                    logger.debug(
+                        "Azure OpenAI async request failed: {exc_type}: {exc}",
+                        exc_type=type(e).__name__,
+                        exc=str(e),
+                    )
                     raise LLMError(safe_provider_error_message("Azure OpenAI", e)) from None
                 delay = compute_retry_delay(self.retry_config, attempt)
                 await asyncio.sleep(delay)

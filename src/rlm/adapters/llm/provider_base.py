@@ -75,6 +75,29 @@ def _load_pydantic_models() -> bool:
         return True
 
 
+def _sdk_object_to_dict(obj: object) -> dict[str, Any]:
+    """Convert SDK response objects to dicts for Pydantic validation."""
+    if isinstance(obj, dict):
+        return obj
+    # Try model_dump (Pydantic v2 style) or dict() (Pydantic v1 / SDK style)
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()  # type: ignore[union-attr]
+    if hasattr(obj, "dict"):
+        return obj.dict()  # type: ignore[union-attr]
+    # Manual extraction for SDK objects
+    result: dict[str, Any] = {}
+    for attr in ("id", "type", "function"):
+        if hasattr(obj, attr):
+            val = getattr(obj, attr)
+            if hasattr(val, "model_dump"):
+                result[attr] = val.model_dump()
+            elif hasattr(val, "dict"):
+                result[attr] = val.dict()
+            else:
+                result[attr] = val
+    return result
+
+
 def _validate_openai_tool_calls(
     raw_tool_calls: list[object],
 ) -> Result[list[ToolCallRequest], LLMError] | None:
@@ -91,9 +114,12 @@ def _validate_openai_tool_calls(
         return None  # Signal: use SafeAccessor fallback
 
     try:
+        # Convert SDK objects to dicts before Pydantic validation
+        tool_calls_as_dicts = [_sdk_object_to_dict(tc) for tc in raw_tool_calls]
+
         # TypeAdapter.validate_python() - runtime validation with coercion
         # pyright: ignore - TypeAdapter is dynamically imported
-        validated = _OpenAIToolCallsAdapter.validate_python(raw_tool_calls)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportAny]
+        validated = _OpenAIToolCallsAdapter.validate_python(tool_calls_as_dicts)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportAny]
 
         result: list[ToolCallRequest] = []
         for tc in validated:  # pyright: ignore[reportAny]
