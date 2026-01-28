@@ -9,4 +9,4 @@ JoinMode = Literal["all", "race"]
 @dataclass(frozen=True, slots=True)
 class JoinSpec:
     mode: JoinMode = "all"
-    timeout_seconds: float | None = None
+    timeout_seconds: float | None = 30.0

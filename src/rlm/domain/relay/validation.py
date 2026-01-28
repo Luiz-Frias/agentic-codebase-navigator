@@ -63,6 +63,14 @@ def _validate_edges(edges: tuple[Edge[object, object, object], ...]) -> list[str
 def _validate_joins(join_groups: tuple) -> list[str]:
     errors: list[str] = []
     for group in join_groups:
+        if group.join_spec.mode == "all":
+            if group.target.input_type is not dict:
+                errors.append(
+                    "Type mismatch: "
+                    f"{group.target.name} expects {group.target.input_type}, "
+                    "but join(all) aggregates into dict.",
+                )
+            continue
         mismatches = [
             (
                 "Type mismatch: "

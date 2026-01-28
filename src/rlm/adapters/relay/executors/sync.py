@@ -4,9 +4,10 @@ import time
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from rlm.domain.models.result import Err
+from rlm.domain.relay.baton import Baton, BatonMetadata, BatonTraceEvent
 from rlm.domain.relay.errors import StateError
 from rlm.domain.relay.execution import PipelineStep
 from rlm.domain.relay.trace import PipelineTrace, TraceEntry
@@ -14,7 +15,6 @@ from rlm.domain.relay.trace import PipelineTrace, TraceEntry
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from rlm.domain.relay.baton import Baton
     from rlm.domain.relay.pipeline import Edge, JoinGroup, Pipeline
     from rlm.domain.relay.ports import StateResult
     from rlm.domain.relay.state import StateSpec
@@ -138,11 +138,16 @@ class SyncPipelineExecutor:
                 continue
             group_state = self._join_state.setdefault(group_id, {})
             group_state[state.name] = baton
-            if group.join_spec.mode == "race" or all(
-                source.name in group_state for source in group.sources
-            ):
+            if group.join_spec.mode == "race":
                 self._completed_joins.add(group_id)
                 self._queue.append((group.target, baton))
+                continue
+            if all(source.name in group_state for source in group.sources):
+                merged = self._merge_join_baton(group_state)
+                if merged is None:
+                    return join_targets
+                self._completed_joins.add(group_id)
+                self._queue.append((group.target, merged))
         return join_targets
 
     def _route_guarded(
@@ -213,6 +218,41 @@ class SyncPipelineExecutor:
             if any(source.name == state.name for source in group.sources):
                 groups.append((idx, group))
         return groups
+
+    def _merge_join_baton(self, group_state: dict[str, Baton[object]]) -> Baton[object] | None:
+        ordered = sorted(group_state.items(), key=lambda item: item[0])
+        payload: dict[str, object] = {name: baton.payload for name, baton in ordered}
+        metadata = self._merge_join_metadata([baton for _, baton in ordered])
+        trace = self._merge_join_trace([baton for _, baton in ordered])
+        result = Baton.create(payload, dict, metadata=metadata, trace=trace)
+        if isinstance(result, Err):
+            self._failed = StateError(
+                error_type="fatal",
+                message=str(result.error),
+            )
+            self._queue.clear()
+            return None
+        return cast("Baton[object]", result.value)
+
+    def _merge_join_metadata(self, batons: list[Baton[object]]) -> BatonMetadata:
+        first = batons[0].metadata
+        created_values = [
+            b.metadata.created_at for b in batons if b.metadata.created_at is not None
+        ]
+        created_at = min(created_values) if created_values else first.created_at
+        tokens_consumed = sum(b.metadata.tokens_consumed for b in batons)
+        return BatonMetadata(
+            trace_id=first.trace_id,
+            created_at=created_at,
+            budget=first.budget,
+            tokens_consumed=tokens_consumed,
+        )
+
+    def _merge_join_trace(self, batons: list[Baton[object]]) -> tuple[BatonTraceEvent, ...]:
+        merged: list[BatonTraceEvent] = []
+        for baton in batons:
+            merged.extend(baton.trace)
+        return tuple(merged)
 
     def _predict_next_states(
         self, state: StateSpec[object, object]

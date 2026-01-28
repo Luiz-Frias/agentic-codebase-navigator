@@ -40,9 +40,14 @@ class ParallelGroup[InputT, OutputT]:
         mode: JoinMode = "all",
         timeout_seconds: float | None = None,
     ) -> ParallelGroup[InputT, OutputT]:
+        join_spec = (
+            JoinSpec(mode=mode)
+            if timeout_seconds is None
+            else JoinSpec(mode=mode, timeout_seconds=timeout_seconds)
+        )
         return ParallelGroup(
             states=self.states,
-            join_spec=JoinSpec(mode=mode, timeout_seconds=timeout_seconds),
+            join_spec=join_spec,
         )
 
     def __rshift__[NextT](self, other: StateSpec[OutputT, NextT]) -> Pipeline:

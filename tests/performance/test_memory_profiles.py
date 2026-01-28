@@ -11,6 +11,9 @@ Tests focus on:
 from __future__ import annotations
 
 import gc
+import os
+from pathlib import Path
+import tracemalloc
 
 import pytest
 
@@ -272,31 +275,159 @@ def test_cleanup_releases_memory() -> None:
     """
     from rlm.adapters.environments.local import LocalEnvironmentAdapter
 
+    report_enabled = os.getenv("RLM_MEMORY_REPORT") == "1"
+    tolerance_ratio = float(os.getenv("RLM_MEMORY_TOLERANCE_RATIO", "0.05"))
+    tolerance_floor = int(os.getenv("RLM_MEMORY_TOLERANCE_FLOOR", "1000000"))
+    report_path = Path(
+        os.getenv("RLM_MEMORY_REPORT_PATH", ".benchmarks/memory_report_local_env.txt"),
+    )
+
+    try:
+        import psutil  # type: ignore[import-not-found]
+    except Exception:  # noqa: BLE001
+        psutil = None
+
+    snapshots: list[tuple[str, tracemalloc.Snapshot]] = []
+    bytes_by_label: dict[str, int] = {}
+    rss_by_label: dict[str, int | None] = {}
+    child_rss_by_label: dict[str, int | None] = {}
+
+    def _safe_rss_bytes(pid: int | None) -> int | None:
+        if psutil is None or pid is None:
+            return None
+        try:
+            proc = psutil.Process(pid)
+            return int(proc.memory_info().rss)
+        except Exception:  # noqa: BLE001
+            return None
+
+    env: LocalEnvironmentAdapter | None = None
+
+    def _child_pid() -> int | None:
+        if env is None:
+            return None
+        proc = getattr(env, "_worker_process", None)
+        return getattr(proc, "pid", None) if proc is not None else None
+
+    def _record(label: str) -> None:
+        current_bytes, _ = tracemalloc.get_traced_memory()
+        bytes_by_label[label] = current_bytes
+        rss_by_label[label] = _safe_rss_bytes(os.getpid())
+        child_rss_by_label[label] = _safe_rss_bytes(_child_pid())
+        if report_enabled:
+            snapshots.append((label, tracemalloc.take_snapshot()))
+
     gc.collect()
-    baseline_objects = len(gc.get_objects())
+    tracemalloc.start()
+    _record("baseline")
+
+    context = generate_large_context(num_keys=100, value_size=10000)
+    gc.collect()
+    _record("after_context")
 
     env = LocalEnvironmentAdapter()
-    env.load_context(generate_large_context(num_keys=100, value_size=10000))
+    gc.collect()
+    _record("after_env")
+
+    env.load_context(context)
+    gc.collect()
+    _record("after_load")
 
     # Execute some code to populate namespace
     for i in range(10):
         env.execute_code(f"data_{i} = 'x' * 10000")
 
-    after_use_objects = len(gc.get_objects())
+    gc.collect()
+    _record("after_exec")
 
     env.cleanup()
     gc.collect()
 
-    after_cleanup_objects = len(gc.get_objects())
+    _record("after_cleanup")
 
-    # Should release most objects created during use
-    objects_released = after_use_objects - after_cleanup_objects
-    objects_added = after_use_objects - baseline_objects
+    env = None
+    context = None
+    gc.collect()
+    _record("after_del")
 
-    # Should release at least 50% of objects
-    assert objects_released > objects_added * 0.5, (
-        f"Cleanup didn't release enough objects: {objects_released} released of {objects_added} added"
+    tracemalloc.stop()
+
+    baseline_bytes = bytes_by_label["baseline"]
+    after_context_bytes = bytes_by_label["after_context"]
+    after_load_bytes = bytes_by_label["after_load"]
+    after_exec_bytes = bytes_by_label["after_exec"]
+    after_cleanup_bytes = bytes_by_label["after_cleanup"]
+    after_del_bytes = bytes_by_label["after_del"]
+
+    load_delta = max(0, after_load_bytes - after_context_bytes)
+    exec_delta = max(0, after_exec_bytes - after_load_bytes)
+    total_added = max(0, after_exec_bytes - baseline_bytes)
+    bytes_released = max(0, after_exec_bytes - after_cleanup_bytes)
+
+    # Phase 1 (load_context): ensure overhead is bounded.
+    assert load_delta < 1_000_000, (
+        "Context load memory too high: "
+        f"{load_delta} bytes allocated"
     )
+
+    # Phase 2 (execute_code): ensure overhead is bounded.
+    assert exec_delta < 500_000, (
+        "Execute memory too high: "
+        f"{exec_delta} bytes allocated"
+    )
+
+    # Cleanup should release a meaningful share of execution allocations.
+    if exec_delta > 0:
+        assert bytes_released > exec_delta * 0.5, (
+            "Cleanup didn't release enough memory after execution: "
+            f"{bytes_released} bytes released of {exec_delta} added "
+            f"(load={load_delta} bytes, total={total_added} bytes)"
+        )
+
+    # End-of-life: memory should return near baseline within tolerance.
+    allowed_delta = max(tolerance_floor, int(baseline_bytes * tolerance_ratio))
+    assert abs(after_del_bytes - baseline_bytes) <= allowed_delta, (
+        "End-of-life memory not near baseline: "
+        f"baseline={baseline_bytes} bytes, after_del={after_del_bytes} bytes, "
+        f"allowed_delta={allowed_delta} bytes"
+    )
+
+    if report_enabled:
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        lines: list[str] = [
+            "Memory report: test_cleanup_releases_memory",
+            "",
+            "Stage bytes:",
+        ]
+        for label, _snapshot in snapshots:
+            rss = rss_by_label.get(label)
+            child_rss = child_rss_by_label.get(label)
+            rss_text = f"{rss} bytes" if isinstance(rss, int) else "n/a"
+            child_text = f"{child_rss} bytes" if isinstance(child_rss, int) else "n/a"
+            lines.append(
+                f"- {label}: {bytes_by_label[label]} bytes "
+                f"(rss={rss_text}, worker_rss={child_text})",
+            )
+        lines.append("")
+        lines.append("Top allocation diffs:")
+        for (before_label, before_snap), (after_label, after_snap) in zip(
+            snapshots,
+            snapshots[1:],
+        ):
+            lines.append(f"{before_label} -> {after_label}")
+            stats = after_snap.compare_to(before_snap, "lineno")[:10]
+            if not stats:
+                lines.append("  (no diffs)")
+                continue
+            for stat in stats:
+                frame = stat.traceback[0]
+                size_kb = stat.size_diff / 1024
+                lines.append(
+                    f"  {size_kb:8.1f} KiB {stat.count_diff:+} "
+                    f"{frame.filename}:{frame.lineno}",
+                )
+            lines.append("")
+        report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 @pytest.mark.performance

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -11,6 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from rlm.domain.relay.join import JoinSpec
+    from rlm.domain.relay.ports import StateExecutorPort
     from rlm.domain.relay.state import StateSpec
 
 
@@ -124,6 +126,26 @@ class Pipeline:
 
     def validate(self) -> None:
         validate_pipeline(self)
+
+    def as_state[InputT, OutputT](
+        self,
+        *,
+        name: str,
+        input_type: type[InputT],
+        output_type: type[OutputT],
+        executor: StateExecutorPort[InputT, OutputT],
+    ) -> StateSpec[InputT, OutputT]:
+        state_module = importlib.import_module("rlm.domain.relay.state")
+        state_spec = cast(
+            "type[StateSpec[InputT, OutputT]]",
+            state_module.StateSpec,
+        )
+        return state_spec(
+            name=name,
+            input_type=input_type,
+            output_type=output_type,
+            executor=executor,
+        )
 
 
 class ConditionalPipeline[InputT, OutputT, NextT](Pipeline):
