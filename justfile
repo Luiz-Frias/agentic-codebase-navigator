@@ -37,6 +37,7 @@ pc-staged:
     @echo "→ Staging all changes and running pre-commit..."
     git add -A
     prek run --all-files
+    @echo "✓ All pre-commit hooks passed"
 
 # Full gate: stage, run pre-commit, then pre-push hooks
 pc-full:

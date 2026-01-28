@@ -12,6 +12,9 @@ from rlm.domain.models import LLMRequest
 from rlm.domain.errors import LLMError
 from rlm.domain.ports import LLMPort
 from rlm.domain.models import ChatCompletion
+from tests.live_llm import load_env_files
+
+load_env_files()
 
 RETRY_CONFIG = RetryConfig(
     max_attempts=5,
