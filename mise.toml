@@ -7,17 +7,20 @@
 PYTHONDONTWRITEBYTECODE = "1"
 PYTHONUNBUFFERED = "1"
 
-# Auto-activate .venv when entering directory (create if missing)
-# This replaces the need for `source .venv/bin/activate` in .envrc
-_.python.venv = { path = ".venv", create = true }
-
 # Load secrets from .env
 _.file = ".env"
 
+# Auto-activate .venv when entering directory (mise uses uv to create it)
+# uv reads Python version from .python-version or pyproject.toml [project.requires-python]
+_.python.venv = { path = ".venv", create = true }
+
+[settings.python]
+# Use uv for venv creation when uv.lock exists (no mise Python needed)
+uv_venv_auto = true
+
 [tools]
-# Python 3.12+ (matches pyproject.toml requires-python)
-python = "3.12"
-# uv for package management
+# Python version managed by uv (reads .python-version or pyproject.toml)
+# mise delegates venv creation to uv when uv is installed
 uv = "latest"
 just = "latest"
 # prek (pre-commit-rs) - fast Rust-based pre-commit runner
@@ -36,5 +39,9 @@ description = "Full pre-commit + pre-push gate"
 run = "just pc-full"
 
 [tasks.sync]
-description = "Sync dependencies"
-run = "uv sync"
+description = "Sync dependencies (dev + test groups)"
+run = "uv sync --group dev --group test"
+
+[hooks]
+# Auto-sync dev+test dependencies when entering the project directory
+enter = "uv sync --group dev --group test --quiet"
