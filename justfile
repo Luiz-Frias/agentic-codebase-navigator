@@ -218,6 +218,65 @@ commit-ai: commit-msg
     fi
 
 # =============================================================================
+# SOPS / SECRETS MANAGEMENT
+# =============================================================================
+
+# Generate age keypair (one-time per machine)
+sops-init:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    KEY_DIR="${HOME}/.config/sops/age"
+    KEY_FILE="${KEY_DIR}/keys.txt"
+    if [[ -f "$KEY_FILE" ]]; then
+        echo "✓ Age key already exists at: $KEY_FILE"
+        echo ""
+        echo "Your public key:"
+        grep "public key:" "$KEY_FILE" | cut -d: -f2 | tr -d ' '
+        echo ""
+        echo "Add this to .sops.yaml under 'age:' to enable decryption on this machine."
+        exit 0
+    fi
+    mkdir -p "$KEY_DIR"
+    age-keygen -o "$KEY_FILE"
+    chmod 600 "$KEY_FILE"
+    echo ""
+    echo "✓ Key generated! Add the public key above to .sops.yaml"
+
+# Show your age public key (for adding to .sops.yaml)
+sops-pubkey:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    KEY_FILE="${HOME}/.config/sops/age/keys.txt"
+    if [[ -f "$KEY_FILE" ]]; then
+        grep "public key:" "$KEY_FILE" | cut -d: -f2 | tr -d ' '
+    else
+        echo "No key found. Run: just sops-init"
+        exit 1
+    fi
+
+# Encrypt .env → .env.enc
+sops-encrypt:
+    @echo "→ Encrypting .env..."
+    sops -e --input-type dotenv --output-type dotenv --output .env.enc .env
+    @echo "✓ Created .env.enc"
+
+# Decrypt .env.enc → .env
+sops-decrypt:
+    @echo "→ Decrypting .env.enc..."
+    sops -d --input-type dotenv --output-type dotenv .env.enc > .env
+    @echo "✓ Created .env"
+
+# Edit .env.enc in-place (opens $EDITOR)
+sops-edit:
+    sops --input-type dotenv --output-type dotenv .env.enc
+
+# Re-encrypt .env.enc after adding new recipient keys to .sops.yaml
+sops-updatekeys:
+    @echo "→ Re-encrypting with updated recipients..."
+    sops updatekeys .env.enc
+    @echo "✓ Updated .env.enc with new recipients"
+
+# =============================================================================
 # HELP
 # =============================================================================
 
@@ -239,7 +298,15 @@ help:
     @echo "  just commit-msg # Generate AI commit message (copies to clipboard)"
     @echo "  just commit-ai  # Generate + commit interactively"
     @echo ""
-    @echo "Before Committing:"
+    @echo "Secrets (SOPS + age):"
+    @echo "  just sops-init       # Generate age keypair (one-time per machine)"
+    @echo "  just sops-pubkey     # Show your public key (add to .sops.yaml)"
+    @echo "  just sops-encrypt    # Encrypt .env → .env.enc"
+    @echo "  just sops-decrypt    # Decrypt .env.enc → .env"
+    @echo "  just sops-edit       # Edit encrypted file in \$EDITOR"
+    @echo "  just sops-updatekeys # Re-encrypt after adding new recipients"
+    @echo ""
+    @echo "Before Committing:
     @echo "  just pc-all    # Run all pre-commit hooks"
     @echo ""
     @echo "Before Pushing:"

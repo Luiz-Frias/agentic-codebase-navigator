@@ -25,5 +25,11 @@ paths = [
     '''CHANGELOG\.md''',
     '''/tests/fixtures/''',
     '''/tests/unit/fixtures/''',
-    '''/docs/examples/'''
+    '''/docs/examples/''',
+    # SOPS config contains age PUBLIC keys (meant to be committed)
+    '''\.sops\.yaml'''
+]
+regexes = [
+    # age public keys start with "age1" - these are safe to commit (only private keys are secret)
+    '''age1[a-z0-9]{58}'''
 ]
