@@ -77,14 +77,14 @@ def get_live_llm_settings() -> LiveLLMSettings:
     except Exception:
         pytest.skip("openai package not available")
 
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = os.environ.get("ACN_OPENAI_API_KEY")
     if not api_key:
-        pytest.skip("OPENAI_API_KEY not set")
+        pytest.skip("ACN_OPENAI_API_KEY not set")
 
-    model = os.environ.get("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
-    base_url = os.environ.get("OPENAI_BASE_URL")
-    api_version = os.environ.get("OPENAI_API_VERSION")
-    model_sub = os.environ.get("OPENAI_MODEL_SUB") or model
+    model = os.environ.get("ACN_OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
+    base_url = os.environ.get("ACN_OPENAI_BASE_URL")
+    api_version = os.environ.get("ACN_OPENAI_API_VERSION")
+    model_sub = os.environ.get("ACN_OPENAI_MODEL_SUB") or model
 
     return LiveLLMSettings(
         api_key=api_key,
