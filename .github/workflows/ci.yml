@@ -13,7 +13,7 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: jdx/mise-action@v3
         with:
           experimental: true  # Required for some mise features
@@ -29,7 +29,7 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: jdx/mise-action@v3
         with:
           experimental: true
@@ -41,7 +41,7 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: jdx/mise-action@v3
         with:
           experimental: true
@@ -53,7 +53,7 @@ jobs:
   packaging:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: jdx/mise-action@v3
         with:
           experimental: true
