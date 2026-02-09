@@ -9,6 +9,9 @@ import pytest
 from rlm.adapters.llm.retry import RetryConfig
 from rlm.application.relay.root_composer import RootAgentComposer
 from rlm.domain.relay import InMemoryPipelineRegistry, PipelineTemplate, StateSpec
+from tests.live_llm import load_env_files
+
+load_env_files()
 
 RETRY_CONFIG = RetryConfig(
     max_attempts=3,

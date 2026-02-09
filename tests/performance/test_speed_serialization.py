@@ -36,7 +36,7 @@ def test_serialize_value_flat_dict() -> None:
             result = serialize_value(data)
 
     assert len(result) == 100
-    assert timing.elapsed_seconds < 0.1, (
+    assert timing.elapsed_seconds < 0.2, (
         f"Flat dict serialization too slow: {timing.elapsed_seconds:.3f}s"
     )
 

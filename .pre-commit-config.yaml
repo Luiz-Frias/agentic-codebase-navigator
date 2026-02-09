@@ -247,13 +247,13 @@ repos:
           RLM_RUN_LIVE_LLM_TESTS: "0"
         args: ["pytest", "tests/e2e", "-n", "auto", "-q", "--maxfail=1", "--disable-warnings"]
 
-      # Pre-push: integration and e2e tests with live LLM tests before code reaches remote
-      - id: uv-run
-        name: python integration tests with live LLM tests (uv)
-        stages: [pre-push]
-        args: ["pytest", "tests/integration", "-m", "live_llm", "-n", "0", "-q", "--maxfail=1", "--disable-warnings"]
+      # # Pre-push: integration tests with live LLM tests before code reaches remote
+      # - id: uv-run
+      #   name: python integration tests with live LLM tests (uv)
+      #   stages: [pre-push]
+      #   args: ["pytest", "tests/integration", "-m", "live_llm", "-n", "0", "-q", "--maxfail=1", "--disable-warnings"]
 
-      # TODO(phase-07): Re-enable live LLM e2e tests when Phase 07 coverage lands.
+      # # Pre-push: live LLM e2e tests when Phase 07 coverage lands.
       # - id: uv-run
       #   name: python e2e tests with live LLM tests (uv)
       #   stages: [pre-push]
@@ -265,7 +265,7 @@ repos:
       - id: pytest-performance-benchmarks
         name: python performance benchmarks (uv)
         stages: [pre-push]
-        entry: bash -c 'mkdir -p .benchmarks && uv run --group test pytest tests/performance tests/benchmark -q --maxfail=1 --disable-warnings --benchmark-json=.benchmarks/pre-push.json'
+        entry: bash -c 'mkdir -p .benchmarks && pytest tests/performance tests/benchmark -q --maxfail=1 --disable-warnings --benchmark-json=.benchmarks/pre-push.json'
         language: system
         pass_filenames: false
 

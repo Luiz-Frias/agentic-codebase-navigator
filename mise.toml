@@ -3,6 +3,9 @@
 # Docs: https://mise.jdx.dev/
 
 [env]
+# SOPS age key location (for encrypted secrets)
+SOPS_AGE_KEY_FILE = "{{env.HOME}}/.config/sops/age/keys.txt"
+
 # Project-specific env vars (loaded automatically when entering directory)
 PYTHONDONTWRITEBYTECODE = "1"
 PYTHONUNBUFFERED = "1"
@@ -25,6 +28,9 @@ uv = "latest"
 just = "latest"
 # prek (pre-commit-rs) - fast Rust-based pre-commit runner
 "github:j178/prek" = "latest"
+# SOPS + age - encrypted secrets management
+sops = "latest"
+age = "latest"
 
 [tasks.check]
 description = "Run linting and type checks"

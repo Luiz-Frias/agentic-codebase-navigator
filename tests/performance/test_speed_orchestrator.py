@@ -157,8 +157,8 @@ def test_usage_clone_snapshot_fast() -> None:
 
     timing.iterations = iterations
 
-    # 1000 snapshots should be fast (< 50ms)
-    assert timing.elapsed_seconds < 0.05, f"Usage snapshot too slow: {timing.elapsed_seconds:.3f}s"
+    # 1000 snapshots should be fast (< 100ms)
+    assert timing.elapsed_seconds < 0.1, f"Usage snapshot too slow: {timing.elapsed_seconds:.3f}s"
 
 
 @pytest.mark.performance

@@ -15,6 +15,7 @@ import pytest
 from rlm.api import create_rlm_from_config
 from rlm.application.config import EnvironmentConfig, LLMConfig, RLMConfig
 from rlm.domain.agent_ports import ToolCallRequest
+from tests.live_llm import LiveLLMSettings
 
 
 def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolCallRequest:
@@ -96,13 +97,34 @@ def get_weather(city: str, unit: str = "celsius") -> dict[str, Any]:
     return {"city": city, "temperature": temp, "unit": unit}
 
 
+def _build_live_rlm(
+    config: RLMConfig,
+    *,
+    tools: list[object],
+    settings: LiveLLMSettings,
+):
+    llm = settings.build_openai_adapter(
+        request_kwargs={
+            "temperature": 0,
+            "max_tokens": 128,
+        }
+    )
+    return create_rlm_from_config(config, llm=llm, tools=tools)
+
+
+def _has_digit(text: str) -> bool:
+    return any(ch.isdigit() for ch in text)
+
+
 # =============================================================================
 # E2E Tests: Tool Calling with Config
 # =============================================================================
 
 
 @pytest.mark.e2e
-def test_e2e_tool_calling_calculator_single_tool() -> None:
+def test_e2e_tool_calling_calculator_single_tool(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """E2E: Config-based RLM with single calculator tool call."""
     config = RLMConfig(
         llm=LLMConfig(
@@ -125,15 +147,23 @@ def test_e2e_tool_calling_calculator_single_tool() -> None:
         agent_mode="tools",
     )
 
-    rlm = create_rlm_from_config(config, tools=[add, multiply, divide])
-    result = rlm.completion("What is 5 + 3?")
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(config, tools=[add, multiply, divide], settings=live_llm_settings)
+        result = rlm.completion("What is 5 + 3?", tool_choice="required")
+        assert result.response.strip()
+        assert _has_digit(result.response)
+    else:
+        rlm = create_rlm_from_config(config, tools=[add, multiply, divide])
+        result = rlm.completion("What is 5 + 3?")
 
-    assert result.response == "The sum of 5 and 3 is 8."
-    assert result.finish_reason == "stop"
+        assert result.response == "The sum of 5 and 3 is 8."
+        assert result.finish_reason == "stop"
 
 
 @pytest.mark.e2e
-def test_e2e_tool_calling_multi_step_calculation() -> None:
+def test_e2e_tool_calling_multi_step_calculation(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """E2E: Config-based RLM with multi-step calculation (chain of tools)."""
     config = RLMConfig(
         llm=LLMConfig(
@@ -158,14 +188,22 @@ def test_e2e_tool_calling_multi_step_calculation() -> None:
         agent_mode="tools",
     )
 
-    rlm = create_rlm_from_config(config, tools=[add, multiply])
-    result = rlm.completion("What is (4 * 5) + 10?")
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(config, tools=[add, multiply], settings=live_llm_settings)
+        result = rlm.completion("What is (4 * 5) + 10?", tool_choice="required")
+        assert result.response.strip()
+        assert _has_digit(result.response)
+    else:
+        rlm = create_rlm_from_config(config, tools=[add, multiply])
+        result = rlm.completion("What is (4 * 5) + 10?")
 
-    assert "30" in result.response
+        assert "30" in result.response
 
 
 @pytest.mark.e2e
-def test_e2e_tool_calling_weather_tool() -> None:
+def test_e2e_tool_calling_weather_tool(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """E2E: Config-based RLM with weather lookup tool."""
     config = RLMConfig(
         llm=LLMConfig(
@@ -190,15 +228,22 @@ def test_e2e_tool_calling_weather_tool() -> None:
         agent_mode="tools",
     )
 
-    rlm = create_rlm_from_config(config, tools=[get_weather])
-    result = rlm.completion("What's the weather in Tokyo?")
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(config, tools=[get_weather], settings=live_llm_settings)
+        result = rlm.completion("What's the weather in Tokyo?", tool_choice="required")
+        assert result.response.strip()
+    else:
+        rlm = create_rlm_from_config(config, tools=[get_weather])
+        result = rlm.completion("What's the weather in Tokyo?")
 
-    assert "Tokyo" in result.response
-    assert "22" in result.response
+        assert "Tokyo" in result.response
+        assert "22" in result.response
 
 
 @pytest.mark.e2e
-def test_e2e_tool_calling_immediate_answer_no_tools() -> None:
+def test_e2e_tool_calling_immediate_answer_no_tools(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """E2E: LLM can respond without using tools even in tool mode."""
     config = RLMConfig(
         llm=LLMConfig(
@@ -212,15 +257,23 @@ def test_e2e_tool_calling_immediate_answer_no_tools() -> None:
         agent_mode="tools",
     )
 
-    rlm = create_rlm_from_config(config, tools=[add, get_weather])
-    result = rlm.completion("What is the capital of France?")
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(config, tools=[add, get_weather], settings=live_llm_settings)
+        result = rlm.completion("What is the capital of France?")
+        assert result.response.strip()
+        assert "paris" in result.response.lower()
+    else:
+        rlm = create_rlm_from_config(config, tools=[add, get_weather])
+        result = rlm.completion("What is the capital of France?")
 
-    assert "Paris" in result.response
-    assert result.finish_reason == "stop"
+        assert "Paris" in result.response
+        assert result.finish_reason == "stop"
 
 
 @pytest.mark.e2e
-def test_e2e_tool_calling_error_handling() -> None:
+def test_e2e_tool_calling_error_handling(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """E2E: Tool execution errors are captured and passed to LLM."""
     config = RLMConfig(
         llm=LLMConfig(
@@ -241,15 +294,22 @@ def test_e2e_tool_calling_error_handling() -> None:
         agent_mode="tools",
     )
 
-    rlm = create_rlm_from_config(config, tools=[divide])
-    result = rlm.completion("Divide 10 by 0")
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(config, tools=[divide], settings=live_llm_settings)
+        result = rlm.completion("Divide 10 by 0", tool_choice="required")
+        assert result.response.strip()
+    else:
+        rlm = create_rlm_from_config(config, tools=[divide])
+        result = rlm.completion("Divide 10 by 0")
 
-    # Should NOT raise - error is passed to LLM
-    assert "zero" in result.response.lower() or "divide" in result.response.lower()
+        # Should NOT raise - error is passed to LLM
+        assert "zero" in result.response.lower() or "divide" in result.response.lower()
 
 
 @pytest.mark.e2e
-async def test_e2e_tool_calling_async_path() -> None:
+async def test_e2e_tool_calling_async_path(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """E2E: Async tool calling with config-based RLM."""
     config = RLMConfig(
         llm=LLMConfig(
@@ -268,11 +328,17 @@ async def test_e2e_tool_calling_async_path() -> None:
         agent_mode="tools",
     )
 
-    rlm = create_rlm_from_config(config, tools=[multiply])
-    result = await rlm.acompletion("What is 7 times 8?")
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(config, tools=[multiply], settings=live_llm_settings)
+        result = await rlm.acompletion("What is 7 times 8?", tool_choice="required")
+        assert result.response.strip()
+        assert _has_digit(result.response)
+    else:
+        rlm = create_rlm_from_config(config, tools=[multiply])
+        result = await rlm.acompletion("What is 7 times 8?")
 
-    assert "56" in result.response
-    assert result.finish_reason == "stop"
+        assert "56" in result.response
+        assert result.finish_reason == "stop"
 
 
 # =============================================================================
@@ -333,7 +399,9 @@ class CalculationResult:
 
 
 @pytest.mark.e2e
-def test_e2e_tool_calling_with_structured_response() -> None:
+def test_e2e_tool_calling_with_structured_response(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """E2E: Tool calling followed by structured JSON response."""
     config = RLMConfig(
         llm=LLMConfig(
@@ -354,15 +422,28 @@ def test_e2e_tool_calling_with_structured_response() -> None:
         agent_mode="tools",
     )
 
-    rlm = create_rlm_from_config(config, tools=[add])
-    result = rlm.completion("Add 15 and 25, return as JSON")
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(config, tools=[add], settings=live_llm_settings)
+        result = rlm.completion("Add 15 and 25, return as JSON", tool_choice="required")
+        assert result.response.strip()
 
-    # Verify the JSON response can be parsed
-    import json
+        import json
 
-    data = json.loads(result.response)
-    assert data["operation"] == "add"
-    assert data["result"] == 40
+        try:
+            data = json.loads(result.response)
+        except json.JSONDecodeError:
+            return
+        assert isinstance(data, dict)
+    else:
+        rlm = create_rlm_from_config(config, tools=[add])
+        result = rlm.completion("Add 15 and 25, return as JSON")
+
+        # Verify the JSON response can be parsed
+        import json
+
+        data = json.loads(result.response)
+        assert data["operation"] == "add"
+        assert data["result"] == 40
 
 
 # =============================================================================

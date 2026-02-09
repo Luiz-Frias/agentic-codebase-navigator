@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from rlm.domain.models import (
@@ -77,6 +77,7 @@ class IdGeneratorPort(Protocol):
     def new_id(self) -> str: ...
 
 
+@runtime_checkable
 class NestedCallHandlerPort(Protocol):
     """Port for handling nested llm_query() calls (optional)."""
 

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from rlm.adapters.relay.states.pipeline_state import SyncPipelineStateExecutor
+from rlm.domain.agent_ports import NestedCallPolicy, NestedConfig
 from rlm.domain.errors import ValidationError
 from rlm.domain.models.nested_call import NestedCallResponse
 from rlm.domain.models.result import Err
@@ -22,10 +23,18 @@ class ComposerPort(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class RelayNestedCallHandler(NestedCallHandlerPort):
+class RelayNestedCallHandler(NestedCallHandlerPort, NestedCallPolicy):
     registry: PipelineRegistry
     composer: ComposerPort
     max_depth: int = 3
+
+    def should_orchestrate(self, prompt: str, depth: int) -> bool:
+        if depth >= self.max_depth:
+            return False
+        return bool(self.registry.search(str(prompt)))
+
+    def get_nested_config(self) -> NestedConfig:
+        return NestedConfig(max_depth=self.max_depth)
 
     def handle(
         self,
@@ -37,7 +46,7 @@ class RelayNestedCallHandler(NestedCallHandlerPort):
         model: str | None,
     ) -> NestedCallResponse:
         _ = (correlation_id, model)
-        if depth >= self.max_depth:
+        if not self.should_orchestrate(str(prompt), depth):
             return NestedCallResponse.not_handled()
 
         candidates = self.registry.search(str(prompt))
