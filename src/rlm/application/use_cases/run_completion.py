@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Protocol, overload
 from rlm.domain.errors import BrokerError, ExecutionError, RLMError
 from rlm.domain.models import ChatCompletion, RunMetadata
 from rlm.domain.models.usage import merge_usage_summaries
+from rlm.domain.ports import NestedCallHandlerPort
 from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
 from rlm.domain.services.rlm_orchestrator import AgentMode, RLMOrchestrator
 
@@ -25,7 +26,6 @@ if TYPE_CHECKING:
         EnvironmentPort,
         LLMPort,
         LoggerPort,
-        NestedCallHandlerPort,
     )
     from rlm.domain.types import Prompt
 
@@ -75,6 +75,19 @@ class EnvironmentFactory(Protocol):
 _FULL_SIGNATURE_PARAMS = 3
 _EXTENDED_SIGNATURE_PARAMS = 4
 _PARTIAL_SIGNATURE_PARAMS = 2
+
+
+def _resolve_nested_call_handler(
+    handler: NestedCallHandlerPort | None,
+    policy: NestedCallPolicy | None,
+) -> NestedCallHandlerPort | None:
+    if handler is not None:
+        return handler
+    if policy is None:
+        return None
+    if isinstance(policy, NestedCallHandlerPort):
+        return policy
+    return None
 
 
 def _try_build_with_fallback(
@@ -262,7 +275,10 @@ def run_completion(request: RunCompletionRequest, *, deps: RunCompletionDeps) ->
                 deps.broker,
                 broker_addr,
                 correlation_id,
-                deps.nested_call_handler,
+                _resolve_nested_call_handler(
+                    deps.nested_call_handler,
+                    deps.nested_call_policy,
+                ),
             )
         except Exception as e:
             raise ExecutionError("Failed to build environment") from e
@@ -356,7 +372,10 @@ async def arun_completion(
                 deps.broker,
                 broker_addr,
                 correlation_id,
-                deps.nested_call_handler,
+                _resolve_nested_call_handler(
+                    deps.nested_call_handler,
+                    deps.nested_call_policy,
+                ),
             )
         except Exception as e:
             raise ExecutionError("Failed to build environment") from e

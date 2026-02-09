@@ -8,6 +8,7 @@ from shutil import which
 
 import pytest
 
+from rlm.domain.policies import timeouts as t
 from tests.live_llm import LiveLLMSettings, get_live_llm_settings, live_llm_enabled
 
 
@@ -21,7 +22,7 @@ def _docker_available() -> bool:
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=2,
+            timeout=t.DEFAULT_DOCKER_DAEMON_PROBE_TIMEOUT_S,
         )
     except Exception:
         return False
