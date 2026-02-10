@@ -2,6 +2,18 @@
 
 This project follows a lightweight changelog format. The public API lives under the `rlm` import package.
 
+## 1.3.1
+
+Security patch release.
+
+### Security
+
+- **protobuf**: Bump `protobuf` from 6.33.2 to 6.33.5 to address CVE JSON recursion depth bypass in `ParseDict()` (CVSS 8.2, Dependabot alert #6)
+
+### Infrastructure
+
+- **CI**: Disable uv dependency cache in publish-only release jobs (`testpypi`, `pypi`) that lack checkout steps
+
 ## 1.3.0
 
 Feature release introducing the **Relay Pipeline Library** — a type-safe, composable pipeline framework for orchestrating multi-step LLM workflows with conditional routing, parallel execution, and nested agent composition.
