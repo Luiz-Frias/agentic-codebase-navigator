@@ -296,10 +296,10 @@ config = RLMConfig(
 The LLM generates code in ` ```repl ` blocks that get executed:
 
 ```python
-```repl
-result = 2 + 2
-print(result)
-```
+# ```repl
+# result = 2 + 2
+# print(result)
+# ```
 ```
 
 ### Tools Mode

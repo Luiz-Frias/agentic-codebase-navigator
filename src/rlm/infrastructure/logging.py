@@ -22,6 +22,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 
 import loguru
@@ -50,21 +51,28 @@ def _configure_logger() -> None:
     # Remove default handler to avoid duplicate output
     logger.remove()
 
+    # Check for RLM_LOG_LEVEL environment variable (default: WARNING)
+    log_level = os.environ.get("RLM_LOG_LEVEL", "WARNING").upper()
+
+    # Disable enqueue for DEBUG level to ensure logs appear immediately
+    # (enqueue=True can cause logs to be delayed or lost in short-lived processes)
+    use_enqueue = log_level not in ("DEBUG", "TRACE")
+
     # Add infrastructure logger with:
-    # - WARNING level (cleanup failures are warnings, not errors)
+    # - Configurable level via RLM_LOG_LEVEL (default: WARNING)
     # - Structured format for log aggregation
-    # - Async-safe (enqueue=True)
+    # - Async-safe (enqueue=True) except for DEBUG/TRACE
     # - Backtrace for debugging (only in non-production)
     logger.add(
         sys.stderr,
-        level="WARNING",
+        level=log_level,
         format=(
             "<dim>{time:YYYY-MM-DD HH:mm:ss.SSS}</dim> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
             "<level>{message}</level>"
         ),
-        enqueue=True,  # Async-safe: non-blocking log writes
+        enqueue=use_enqueue,  # Async-safe except DEBUG/TRACE for immediate output
         backtrace=False,  # Disable full backtrace in production
         diagnose=False,  # Disable variable inspection in production
     )

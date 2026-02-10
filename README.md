@@ -327,6 +327,36 @@ Available protocols:
 
 See [docs/extending.md](docs/extending.md) for detailed documentation.
 
+## Relay Pipeline Library
+
+Build type-safe, composable multi-step LLM workflows using a pipeline DSL:
+
+```python
+from rlm.domain.relay import StateSpec, Pipeline, Baton
+from rlm.adapters.relay.states import FunctionStateExecutor
+from rlm.adapters.relay.executors import SyncPipelineExecutor
+
+# Define states with typed inputs/outputs
+analyze = StateSpec[str, dict]("analyze", str, dict, FunctionStateExecutor(analyze_fn))
+summarize = StateSpec[dict, str]("summarize", dict, str, FunctionStateExecutor(summarize_fn))
+
+# Compose with operators: >> (sequence), | (parallel), .when() (conditional)
+pipeline = Pipeline(analyze >> summarize)
+
+# Execute with typed baton
+executor = SyncPipelineExecutor(pipeline)
+result = executor.run(Baton(payload="Analyze this codebase"))
+```
+
+**Key capabilities:**
+- **Conditional routing**: `state.when(predicate) >> target` with `.otherwise()` fallback
+- **Parallel execution**: `(left | right).join(mode="all")` with fan-out/fan-in
+- **Nested pipelines**: Use pipelines or full RLM agents as pipeline states
+- **Token budgets**: Track and enforce token consumption across pipeline runs
+- **Compile-time validation**: Type compatibility, reachability, and cycle detection
+
+See [docs/relay/overview.md](docs/relay/overview.md) for the full guide.
+
 ## LLM Provider Configuration
 
 | Provider | Extra | Environment Variables |
@@ -345,11 +375,14 @@ RLM uses a **hexagonal (ports & adapters) architecture**:
 ```
 src/rlm/
 ├── domain/          # Pure business logic, ports (protocols), models
+│   └── relay/       # Pipeline DSL: states, baton, validation, composition
 ├── application/     # Use cases, configuration
+│   └── relay/       # Pipeline registry composer
 ├── infrastructure/  # Wire protocol, execution policies
 ├── adapters/
 │   ├── llm/         # LLM providers (OpenAI, Anthropic, Gemini, etc.)
 │   ├── environments/# Execution environments (local, docker)
+│   ├── relay/       # Pipeline executors, state implementations
 │   ├── tools/       # Tool calling infrastructure
 │   ├── policies/    # Extension protocol implementations
 │   ├── broker/      # TCP broker for nested LLM calls
@@ -449,6 +482,14 @@ uv run --group dev ty check src/rlm
 - **Environment**: `LocalEnvironmentAdapter`, `DockerEnvironmentAdapter`
 - **Logger**: `JsonlLoggerAdapter`, `ConsoleLoggerAdapter`, `NoopLoggerAdapter`
 - **Tools**: `ToolRegistry`, `tool` decorator, `NativeToolAdapter`
+
+### Relay Pipeline
+
+- **`StateSpec`** - Type-safe state descriptor with operators (`>>`, `|`, `.when()`)
+- **`Pipeline`** - State graph builder with validation
+- **`Baton`** - Immutable request-response envelope
+- **`SyncPipelineExecutor`** / **`AsyncPipelineExecutor`** - Pipeline orchestrators
+- **State Executors**: `FunctionStateExecutor`, `LLMStateExecutor`, `RLMStateExecutor`, `AsyncStateExecutor`
 
 ### Extension Protocols
 

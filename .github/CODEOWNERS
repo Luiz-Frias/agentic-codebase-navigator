@@ -45,6 +45,14 @@ mise.toml @Luiz-Frias
 .pre-commit-config.yaml @Luiz-Frias
 pyrightconfig.json @Luiz-Frias
 
+# AI Agent Tooling
+# Maintained in collaboration with Claude (Anthropic) and Codex (OpenAI)
+
+# Adapter: Relay Pipeline
+/src/rlm/adapters/relay/ @Luiz-Frias
+/src/rlm/domain/relay/ @Luiz-Frias
+/src/rlm/application/relay/ @Luiz-Frias
+
 # GitHub workflows
 .github/workflows/ @Luiz-Frias
 

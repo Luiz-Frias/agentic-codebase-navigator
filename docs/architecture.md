@@ -4,23 +4,23 @@ RLM implements a **hexagonal modular monolith** (ports & adapters) architecture 
 
 ## Overview
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────┐
-│                         API Layer                                │
+│                         API Layer                               │
 │                  (RLM, create_rlm, factories)                   │
-│                    Composition Root                              │
+│                    Composition Root                             │
 ├─────────────────────────────────────────────────────────────────┤
-│                     Application Layer                            │
-│              (use cases, configuration DTOs)                     │
+│                     Application Layer                           │
+│              (use cases, configuration DTOs)                    │
 ├─────────────────────────────────────────────────────────────────┤
-│                       Domain Layer                               │
-│        (orchestrator, ports, models — zero dependencies)         │
+│                       Domain Layer                              │
+│        (orchestrator, ports, models — zero dependencies)        │
 ├─────────────────────────────────────────────────────────────────┤
-│                      Adapters Layer                              │
-│     (LLM providers, environments, tools, broker, logger)         │
+│                      Adapters Layer                             │
+│     (LLM providers, environments, tools, broker, logger)        │
 ├─────────────────────────────────────────────────────────────────┤
-│                    Infrastructure Layer                          │
-│            (wire protocol, comms, execution policy)              │
+│                    Infrastructure Layer                         │
+│            (wire protocol, comms, execution policy)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -42,6 +42,7 @@ Dependencies **must point inward**:
 - **Ports** (`ports.py`, `agent_ports.py`): Protocol definitions (interfaces)
 - **Models** (`models/`): Domain value objects (`ChatCompletion`, `LLMRequest`, `Iteration`, etc.)
 - **Services** (`services/`): Core orchestrator and prompt builders
+- **Relay** (`relay/`): Pipeline DSL — states, baton, validation, composition, registry
 - **Errors** (`errors.py`): Domain exception hierarchy
 - **Types** (`types.py`): Type aliases and literals
 
@@ -65,6 +66,7 @@ Dependencies **must point inward**:
 **Contents**:
 - **Config** (`config.py`): Dataclass-based configuration (`RLMConfig`, `LLMConfig`, etc.)
 - **Use Cases** (`use_cases/`): Application-level orchestration
+- **Relay** (`relay/`): Pipeline registry composer (`RootAgentComposer`)
 
 **Key Use Case**: `run_completion(request, deps)`
 
@@ -94,7 +96,7 @@ Dependencies **must point inward**:
 **Purpose**: Concrete implementations of domain ports.
 
 **Structure**:
-```
+```bash
 adapters/
 ├── llm/              # LLM provider adapters
 │   ├── openai.py
@@ -103,12 +105,18 @@ adapters/
 │   ├── azure_openai.py
 │   ├── litellm.py
 │   ├── portkey.py
-│   └── mock.py
+│   ├── mock.py
+│   └── retry.py      # Exponential backoff retry strategy
 ├── environments/     # Code execution environments
 │   ├── local.py
 │   ├── docker.py
 │   ├── modal.py      # stub
 │   └── prime.py      # stub
+├── relay/            # Pipeline executors and state implementations
+│   ├── executors/    # Sync/async pipeline orchestrators
+│   ├── states/       # Function, LLM, RLM, async, pipeline state executors
+│   ├── nested_handler.py  # Nested call policy for relay
+│   └── retry.py      # Retry strategy for state executors
 ├── tools/            # Tool calling infrastructure
 │   ├── registry.py
 │   └── native.py
@@ -156,14 +164,15 @@ RLM supports two agent paradigms:
 
 LLM generates Python code in ` ```repl ` blocks:
 
-```
+```bash
 User: What is 6 * 7?
 
 LLM: Let me calculate that.
-```repl
-result = 6 * 7
-print(f"The answer is {result}")
-```
+
+# ```repl
+# result = 6 * 7
+# print(f"The answer is {result}")
+# ```
 
 LLM: FINAL(42)
 ```
@@ -178,7 +187,7 @@ LLM: FINAL(42)
 
 LLM invokes registered tools via function calling:
 
-```
+```bash
 User: What's the weather in Tokyo?
 
 LLM: [calls get_weather(city="Tokyo")]
@@ -233,7 +242,7 @@ class NestedCallPolicy(Protocol):
 
 ## Request Flow
 
-```
+```bash
 ┌──────────┐    ┌─────────┐    ┌─────────────┐    ┌─────────────┐
 │  User    │───▶│   RLM   │───▶│  Use Case   │───▶│ Orchestrator│
 │          │    │ (Facade)│    │             │    │             │
@@ -289,7 +298,7 @@ The architecture enables comprehensive testing:
 
 ## Directory Structure
 
-```
+```bash
 src/rlm/
 ├── __init__.py              # Public exports
 ├── _meta.py                 # Version info
@@ -306,12 +315,24 @@ src/rlm/
 │   │   ├── llm_request.py
 │   │   ├── iteration.py
 │   │   └── ...
+│   ├── relay/               # Pipeline DSL (states, baton, validation, composition)
+│   │   ├── state.py         # StateSpec with operator overloading
+│   │   ├── pipeline.py      # Pipeline builder and graph definition
+│   │   ├── baton.py         # Immutable request-response envelope
+│   │   ├── validation.py    # Type/reachability/cycle validation
+│   │   ├── composition.py   # ComposablePipeline, WorkflowSeed
+│   │   ├── registry.py      # PipelineTemplate, PipelineRegistry
+│   │   ├── budget.py        # TokenBudget tracking
+│   │   ├── trace.py         # PipelineTrace audit log
+│   │   └── ...
 │   └── services/
 │       ├── rlm_orchestrator.py
 │       └── prompts.py
 │
 ├── application/             # USE CASES
 │   ├── config.py            # Configuration DTOs
+│   ├── relay/               # Pipeline registry composer
+│   │   └── root_composer.py # LLM-assisted pipeline selection
 │   └── use_cases/
 │       └── run_completion.py
 │
@@ -373,5 +394,6 @@ See [Architecture Decision Records](adr/) for rationale:
 - [API Reference](api-reference.md) — Public API documentation
 - [Configuration](configuration.md) — All configuration options
 - [Extension Protocols](extending/extension-protocols.md) — Custom policies
+- [Relay Pipeline](relay/overview.md) — Pipeline DSL and composition
 - [Internals: Ports](internals/ports.md) — Port interface details
 - [Internals: Protocol](internals/protocol.md) — Wire protocol specification

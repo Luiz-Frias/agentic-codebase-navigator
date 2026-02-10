@@ -1,4 +1,4 @@
-# Public API (Phase 06)
+# Public API
 
 This document defines the **stable user-facing Python API** for the refactored `rlm` package.
 
@@ -198,7 +198,68 @@ Tool calling is supported across multiple LLM providers:
 - **Gemini**: FunctionDeclaration format
 - **LiteLLM** / **Portkey**: Passthrough to underlying provider
 
-## Migration notes
+## Relay Pipeline Library
 
-The upstream snapshot remains available under `references/rlm/**` for reference only.
-Runtime code lives under `src/rlm/**`. Legacy has been fully removed.
+Type-safe, composable multi-step LLM workflows. See [Relay Overview](relay/overview.md) for the full guide.
+
+### Core Types
+
+```python
+from rlm.domain.relay import StateSpec, Pipeline, Baton, validate_pipeline, allow_cycles
+```
+
+| Type | Purpose |
+|------|---------|
+| `StateSpec[InputT, OutputT]` | Type-safe state descriptor with operator overloading |
+| `Pipeline` | State graph builder with edges, guards, and join groups |
+| `Baton[T]` | Immutable request-response envelope with metadata and trace |
+| `TokenBudget` | Token consumption tracking across pipeline runs |
+| `PipelineTrace` | Immutable append-only execution audit log |
+| `PipelineTemplate` | Registry entry with name, types, factory, and tags |
+| `InMemoryPipelineRegistry` | In-memory pipeline discovery with search |
+
+### Pipeline Composition Operators
+
+```python
+# Sequential: state_a >> state_b
+# Parallel: state_a | state_b
+# Conditional: state_a.when(predicate) >> state_b
+# Join: (state_a | state_b).join(mode="all") >> merge_state
+```
+
+### State Executors
+
+```python
+from rlm.adapters.relay.states import (
+    FunctionStateExecutor,   # Pure Python callables
+    LLMStateExecutor,        # LLM calls via LLMPort
+    AsyncStateExecutor,      # Async callables
+    RLMStateExecutor,        # Full agent orchestration
+)
+from rlm.adapters.relay.states.pipeline_state import (
+    SyncPipelineStateExecutor,   # Nested pipeline (sync)
+    AsyncPipelineStateExecutor,  # Nested pipeline (async)
+)
+```
+
+### Pipeline Executors
+
+```python
+from rlm.adapters.relay.executors import SyncPipelineExecutor, AsyncPipelineExecutor
+
+executor = SyncPipelineExecutor(pipeline)
+result = executor.run(Baton(payload="input"))
+```
+
+### Pipeline Registry
+
+```python
+from rlm.domain.relay import InMemoryPipelineRegistry, PipelineTemplate
+from rlm.application.relay import RootAgentComposer
+
+registry = InMemoryPipelineRegistry()
+registry.register(PipelineTemplate(name="research", ...))
+
+composer = RootAgentComposer(registry=registry, llm=llm_port)
+pipeline = composer.compose_from_registry("analyze this codebase")
+```

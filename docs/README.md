@@ -14,6 +14,7 @@ Welcome to the documentation for **agentic-codebase-navigator** (`rlm`) — an a
 | Add a new LLM provider | [LLM Providers](providers/llm-providers.md) |
 | Use different execution environments | [Environments](environments/execution-environments.md) |
 | Extend with custom policies | [Extension Protocols](extending/extension-protocols.md) |
+| Build multi-step LLM pipelines | [Relay Pipeline](relay/overview.md) |
 | Run tests | [Testing Guide](testing/testing-guide.md) |
 | Contribute to the project | [Contributing](contributing/development-setup.md) |
 | Release a new version | [Releasing](contributing/releasing.md) |
@@ -21,7 +22,7 @@ Welcome to the documentation for **agentic-codebase-navigator** (`rlm`) — an a
 
 ## Documentation Structure
 
-```
+```bash
 docs/
 ├── README.md                    # This file (navigation)
 ├── getting-started.md           # Quick start tutorial
@@ -39,6 +40,12 @@ docs/
 │
 ├── extending/
 │   └── extension-protocols.md   # StoppingPolicy, ContextCompressor, NestedCallPolicy
+│
+├── relay/
+│   ├── overview.md              # Relay pipeline philosophy and quick start
+│   ├── composition.md           # DSL operators (>>, |, .when(), .join())
+│   ├── states.md                # State executor types and usage
+│   └── validation.md            # Pipeline validation and cycle detection
 │
 ├── testing/
 │   └── testing-guide.md         # How to run and write tests
@@ -83,7 +90,7 @@ RLM supports two agent modes:
 
 RLM uses a **hexagonal (ports & adapters) architecture**:
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────┐
 │                      API Layer                          │
 │              (RLM, create_rlm, factories)               │
@@ -104,7 +111,7 @@ RLM uses a **hexagonal (ports & adapters) architecture**:
 
 ## Version
 
-Current version: **1.1.0**
+Current version: **1.3.0**
 
 See [CHANGELOG.md](../CHANGELOG.md) for release history.
 

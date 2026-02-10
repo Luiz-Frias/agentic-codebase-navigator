@@ -1,4 +1,4 @@
-# Ports (Phase 2)
+# Ports
 
 This document describes the **domain ports** (interfaces) that isolate the hexagonal core from external concerns.
 
@@ -43,7 +43,7 @@ Responsibilities:
 - Aggregate usage across routed calls.
 
 Related docs:
-- Wire protocol (Phase 3): `docs/protocol.md`
+- Wire protocol: `docs/protocol.md`
 
 Interface shape:
 - `register_llm(model_name: str, llm: LLMPort) -> None`
@@ -80,7 +80,3 @@ Responsibilities:
 Interface shape:
 - `ClockPort.now() -> float`
 - `IdGeneratorPort.new_id() -> str`
-
-## Transitional note (Phase 2 bridge)
-
-Legacy has been fully removed; all runtime code paths use native hexagonal adapters.

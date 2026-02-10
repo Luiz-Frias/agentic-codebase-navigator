@@ -19,6 +19,9 @@ from rlm.adapters.llm.provider_base import (
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
+from rlm.infrastructure.logging import get_infrastructure_logger
+
+logger = get_infrastructure_logger()
 
 if TYPE_CHECKING:
     from rlm.domain.types import Prompt
@@ -274,6 +277,11 @@ class AnthropicAdapter(BaseLLMAdapter):
                     **kwargs,
                 )
         except Exception as e:
+            logger.debug(
+                "Anthropic request failed: {exc_type}: {exc}",
+                exc_type=type(e).__name__,
+                exc=str(e),
+            )
             raise LLMError(safe_provider_error_message("Anthropic", e)) from None
         end = time.perf_counter()
 
@@ -346,6 +354,11 @@ class AnthropicAdapter(BaseLLMAdapter):
                     **kwargs,
                 )
         except Exception as e:
+            logger.debug(
+                "Anthropic async request failed: {exc_type}: {exc}",
+                exc_type=type(e).__name__,
+                exc=str(e),
+            )
             raise LLMError(safe_provider_error_message("Anthropic", e)) from None
         end = time.perf_counter()
 

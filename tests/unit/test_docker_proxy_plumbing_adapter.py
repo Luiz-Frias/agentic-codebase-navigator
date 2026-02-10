@@ -74,7 +74,7 @@ def test_docker_exec_script_passes_correlation_id_to_proxy_requests() -> None:
     script = _build_exec_script("print('hi')", 1234)
     assert "RUN_CORRELATION_ID" in script
     assert "correlation_id" in script
-    assert "def llm_query(prompt, model=None, correlation_id=None):" in script
+    assert "def llm_query(prompt, model=None, correlation_id=None, depth=None):" in script
     assert "def llm_query_batched(prompts, model=None, correlation_id=None):" in script
     assert '"correlation_id": cid' in script
 
