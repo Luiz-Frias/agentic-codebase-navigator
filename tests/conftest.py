@@ -8,6 +8,9 @@ from shutil import which
 
 import pytest
 
+from rlm.domain.policies import timeouts as t
+from tests.live_llm import LiveLLMSettings, get_live_llm_settings, live_llm_enabled
+
 
 @lru_cache(maxsize=1)
 def _docker_available() -> bool:
@@ -19,23 +22,11 @@ def _docker_available() -> bool:
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=2,
+            timeout=t.DEFAULT_DOCKER_DAEMON_PROBE_TIMEOUT_S,
         )
     except Exception:
         return False
     return True
-
-
-def _live_llm_enabled() -> bool:
-    """
-    Opt-in gate for tests that hit real provider APIs.
-
-    These tests are skipped by default to keep CI hermetic and avoid accidental
-    spend. Enable with:
-      - RLM_RUN_LIVE_LLM_TESTS=1
-    """
-    raw = (os.environ.get("RLM_RUN_LIVE_LLM_TESTS") or "").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -102,5 +93,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 def pytest_runtest_setup(item: pytest.Item) -> None:
     if "docker" in item.keywords and not _docker_available():
         pytest.skip("Docker not available (no docker binary or daemon not reachable)")
-    if "live_llm" in item.keywords and not _live_llm_enabled():
+    if "live_llm" in item.keywords and not live_llm_enabled():
         pytest.skip("Live LLM tests disabled (set RLM_RUN_LIVE_LLM_TESTS=1 to enable)")
+
+
+@pytest.fixture(scope="session")
+def live_llm_settings() -> LiveLLMSettings | None:
+    if not live_llm_enabled():
+        return None
+    return get_live_llm_settings()

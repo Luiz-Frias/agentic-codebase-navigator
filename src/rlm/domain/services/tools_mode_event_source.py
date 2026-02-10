@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from rlm.domain.agent_ports import ToolCallRequest, ToolCallResult, ToolMessage
 from rlm.domain.errors import ToolNotFoundError
+from rlm.domain.models import Iteration
 from rlm.domain.models.llm_request import LLMRequest, ToolChoice
 from rlm.domain.models.orchestration_types import (
     LLMResponseReceived,
@@ -35,7 +36,7 @@ from rlm.domain.models.orchestration_types import (
     ToolsModeEvent,
     ToolsModeState,
 )
-from rlm.domain.models.usage import ModelUsageSummary
+from rlm.domain.models.usage import ModelUsageSummary, UsageSummary
 from rlm.domain.services.prompts import RLM_SYSTEM_PROMPT
 from rlm.domain.services.tool_serialization import tool_json_default
 
@@ -43,20 +44,19 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from rlm.domain.agent_ports import StoppingPolicy, ToolDefinition, ToolRegistryPort
-    from rlm.domain.models.usage import UsageSummary
-    from rlm.domain.ports import LLMPort
+    from rlm.domain.ports import LLMPort, LoggerPort
     from rlm.domain.types import Prompt
 
     # Type alias for the sync summarizer callback
     ConversationSummarizer = Callable[
-        [list[dict[str, Any]], list[ToolDefinition], dict[str, ModelUsageSummary]],
-        list[dict[str, Any]],
+        [list[dict[str, object]], list[ToolDefinition], dict[str, ModelUsageSummary]],
+        list[dict[str, object]],
     ]
 
     # Type alias for the async summarizer callback
     AsyncConversationSummarizer = Callable[
-        [list[dict[str, Any]], list[ToolDefinition], dict[str, ModelUsageSummary]],
-        Awaitable[list[dict[str, Any]]],
+        [list[dict[str, object]], list[ToolDefinition], dict[str, ModelUsageSummary]],
+        Awaitable[list[dict[str, object]]],
     ]
 
 
@@ -88,6 +88,7 @@ class ToolsModeEventSource:
 
     llm: LLMPort
     tool_registry: ToolRegistryPort
+    logger: LoggerPort | None = None
     stopping_policy: StoppingPolicy | None = None
     system_prompt: str = ""
     summarizer: ConversationSummarizer | None = None
@@ -176,7 +177,8 @@ class ToolsModeEventSource:
         ctx.last_response = completion.response
         self._add_usage(ctx, completion.usage_summary)
 
-        # Notify stopping policy of iteration completion (INIT counts as iteration 0)
+        # Log iteration and notify stopping policy (INIT counts as iteration 0)
+        self._log_iteration(ctx)
         self._on_iteration_complete(ctx)
 
         # Store tool calls for PROMPTING to process
@@ -272,6 +274,7 @@ class ToolsModeEventSource:
             ctx.last_completion = completion
             ctx.last_response = completion.response
             self._add_usage(ctx, completion.usage_summary)
+            self._log_iteration(ctx)
             ctx.pending_tool_calls = []  # Ensure no more tool calls
             # Return MaxIterationsReached to signal state machine to transition to DONE
             return MaxIterationsReached()
@@ -292,6 +295,7 @@ class ToolsModeEventSource:
         ctx.last_completion = completion
         ctx.last_response = completion.response
         self._add_usage(ctx, completion.usage_summary)
+        self._log_iteration(ctx)
 
         # Notify stopping policy of iteration completion
         self._on_iteration_complete(ctx)
@@ -301,9 +305,9 @@ class ToolsModeEventSource:
 
         return ToolsExecuted(results=results)
 
-    def _build_tool_conversation(self, prompt: Prompt | None) -> list[dict[str, Any]]:
+    def _build_tool_conversation(self, prompt: Prompt | None) -> list[dict[str, object]]:
         """Create the initial tool-mode conversation history."""
-        conversation: list[dict[str, Any]] = [
+        conversation: list[dict[str, object]] = [
             {"role": "system", "content": self.system_prompt},
         ]
 
@@ -356,7 +360,7 @@ class ToolsModeEventSource:
 
     def _build_tool_result_message(self, result: ToolCallResult) -> ToolMessage:
         """Format a tool execution result as a conversation message."""
-        payload: Any = (
+        payload: object = (
             {"error": result["error"]} if result["error"] is not None else result["result"]
         )
 
@@ -375,7 +379,7 @@ class ToolsModeEventSource:
         self,
         tool_calls: list[ToolCallRequest],
         response_text: str = "",
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """Build an assistant message containing tool calls."""
         return {
             "role": "assistant",
@@ -419,7 +423,42 @@ class ToolsModeEventSource:
                 current.total_input_tokens += mus.total_input_tokens
                 current.total_output_tokens += mus.total_output_tokens
 
-    def _build_policy_context(self, ctx: ToolsModeContext) -> dict[str, Any]:
+    def _add_usage_to_dict(
+        self,
+        totals: dict[str, ModelUsageSummary],
+        summary: UsageSummary,
+    ) -> None:
+        """Add usage from a summary into a totals dict (mutating totals)."""
+        if not hasattr(summary, "model_usage_summaries"):
+            return
+
+        for model, mus in summary.model_usage_summaries.items():
+            current = totals.get(model)
+            if current is None:
+                totals[model] = ModelUsageSummary(
+                    total_calls=mus.total_calls,
+                    total_input_tokens=mus.total_input_tokens,
+                    total_output_tokens=mus.total_output_tokens,
+                )
+            else:
+                current.total_calls += mus.total_calls
+                current.total_input_tokens += mus.total_input_tokens
+                current.total_output_tokens += mus.total_output_tokens
+
+    def _clone_usage(self, totals: dict[str, ModelUsageSummary]) -> UsageSummary:
+        """Clone usage totals into a UsageSummary."""
+        return UsageSummary(
+            model_usage_summaries={
+                model: ModelUsageSummary(
+                    total_calls=mus.total_calls,
+                    total_input_tokens=mus.total_input_tokens,
+                    total_output_tokens=mus.total_output_tokens,
+                )
+                for model, mus in ((m, totals[m]) for m in sorted(totals))
+            },
+        )
+
+    def _build_policy_context(self, ctx: ToolsModeContext) -> dict[str, object]:
         """Build context dict for policy callbacks."""
         return {
             "iteration": ctx.iteration,
@@ -438,6 +477,25 @@ class ToolsModeEventSource:
 
         policy_context = self._build_policy_context(ctx)
         self.stopping_policy.on_iteration_complete(policy_context, ctx.last_completion)
+
+    def _log_iteration(self, ctx: ToolsModeContext) -> None:
+        """Log an iteration if a logger is configured."""
+        if self.logger is None or ctx.last_completion is None:
+            return
+
+        iteration_totals: dict[str, ModelUsageSummary] = {}
+        self._add_usage_to_dict(iteration_totals, ctx.last_completion.usage_summary)
+        iteration_usage = self._clone_usage(iteration_totals) if iteration_totals else None
+        cumulative_usage = self._clone_usage(ctx.usage_totals) if ctx.usage_totals else None
+
+        iteration = Iteration(
+            prompt=ctx.conversation,
+            response=ctx.last_response or "",
+            iteration_time=0.0,
+            iteration_usage_summary=iteration_usage,
+            cumulative_usage_summary=cumulative_usage,
+        )
+        self.logger.log_iteration(iteration)
 
 
 # ============================================================================
@@ -465,6 +523,7 @@ class AsyncToolsModeEventSource:
 
     llm: LLMPort
     tool_registry: ToolRegistryPort
+    logger: LoggerPort | None = None
     stopping_policy: StoppingPolicy | None = None
     system_prompt: str = ""
     summarizer: AsyncConversationSummarizer | None = None
@@ -539,7 +598,8 @@ class AsyncToolsModeEventSource:
         ctx.last_response = completion.response
         self._add_usage(ctx, completion.usage_summary)
 
-        # Notify stopping policy of iteration completion (INIT counts as iteration 0)
+        # Log iteration and notify stopping policy (INIT counts as iteration 0)
+        self._log_iteration(ctx)
         self._on_iteration_complete(ctx)
 
         # Store tool calls for PROMPTING to process
@@ -619,6 +679,7 @@ class AsyncToolsModeEventSource:
             ctx.last_completion = completion
             ctx.last_response = completion.response
             self._add_usage(ctx, completion.usage_summary)
+            self._log_iteration(ctx)
             ctx.pending_tool_calls = []  # Ensure no more tool calls
             # Return MaxIterationsReached to signal state machine to transition to DONE
             return MaxIterationsReached()
@@ -639,6 +700,7 @@ class AsyncToolsModeEventSource:
         ctx.last_completion = completion
         ctx.last_response = completion.response
         self._add_usage(ctx, completion.usage_summary)
+        self._log_iteration(ctx)
 
         # Notify stopping policy of iteration completion
         self._on_iteration_complete(ctx)
@@ -652,9 +714,9 @@ class AsyncToolsModeEventSource:
     # Helper methods (shared with sync version - could be extracted to mixin)
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_tool_conversation(self, prompt: Prompt | None) -> list[dict[str, Any]]:
+    def _build_tool_conversation(self, prompt: Prompt | None) -> list[dict[str, object]]:
         """Create the initial tool-mode conversation history."""
-        conversation: list[dict[str, Any]] = [
+        conversation: list[dict[str, object]] = [
             {"role": "system", "content": self.system_prompt},
         ]
 
@@ -701,7 +763,7 @@ class AsyncToolsModeEventSource:
 
     def _build_tool_result_message(self, result: ToolCallResult) -> ToolMessage:
         """Format a tool execution result as a conversation message."""
-        payload: Any = (
+        payload: object = (
             {"error": result["error"]} if result["error"] is not None else result["result"]
         )
 
@@ -720,7 +782,7 @@ class AsyncToolsModeEventSource:
         self,
         tool_calls: list[ToolCallRequest],
         response_text: str = "",
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """Build an assistant message containing tool calls."""
         return {
             "role": "assistant",
@@ -764,7 +826,42 @@ class AsyncToolsModeEventSource:
                 current.total_input_tokens += mus.total_input_tokens
                 current.total_output_tokens += mus.total_output_tokens
 
-    def _build_policy_context(self, ctx: ToolsModeContext) -> dict[str, Any]:
+    def _add_usage_to_dict(
+        self,
+        totals: dict[str, ModelUsageSummary],
+        summary: UsageSummary,
+    ) -> None:
+        """Add usage from a summary into a totals dict (mutating totals)."""
+        if not hasattr(summary, "model_usage_summaries"):
+            return
+
+        for model, mus in summary.model_usage_summaries.items():
+            current = totals.get(model)
+            if current is None:
+                totals[model] = ModelUsageSummary(
+                    total_calls=mus.total_calls,
+                    total_input_tokens=mus.total_input_tokens,
+                    total_output_tokens=mus.total_output_tokens,
+                )
+            else:
+                current.total_calls += mus.total_calls
+                current.total_input_tokens += mus.total_input_tokens
+                current.total_output_tokens += mus.total_output_tokens
+
+    def _clone_usage(self, totals: dict[str, ModelUsageSummary]) -> UsageSummary:
+        """Clone usage totals into a UsageSummary."""
+        return UsageSummary(
+            model_usage_summaries={
+                model: ModelUsageSummary(
+                    total_calls=mus.total_calls,
+                    total_input_tokens=mus.total_input_tokens,
+                    total_output_tokens=mus.total_output_tokens,
+                )
+                for model, mus in ((m, totals[m]) for m in sorted(totals))
+            },
+        )
+
+    def _build_policy_context(self, ctx: ToolsModeContext) -> dict[str, object]:
         """Build context dict for policy callbacks."""
         return {
             "iteration": ctx.iteration,
@@ -783,3 +880,22 @@ class AsyncToolsModeEventSource:
 
         policy_context = self._build_policy_context(ctx)
         self.stopping_policy.on_iteration_complete(policy_context, ctx.last_completion)
+
+    def _log_iteration(self, ctx: ToolsModeContext) -> None:
+        """Log an iteration if a logger is configured."""
+        if self.logger is None or ctx.last_completion is None:
+            return
+
+        iteration_totals: dict[str, ModelUsageSummary] = {}
+        self._add_usage_to_dict(iteration_totals, ctx.last_completion.usage_summary)
+        iteration_usage = self._clone_usage(iteration_totals) if iteration_totals else None
+        cumulative_usage = self._clone_usage(ctx.usage_totals) if ctx.usage_totals else None
+
+        iteration = Iteration(
+            prompt=ctx.conversation,
+            response=ctx.last_response or "",
+            iteration_time=0.0,
+            iteration_usage_summary=iteration_usage,
+            cumulative_usage_summary=cumulative_usage,
+        )
+        self.logger.log_iteration(iteration)

@@ -42,6 +42,7 @@ Dependencies **must point inward**:
 - **Ports** (`ports.py`, `agent_ports.py`): Protocol definitions (interfaces)
 - **Models** (`models/`): Domain value objects (`ChatCompletion`, `LLMRequest`, `Iteration`, etc.)
 - **Services** (`services/`): Core orchestrator and prompt builders
+- **Relay** (`relay/`): Pipeline DSL — states, baton, validation, composition, registry
 - **Errors** (`errors.py`): Domain exception hierarchy
 - **Types** (`types.py`): Type aliases and literals
 
@@ -65,6 +66,7 @@ Dependencies **must point inward**:
 **Contents**:
 - **Config** (`config.py`): Dataclass-based configuration (`RLMConfig`, `LLMConfig`, etc.)
 - **Use Cases** (`use_cases/`): Application-level orchestration
+- **Relay** (`relay/`): Pipeline registry composer (`RootAgentComposer`)
 
 **Key Use Case**: `run_completion(request, deps)`
 
@@ -103,12 +105,18 @@ adapters/
 │   ├── azure_openai.py
 │   ├── litellm.py
 │   ├── portkey.py
-│   └── mock.py
+│   ├── mock.py
+│   └── retry.py      # Exponential backoff retry strategy
 ├── environments/     # Code execution environments
 │   ├── local.py
 │   ├── docker.py
 │   ├── modal.py      # stub
 │   └── prime.py      # stub
+├── relay/            # Pipeline executors and state implementations
+│   ├── executors/    # Sync/async pipeline orchestrators
+│   ├── states/       # Function, LLM, RLM, async, pipeline state executors
+│   ├── nested_handler.py  # Nested call policy for relay
+│   └── retry.py      # Retry strategy for state executors
 ├── tools/            # Tool calling infrastructure
 │   ├── registry.py
 │   └── native.py
@@ -307,12 +315,24 @@ src/rlm/
 │   │   ├── llm_request.py
 │   │   ├── iteration.py
 │   │   └── ...
+│   ├── relay/               # Pipeline DSL (states, baton, validation, composition)
+│   │   ├── state.py         # StateSpec with operator overloading
+│   │   ├── pipeline.py      # Pipeline builder and graph definition
+│   │   ├── baton.py         # Immutable request-response envelope
+│   │   ├── validation.py    # Type/reachability/cycle validation
+│   │   ├── composition.py   # ComposablePipeline, WorkflowSeed
+│   │   ├── registry.py      # PipelineTemplate, PipelineRegistry
+│   │   ├── budget.py        # TokenBudget tracking
+│   │   ├── trace.py         # PipelineTrace audit log
+│   │   └── ...
 │   └── services/
 │       ├── rlm_orchestrator.py
 │       └── prompts.py
 │
 ├── application/             # USE CASES
 │   ├── config.py            # Configuration DTOs
+│   ├── relay/               # Pipeline registry composer
+│   │   └── root_composer.py # LLM-assisted pipeline selection
 │   └── use_cases/
 │       └── run_completion.py
 │
@@ -374,5 +394,6 @@ See [Architecture Decision Records](adr/) for rationale:
 - [API Reference](api-reference.md) — Public API documentation
 - [Configuration](configuration.md) — All configuration options
 - [Extension Protocols](extending/extension-protocols.md) — Custom policies
+- [Relay Pipeline](relay/overview.md) — Pipeline DSL and composition
 - [Internals: Ports](internals/ports.md) — Port interface details
 - [Internals: Protocol](internals/protocol.md) — Wire protocol specification

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rlm.domain.agent_ports import ToolCallRequest, ToolCallResult, ToolDefinition
@@ -323,7 +323,7 @@ class ToolsModeContext:
     """Start time (perf_counter) for execution timing."""
 
     # Conversation history
-    conversation: list[dict[str, Any]] = field(default_factory=list)
+    conversation: list[dict[str, object]] = field(default_factory=list)
     """Accumulated tool conversation history."""
 
     # Usage tracking
@@ -351,7 +351,7 @@ class ToolsModeContext:
     policy_stop: bool = False
     """True when a StoppingPolicy requested early termination."""
 
-    policy_context: dict[str, Any] = field(default_factory=dict)
+    policy_context: dict[str, object] = field(default_factory=dict)
     """Context dict for StoppingPolicy callbacks."""
 
     # Configuration

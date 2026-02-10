@@ -13,6 +13,7 @@ import pytest
 from rlm.adapters.llm.mock import MockLLMAdapter
 from rlm.api.rlm import RLM
 from rlm.domain.agent_ports import ToolCallRequest
+from tests.live_llm import LiveLLMSettings
 
 
 def _make_tool_call(tool_id: str, name: str, arguments: dict[str, Any]) -> ToolCallRequest:
@@ -56,9 +57,35 @@ def calculate(operation: str, a: float, b: float) -> float:
     return ops.get(operation, lambda x, y: 0)(a, b)
 
 
+def _build_live_rlm(settings: LiveLLMSettings, tools: list[object]) -> RLM:
+    llm = settings.build_openai_adapter(
+        request_kwargs={
+            "temperature": 0,
+            "max_tokens": 128,
+        }
+    )
+    return RLM(
+        llm=llm,
+        tools=tools,
+        agent_mode="tools",
+    )
+
+
+def _has_digit(text: str) -> bool:
+    return any(ch.isdigit() for ch in text)
+
+
 @pytest.mark.integration
-def test_rlm_tool_calling_single_tool_happy_path() -> None:
+def test_rlm_tool_calling_single_tool_happy_path(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """Full stack test: LLM calls tool → executes → returns final answer."""
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(live_llm_settings, tools=[get_weather])
+        result = rlm.completion("What's the weather in Tokyo?", tool_choice="required")
+        assert result.response.strip()
+        return
+
     # MockLLMAdapter with scripted tool_call response
     llm = MockLLMAdapter(
         model="mock-tool-test",
@@ -89,8 +116,19 @@ def test_rlm_tool_calling_single_tool_happy_path() -> None:
 
 
 @pytest.mark.integration
-def test_rlm_tool_calling_multi_turn_conversation() -> None:
+def test_rlm_tool_calling_multi_turn_conversation(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """Full stack test: LLM makes multiple tool calls across turns."""
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(live_llm_settings, tools=[get_weather])
+        result = rlm.completion(
+            "Compare the weather in London and Tokyo. Use tools if needed.",
+            tool_choice="required",
+        )
+        assert result.response.strip()
+        return
+
     llm = MockLLMAdapter(
         model="mock-tool-test",
         script=[
@@ -120,8 +158,17 @@ def test_rlm_tool_calling_multi_turn_conversation() -> None:
 
 
 @pytest.mark.integration
-def test_rlm_tool_calling_multiple_tools() -> None:
+def test_rlm_tool_calling_multiple_tools(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """Full stack test: LLM can use multiple different tools."""
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(live_llm_settings, tools=[get_weather, calculate])
+        result = rlm.completion("What is 5 times 3?", tool_choice="required")
+        assert result.response.strip()
+        assert _has_digit(result.response)
+        return
+
     llm = MockLLMAdapter(
         model="mock-tool-test",
         script=[
@@ -152,8 +199,17 @@ def test_rlm_tool_calling_multiple_tools() -> None:
 
 
 @pytest.mark.integration
-def test_rlm_tool_calling_immediate_answer() -> None:
+def test_rlm_tool_calling_immediate_answer(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """Full stack test: LLM can respond without using tools."""
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(live_llm_settings, tools=[get_weather, calculate])
+        result = rlm.completion("What is the capital of France?")
+        assert result.response.strip()
+        assert "paris" in result.response.lower()
+        return
+
     llm = MockLLMAdapter(
         model="mock-tool-test",
         script=["I don't need any tools to answer this: Paris is the capital of France."],
@@ -172,12 +228,20 @@ def test_rlm_tool_calling_immediate_answer() -> None:
 
 
 @pytest.mark.integration
-def test_rlm_tool_calling_tool_error_captured() -> None:
+def test_rlm_tool_calling_tool_error_captured(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """Full stack test: Tool execution errors are passed to LLM, not raised."""
 
     def always_fails() -> None:
         """A tool that always fails."""
         raise RuntimeError("This tool is broken!")
+
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(live_llm_settings, tools=[always_fails])
+        result = rlm.completion("Call the tool even if it fails.", tool_choice="required")
+        assert result.response.strip()
+        return
 
     llm = MockLLMAdapter(
         model="mock-tool-test",
@@ -204,8 +268,17 @@ def test_rlm_tool_calling_tool_error_captured() -> None:
 
 
 @pytest.mark.integration
-async def test_rlm_tool_calling_async_path() -> None:
+async def test_rlm_tool_calling_async_path(
+    live_llm_settings: LiveLLMSettings | None,
+) -> None:
     """Full stack test: Async completion with tool calling."""
+    if live_llm_settings is not None:
+        rlm = _build_live_rlm(live_llm_settings, tools=[calculate])
+        result = await rlm.acompletion("What is 10 plus 5?", tool_choice="required")
+        assert result.response.strip()
+        assert _has_digit(result.response)
+        return
+
     llm = MockLLMAdapter(
         model="mock-tool-test",
         script=[

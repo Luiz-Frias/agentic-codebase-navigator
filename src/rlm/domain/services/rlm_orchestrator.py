@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from rlm.domain.agent_ports import (
     AgentModeName,
@@ -152,9 +152,9 @@ class RLMOrchestrator:
         iteration: int,
         max_iterations: int,
         depth: int = 0,
-        history: list[dict[str, Any]] | None = None,
+        history: list[dict[str, object]] | None = None,
         last_result: ChatCompletion | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """
         Build context dict for policy callbacks.
 
@@ -170,7 +170,7 @@ class RLMOrchestrator:
             "last_result": last_result,
         }
 
-    def _should_stop(self, context: dict[str, Any]) -> bool:
+    def _should_stop(self, context: dict[str, object]) -> bool:
         """
         Check if the iteration loop should stop early.
 
@@ -180,7 +180,7 @@ class RLMOrchestrator:
             return False
         return self.stopping_policy.should_stop(context)
 
-    def _on_iteration_complete(self, context: dict[str, Any], result: ChatCompletion) -> None:
+    def _on_iteration_complete(self, context: dict[str, object], result: ChatCompletion) -> None:
         """
         Notify policy that an iteration completed.
 
@@ -314,7 +314,7 @@ class RLMOrchestrator:
 
         The content is JSON-serialized for consistent parsing by the LLM.
         """
-        payload: Any = (
+        payload: object = (
             {"error": result["error"]} if result["error"] is not None else result["result"]
         )
 
@@ -333,7 +333,7 @@ class RLMOrchestrator:
         self,
         tool_calls: list[ToolCallRequest],
         response_text: str = "",
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """
         Build an assistant message containing tool calls.
 
@@ -355,9 +355,9 @@ class RLMOrchestrator:
             ],
         }
 
-    def _build_tool_conversation(self, prompt: Prompt, /) -> list[dict[str, Any]]:
+    def _build_tool_conversation(self, prompt: Prompt, /) -> list[dict[str, object]]:
         """Create the initial tool-mode conversation history."""
-        conversation: list[dict[str, Any]] = [
+        conversation: list[dict[str, object]] = [
             {"role": "system", "content": self.system_prompt},
         ]
 
@@ -425,10 +425,10 @@ class RLMOrchestrator:
 
         # Create summarizer callback that wraps the orchestrator's summarization logic
         def summarizer(
-            conversation: list[dict[str, Any]],
+            conversation: list[dict[str, object]],
             tool_definitions: list[ToolDefinition],
             usage_totals: dict[str, ModelUsageSummary],
-        ) -> list[dict[str, Any]]:
+        ) -> list[dict[str, object]]:
             return self._maybe_summarize_tool_conversation(
                 conversation,
                 tool_definitions=tool_definitions,
@@ -438,6 +438,7 @@ class RLMOrchestrator:
         source = ToolsModeEventSource(
             llm=self.llm,
             tool_registry=self.tool_registry,
+            logger=self.logger,
             stopping_policy=self.stopping_policy,
             system_prompt=self.system_prompt,
             summarizer=summarizer,
@@ -508,10 +509,10 @@ class RLMOrchestrator:
 
         # Create async summarizer callback that wraps the orchestrator's summarization logic
         async def summarizer(
-            conversation: list[dict[str, Any]],
+            conversation: list[dict[str, object]],
             tool_definitions: list[ToolDefinition],
             usage_totals: dict[str, ModelUsageSummary],
-        ) -> list[dict[str, Any]]:
+        ) -> list[dict[str, object]]:
             return await self._maybe_asummarize_tool_conversation(
                 conversation,
                 tool_definitions=tool_definitions,
@@ -521,6 +522,7 @@ class RLMOrchestrator:
         source = AsyncToolsModeEventSource(
             llm=self.llm,
             tool_registry=self.tool_registry,
+            logger=self.logger,
             stopping_policy=self.stopping_policy,
             system_prompt=self.system_prompt,
             summarizer=summarizer,
@@ -715,7 +717,7 @@ class RLMOrchestrator:
         tools: list[ToolDefinition] | None,
         /,
     ) -> int:
-        payload: dict[str, Any] = {"prompt": prompt}
+        payload: dict[str, object] = {"prompt": prompt}
         if tools:
             payload["tools"] = tools
         try:
@@ -751,7 +753,7 @@ class RLMOrchestrator:
                 return count
         return self._estimate_prompt_tokens_fallback(prompt, tools)
 
-    def _build_tool_summary_prompt(self, messages: list[dict[str, Any]], /) -> Prompt:
+    def _build_tool_summary_prompt(self, messages: list[dict[str, object]], /) -> Prompt:
         summary_instructions = (
             "Summarize the conversation history for a tool-calling agent. "
             "Preserve the user goal, constraints, tool calls (ids, names, args), "
@@ -766,11 +768,11 @@ class RLMOrchestrator:
 
     def _maybe_summarize_tool_conversation(
         self,
-        conversation: list[dict[str, Any]],
+        conversation: list[dict[str, object]],
         *,
         tool_definitions: list[ToolDefinition],
         usage_totals: dict[str, ModelUsageSummary],
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         context_window = self._context_window_tokens()
         if context_window is None:
             return conversation
@@ -798,11 +800,11 @@ class RLMOrchestrator:
         if not summary_text:
             return conversation
 
-        summary_message = {
+        summary_message: dict[str, object] = {
             "role": "assistant",
             "content": f"Summary of prior conversation:\n{summary_text}",
         }
-        rebuilt: list[dict[str, Any]] = []
+        rebuilt: list[dict[str, object]] = []
         if head_start:
             rebuilt.append(conversation[0])
         rebuilt.append(summary_message)
@@ -811,11 +813,11 @@ class RLMOrchestrator:
 
     async def _maybe_asummarize_tool_conversation(
         self,
-        conversation: list[dict[str, Any]],
+        conversation: list[dict[str, object]],
         *,
         tool_definitions: list[ToolDefinition],
         usage_totals: dict[str, ModelUsageSummary],
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         context_window = self._context_window_tokens()
         if context_window is None:
             return conversation
@@ -843,11 +845,11 @@ class RLMOrchestrator:
         if not summary_text:
             return conversation
 
-        summary_message = {
+        summary_message: dict[str, object] = {
             "role": "assistant",
             "content": f"Summary of prior conversation:\n{summary_text}",
         }
-        rebuilt: list[dict[str, Any]] = []
+        rebuilt: list[dict[str, object]] = []
         if head_start:
             rebuilt.append(conversation[0])
         rebuilt.append(summary_message)
