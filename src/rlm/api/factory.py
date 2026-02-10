@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 
     from rlm.application.config import AgentModeName, EnvironmentName, RLMConfig
     from rlm.application.use_cases.run_completion import EnvironmentFactory
-    from rlm.domain.agent_ports import ToolPort
-    from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
+    from rlm.domain.agent_ports import NestedCallPolicy, ToolPort
+    from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort, NestedCallHandlerPort
 
 
 def create_rlm(
@@ -37,6 +37,9 @@ def create_rlm(
     # Agent capability extensions
     tools: list[ToolPort | Callable[..., object]] | None = None,
     agent_mode: AgentModeName = "code",
+    # Extension protocols
+    nested_call_policy: NestedCallPolicy | None = None,
+    nested_call_handler: NestedCallHandlerPort | None = None,
 ) -> RLM:
     """
     Convenience factory for the public `RLM` facade.
@@ -55,6 +58,8 @@ def create_rlm(
         system_prompt: Custom system prompt override.
         tools: List of tools (ToolPort or callable) for function calling.
         agent_mode: Either "code" (default) or "tools" for function calling.
+        nested_call_policy: Custom nested call policy (optional).
+        nested_call_handler: Custom nested call handler (optional).
 
     Returns:
         Configured RLM facade instance.
@@ -74,6 +79,8 @@ def create_rlm(
         system_prompt=system_prompt,
         tools=tools,
         agent_mode=agent_mode,
+        nested_call_policy=nested_call_policy,
+        nested_call_handler=nested_call_handler,
     )
 
 
@@ -86,6 +93,8 @@ def create_rlm_from_config(
     logger_registry: LoggerRegistry | None = None,
     # Runtime tool injection (tools cannot be serialized to config)
     tools: list[ToolPort | Callable[..., object]] | None = None,
+    nested_call_policy: NestedCallPolicy | None = None,
+    nested_call_handler: NestedCallHandlerPort | None = None,
 ) -> RLM:
     """
     Construct an `RLM` from config.
@@ -98,6 +107,8 @@ def create_rlm_from_config(
         logger_registry: Registry for building loggers.
         tools: List of tools for function calling (runtime injection, since
             tools are Python callables and cannot be serialized to config).
+        nested_call_policy: Custom nested call policy (optional).
+        nested_call_handler: Custom nested call handler (optional).
 
     Returns:
         Configured RLM facade instance.
@@ -138,4 +149,6 @@ def create_rlm_from_config(
         logger=logger,
         tools=tools,
         agent_mode=config.agent_mode,
+        nested_call_policy=nested_call_policy,
+        nested_call_handler=nested_call_handler,
     )

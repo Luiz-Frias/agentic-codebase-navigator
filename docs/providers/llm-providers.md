@@ -1,4 +1,4 @@
-# LLM providers (Phase 4)
+# LLM providers
 
 This project keeps most **provider SDKs optional** so the default install remains lightweight and fully testable.
 

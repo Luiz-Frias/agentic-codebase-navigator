@@ -30,7 +30,7 @@ from rlm.infrastructure.execution_namespace_policy import ExecutionNamespacePoli
 from rlm.infrastructure.logging import warn_cleanup_failure
 
 if TYPE_CHECKING:
-    from rlm.domain.ports import BrokerPort
+    from rlm.domain.ports import BrokerPort, NestedCallHandlerPort
     from rlm.domain.types import ContextPayload, Prompt
 
 
@@ -72,6 +72,7 @@ _RESERVED_KEYS: set[str] = {
     "llm_query",
     "llm_query_batched",
     "RLM_CORRELATION_ID",
+    "RLM_DEPTH",
     "context",
 }
 
@@ -132,6 +133,7 @@ def _local_worker_main(
     session_dir: str,
     allowed_import_roots: set[str],
     correlation_id: str | None,
+    depth: int | None,
     execute_timeout_s: float,
 ) -> None:
     # Isolate child process group so we can kill all descendants on timeout.
@@ -164,16 +166,20 @@ def _local_worker_main(
             resp = conn.recv()
         return resp if isinstance(resp, dict) else {"type": "llm_query_result", "ok": False}
 
+    depth_default = depth if isinstance(depth, int) and depth >= 0 else None
+
     def _llm_query(
         prompt: Prompt,
         model: str | None = None,
         correlation_id: str | None = None,
+        depth: int | None = None,
     ) -> str:
         cid = (
             correlation_id if (correlation_id is None or isinstance(correlation_id, str)) else None
         )
         if correlation_id is not None and cid is None:
             return "Error: Invalid correlation_id"
+        depth_value = depth if isinstance(depth, int) and depth >= 0 else depth_default
 
         resp = _send_request(
             {
@@ -181,6 +187,7 @@ def _local_worker_main(
                 "prompt": prompt,
                 "model": model,
                 "correlation_id": cid,
+                "depth": depth_value,
             },
         )
         if resp.get("type") != "llm_query_result":
@@ -225,6 +232,7 @@ def _local_worker_main(
             "llm_query": _llm_query,
             "llm_query_batched": _llm_query_batched,
             "RLM_CORRELATION_ID": correlation_id,
+            "RLM_DEPTH": depth,
             "context": None,
         },
     )
@@ -308,6 +316,8 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         broker: BrokerPort | None = None,
         broker_address: tuple[str, int] | None = None,
         correlation_id: str | None = None,
+        nested_call_handler: NestedCallHandlerPort | None = None,
+        depth: int | None = None,
         policy: ExecutionNamespacePolicy | None = None,
         context_payload: ContextPayload | None = None,
         setup_code: str | None = None,
@@ -319,6 +329,8 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         self._broker = broker
         self._broker_address = broker_address
         self._correlation_id = correlation_id
+        self._nested_call_handler = nested_call_handler
+        self._depth = depth if isinstance(depth, int) and depth >= 0 else None
 
         if policy is None:
             if allowed_import_roots is None:
@@ -399,6 +411,9 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         except Exception as exc:  # nosec B110
             warn_cleanup_failure("LocalEnvironment.cleanup_tmp", exc)
         self._pending_llm_calls.clear()
+        # Release references to potentially large payloads.
+        self._context_payload = None
+        self._setup_code = None
 
     # ------------------------------------------------------------------
     # Helpers exposed to user code
@@ -456,6 +471,7 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
                 "session_dir": str(self._session_dir),
                 "allowed_import_roots": set(self._policy.allowed_import_roots),
                 "correlation_id": self._correlation_id,
+                "depth": self._depth,
                 "execute_timeout_s": self._execute_timeout_s,
             },
         )
@@ -576,6 +592,25 @@ class LocalEnvironmentAdapter(BaseEnvironmentAdapter):
         prompt = msg.get("prompt")
         model = msg.get("model")
         correlation_id = msg.get("correlation_id")
+        depth_raw = msg.get("depth")
+        depth = depth_raw if isinstance(depth_raw, int) and depth_raw >= 0 else 0
+        handler = self._nested_call_handler
+        if handler is not None and isinstance(prompt, str):
+            try:
+                response = handler.handle(
+                    prompt,
+                    depth=depth,
+                    correlation_id=correlation_id if isinstance(correlation_id, str) else None,
+                    model=model if isinstance(model, str) or model is None else None,
+                )
+            except Exception as exc:
+                return {"type": "llm_query_result", "ok": False, "error": str(exc)}
+            if response.handled:
+                return {
+                    "type": "llm_query_result",
+                    "ok": True,
+                    "response": response.response or "",
+                }
         try:
             cc = self._request_completion(
                 prompt=prompt,  # type: ignore[arg-type]

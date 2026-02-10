@@ -2,6 +2,81 @@
 
 This project follows a lightweight changelog format. The public API lives under the `rlm` import package.
 
+## 1.3.0
+
+Feature release introducing the **Relay Pipeline Library** — a type-safe, composable pipeline framework for orchestrating multi-step LLM workflows with conditional routing, parallel execution, and nested agent composition.
+
+### Features
+
+- **Relay Pipeline Library**: Full pipeline DSL for composing stateful LLM workflows (`src/rlm/domain/relay/`, `src/rlm/adapters/relay/`)
+  - `StateSpec[InputT, OutputT]` descriptors with operator overloading: `>>` (sequence), `|` (parallel), `.when()` (conditional)
+  - `Pipeline` builder for defining state graphs with typed edges, guards, and join groups
+  - `Baton[T]` immutable request-response envelope with validation, trace events, and metadata propagation
+  - Compile-time validation: type compatibility, reachability, terminal states, cycle detection via `validate_pipeline()`
+  - `allow_cycles(max_iterations=...)` decorator for intentional loops
+  - Full documentation in `docs/relay/`
+
+- **Pipeline Executors**: Sync and async orchestrators for pipeline execution
+  - `SyncPipelineExecutor` with `ThreadPoolExecutor` for parallel state execution
+  - `AsyncPipelineExecutor` with native `asyncio` concurrency
+  - Join aggregation: `"all"` (keyed dict) and `"race"` (first result) modes
+  - Guard evaluation, budget checks, and trace recording at each step
+
+- **State Executor Types**: Pluggable execution strategies for pipeline states
+  - `FunctionStateExecutor` — pure Python callables with optional retry
+  - `LLMStateExecutor` — LLM calls via `LLMPort` with request builder
+  - `AsyncStateExecutor` — async callables with event loop detection
+  - `RLMStateExecutor` — full agent orchestration as a pipeline state
+  - `SyncPipelineStateExecutor` / `AsyncPipelineStateExecutor` — nested pipeline composition
+
+- **Token Budget & Trace Tracking**: Execution observability across pipeline runs
+  - `TokenBudget` with max tokens, per-state estimates, and consumption tracking
+  - `PipelineTrace` immutable append-only audit log with state-level timing and status
+
+- **Pipeline Registry & LLM-Assisted Composition**: Dynamic pipeline discovery and chaining
+  - `PipelineTemplate` with name, description, types, factory, and tags
+  - `InMemoryPipelineRegistry` with substring and tag-based search
+  - `RootAgentComposer` — uses LLM to select and chain pipelines from registry
+
+- **Nested Agent Policy for Relay**: Agent-as-state integration
+  - `RelayNestedCallHandler` implements `NestedCallHandlerPort` + `NestedCallPolicy`
+  - Registry lookup, pipeline composition, synchronous execution with depth enforcement
+
+- **LLM Provider Resilience**: Exponential backoff retry across providers
+  - `RetryStrategy` with configurable max attempts, backoff, and exception types
+  - Applied to OpenAI, Azure OpenAI, LiteLLM, and Portkey adapters
+  - Enhanced debug logging and error handling across all providers
+
+- **Examples**: Three runnable examples demonstrating pipeline patterns
+  - `relay_conditional_routing.py` — if/else branching with guards
+  - `relay_parallel_join.py` — fan-out/fan-in with "all" join mode
+  - `relay_research_pipeline.py` — sequential multi-step chain with Pydantic models
+
+### Improvements
+
+- **Remote Environment Adapter**: New adapter with memory profiling support
+- **Enhanced Live LLM Testing**: `tests/live_llm.py` harness for opt-in provider smoke tests
+- **Tooling Optimization**: Improved mise venv and Python configuration
+- **Performance Thresholds**: Updated serialization benchmarks
+
+### Infrastructure
+
+- **New documentation files**:
+  - `docs/relay/overview.md` — Relay pipeline philosophy and quick start
+  - `docs/relay/composition.md` — DSL operators and composition patterns
+  - `docs/relay/states.md` — All executor types with usage examples
+  - `docs/relay/validation.md` — Pipeline validation rules and cycle handling
+- **SOPS Encrypted Secrets**: `.sops.yaml` + `.env.enc` for secure secrets management
+- **CI/CD Updates**: Bumped `actions/checkout` to v6, `actions/download-artifact` to v7, `astral-sh/setup-uv` to v7
+- **Dependency Updates**: `python-multipart` 0.0.21 → 0.0.22
+
+### Test Coverage
+
+- **11 new test files** spanning unit, integration, and e2e layers (~1,500 LOC)
+- Unit: baton, budget/trace, composition, executors, pipeline, state, validation
+- Integration: pipeline execution, composition chains, nested handler, nested policy (live)
+- E2E: full pipeline workflows, composition flows, nested policy integration
+
 ## 1.2.0-rc.1
 
 Major architecture release introducing declarative state machine orchestration, subprocess-based local execution, and optional Pydantic integration.

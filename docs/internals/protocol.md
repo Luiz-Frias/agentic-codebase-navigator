@@ -1,4 +1,4 @@
-# Wire protocol (Phase 3)
+# Wire protocol
 
 This document describes the **wire protocol** used to route `llm_query()` calls from execution environments back to the host broker.
 
@@ -100,12 +100,3 @@ Client-side:
 ## Docker proxy expectations
 
 The Docker execution environment uses an in-host HTTP proxy (legacy: `LLMProxyHandler`) so in-container code can call `llm_query()` without direct socket wiring.
-
-Phase 3 target behavior:
-
-- HTTP endpoints accept/forward:
-  - `prompt` / `prompts`
-  - `model` (optional)
-  - `correlation_id` (optional initially; required once env scripts are updated)
-- The proxy preserves batched ordering and surfaces errors deterministically.
-- The proxy records structured `ChatCompletion` objects so the final `ReplResult.llm_calls` includes nested LLM calls from code execution.

@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     )
     from rlm.domain.models import ChatCompletion
     from rlm.domain.models.llm_request import ToolChoice
-    from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort
+    from rlm.domain.ports import BrokerPort, LLMPort, LoggerPort, NestedCallHandlerPort
     from rlm.domain.services.rlm_orchestrator import AgentMode
     from rlm.domain.types import Prompt
 
@@ -87,6 +87,7 @@ class RLM:
         stopping_policy: StoppingPolicy | None = None,
         context_compressor: ContextCompressor | None = None,
         nested_call_policy: NestedCallPolicy | None = None,
+        nested_call_handler: NestedCallHandlerPort | None = None,
     ) -> None:
         self._llm = llm
         self._other_llms = list(other_llms or [])
@@ -105,6 +106,7 @@ class RLM:
         self._stopping_policy = stopping_policy
         self._context_compressor = context_compressor
         self._nested_call_policy = nested_call_policy
+        self._nested_call_handler = nested_call_handler
 
         # Build tool registry if tools provided
         if tools:
@@ -155,6 +157,7 @@ class RLM:
                 stopping_policy=self._stopping_policy,
                 context_compressor=self._context_compressor,
                 nested_call_policy=self._nested_call_policy,
+                nested_call_handler=self._nested_call_handler,
             )
         else:
             deps = RunCompletionDeps(
@@ -168,6 +171,7 @@ class RLM:
                 stopping_policy=self._stopping_policy,
                 context_compressor=self._context_compressor,
                 nested_call_policy=self._nested_call_policy,
+                nested_call_handler=self._nested_call_handler,
             )
         req = RunCompletionRequest(
             prompt=prompt,
@@ -205,6 +209,7 @@ class RLM:
                 stopping_policy=self._stopping_policy,
                 context_compressor=self._context_compressor,
                 nested_call_policy=self._nested_call_policy,
+                nested_call_handler=self._nested_call_handler,
             )
         else:
             deps = RunCompletionDeps(
@@ -218,6 +223,7 @@ class RLM:
                 stopping_policy=self._stopping_policy,
                 context_compressor=self._context_compressor,
                 nested_call_policy=self._nested_call_policy,
+                nested_call_handler=self._nested_call_handler,
             )
         req = RunCompletionRequest(
             prompt=prompt,

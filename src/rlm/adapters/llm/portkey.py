@@ -20,6 +20,9 @@ from rlm.adapters.llm.provider_base import (
 )
 from rlm.domain.errors import LLMError
 from rlm.domain.models import ChatCompletion, LLMRequest, UsageSummary
+from rlm.infrastructure.logging import get_infrastructure_logger
+
+logger = get_infrastructure_logger()
 
 
 def _require_portkey() -> Any:
@@ -83,6 +86,11 @@ class PortkeyAdapter(BaseLLMAdapter):
         try:
             resp = client.chat.completions.create(model=model, messages=messages, **api_kwargs)
         except Exception as e:
+            logger.debug(
+                "Portkey request failed: {exc_type}: {exc}",
+                exc_type=type(e).__name__,
+                exc=str(e),
+            )
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
         end = time.perf_counter()
 
@@ -93,10 +101,15 @@ class PortkeyAdapter(BaseLLMAdapter):
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:
+        except Exception as e:
             if tool_calls:
                 text = ""
             else:
+                logger.debug(
+                    "Portkey response invalid: {exc_type}: {exc}",
+                    exc_type=type(e).__name__,
+                    exc=str(e),
+                )
                 raise LLMError("Portkey response invalid") from None
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)
@@ -136,6 +149,11 @@ class PortkeyAdapter(BaseLLMAdapter):
                 **api_kwargs,
             )
         except Exception as e:
+            logger.debug(
+                "Portkey async request failed: {exc_type}: {exc}",
+                exc_type=type(e).__name__,
+                exc=str(e),
+            )
             raise LLMError(safe_provider_error_message("Portkey", e)) from None
         end = time.perf_counter()
 
@@ -146,10 +164,15 @@ class PortkeyAdapter(BaseLLMAdapter):
         # Extract text response (may be empty if tool_calls present)
         try:
             text = extract_text_from_chat_response(resp)
-        except Exception:
+        except Exception as e:
             if tool_calls:
                 text = ""
             else:
+                logger.debug(
+                    "Portkey async response invalid: {exc_type}: {exc}",
+                    exc_type=type(e).__name__,
+                    exc=str(e),
+                )
                 raise LLMError("Portkey response invalid") from None
 
         in_tokens, out_tokens = extract_openai_style_token_usage(resp)

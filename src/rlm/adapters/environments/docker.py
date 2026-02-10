@@ -24,7 +24,7 @@ from rlm.domain.policies.timeouts import (
 )
 
 if TYPE_CHECKING:
-    from rlm.domain.ports import BrokerPort
+    from rlm.domain.ports import BrokerPort, NestedCallHandlerPort
     from rlm.domain.types import ContextPayload, Prompt
 from rlm.infrastructure.comms.protocol import (
     request_completion,
@@ -189,6 +189,21 @@ class DockerLLMProxyHandler(BaseHTTPRequestHandler):
         prompt: Prompt = cast("Prompt", body["prompt"])
         model = body.get("model")
         correlation_id = body.get("correlation_id")
+        depth_raw = body.get("depth")
+        depth = depth_raw if isinstance(depth_raw, int) and depth_raw >= 0 else 0
+        handler = getattr(self, "nested_call_handler", None)
+        if handler is not None and isinstance(prompt, str):
+            try:
+                response = handler.handle(
+                    prompt,
+                    depth=depth,
+                    correlation_id=correlation_id if isinstance(correlation_id, str) else None,
+                    model=model if isinstance(model, str) or model is None else None,
+                )
+            except Exception as exc:
+                return {"error": str(exc)}
+            if response.handled:
+                return {"response": response.response or ""}
 
         try:
             broker = getattr(self, "broker", None)
@@ -303,6 +318,11 @@ from urllib import request as _urlreq
 PROXY = "http://{proxy_host}:{proxy_port}"
 STATE = "/workspace/state.pkl"
 RUN_CORRELATION_ID = os.environ.get("RLM_CORRELATION_ID") or str(uuid.uuid4())
+RUN_DEPTH_RAW = os.environ.get("RLM_DEPTH")
+try:
+    RUN_DEPTH = int(RUN_DEPTH_RAW) if RUN_DEPTH_RAW is not None else 0
+except Exception:
+    RUN_DEPTH = 0
 
 def _post_json(url, payload, timeout_s):
     data = json.dumps(payload).encode("utf-8")
@@ -310,12 +330,13 @@ def _post_json(url, payload, timeout_s):
     with _urlreq.urlopen(req, timeout=timeout_s) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
-def llm_query(prompt, model=None, correlation_id=None):
+def llm_query(prompt, model=None, correlation_id=None, depth=None):
     try:
         cid = correlation_id or RUN_CORRELATION_ID
+        depth_value = depth if isinstance(depth, int) and depth >= 0 else RUN_DEPTH
         d = _post_json(
             f"{{PROXY}}/llm_query",
-            {{"prompt": prompt, "model": model, "correlation_id": cid}},
+            {{"prompt": prompt, "model": model, "correlation_id": cid, "depth": depth_value}},
             {proxy_timeout_s},
         )
         # Important: preserve a legitimate empty-string response. Don't rely on
@@ -428,6 +449,8 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         broker: BrokerPort | None = None,
         broker_address: tuple[str, int] | None = None,
         correlation_id: str | None = None,
+        nested_call_handler: NestedCallHandlerPort | None = None,
+        depth: int | None = None,
         context_payload: ContextPayload | None = None,
         setup_code: str | None = None,
         subprocess_timeout_s: float = DEFAULT_DOCKER_SUBPROCESS_TIMEOUT_S,
@@ -440,6 +463,8 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         self._broker = broker
         self._broker_address = broker_address
         self._correlation_id = correlation_id
+        self._nested_call_handler = nested_call_handler
+        self._depth = depth if isinstance(depth, int) and depth >= 0 else None
         self._subprocess_timeout_s = subprocess_timeout_s
         self._proxy_http_timeout_s = proxy_http_timeout_s
         self._stop_grace_s = stop_grace_s
@@ -527,6 +552,8 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
         cmd: list[str] = ["docker", "exec", "--workdir", "/workspace"]
         if self._correlation_id is not None:
             cmd.extend(["--env", f"RLM_CORRELATION_ID={self._correlation_id}"])
+        if self._depth is not None:
+            cmd.extend(["--env", f"RLM_DEPTH={self._depth}"])
         cmd.extend([container_id, "python", "-c", script])
 
         try:
@@ -680,6 +707,7 @@ class DockerEnvironmentAdapter(BaseEnvironmentAdapter):
                 "pending_calls": self._pending_calls,
                 "lock": self._calls_lock,
                 "timeout_s": self._proxy_http_timeout_s,
+                "nested_call_handler": self._nested_call_handler,
             },
         )
         # When using host network mode, bind to all interfaces so the container

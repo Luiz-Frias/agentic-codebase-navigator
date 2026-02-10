@@ -20,7 +20,7 @@ while iteration < max_iterations:
 ```
 
 This approach had several issues:
-- **C901 complexity violations** — Cyclomatic complexity exceeded linter thresholds
+- **Complexity violations** — Cyclomatic complexity exceeded linter thresholds
 - **Implicit control flow** — Difficult to trace which conditions led to which outcomes
 - **Hard to extend** — Adding new states or transitions required modifying deeply nested code
 - **Testing challenges** — Unit testing specific transitions required mocking entire loops
@@ -125,33 +125,33 @@ def event_source(state: S, ctx: C) -> E | None:
 
 ### State Flow Diagram
 
-```
+```bash
                     ┌──────────────────────────────────────────────┐
                     │                                              │
-                    │  ┌──────┐  DepthExceeded  ┌─────────────┐   │
-                    │  │ INIT │ ───────────────▶│ SHALLOW_CALL│   │
-                    │  └──────┘                 └─────────────┘   │
-                    │      │                           │          │
-                    │      │ LLMResponse               │ LLMResp  │
-                    │      ▼                           │          │
-                    │  ┌──────────┐                    │          │
-                    │  │ PROMPTING│◀───────────────────┼──────────┤
-                    │  └──────────┘                    │          │
-                    │      │       │                   │          │
-                    │      │       │ FinalAnswer       │          │
-                    │      │       ▼                   ▼          │
-                    │      │  ┌────────────────────────────┐      │
-                    │      │  │            DONE            │      │
-                    │      │  └────────────────────────────┘      │
-                    │      │                   ▲                  │
-                    │      │ CodeBlocks        │ MaxIterations    │
-                    │      ▼                   │ or FinalAnswer   │
-                    │  ┌──────────┐            │                  │
-                    │  │EXECUTING │────────────┘                  │
-                    │  └──────────┘                               │
-                    │      │  ▲                                   │
-                    │      │  │ CodeExecuted                      │
-                    │      └──┘                                   │
+                    │  ┌──────┐  DepthExceeded  ┌─────────────┐    │
+                    │  │ INIT │ ───────────────▶│ SHALLOW_CALL│    │
+                    │  └──────┘                 └─────────────┘    │
+                    │      │                           │           │
+                    │      │ LLMResponse               │ LLMResp   │
+                    │      ▼                           │           │
+                    │  ┌──────────┐                    │           │
+                    │  │ PROMPTING│◀───────────────────┤           │
+                    │  └──────────┘                    │           │
+                    │      │    │                      │           │
+                    │      │    │ FinalAnswer          │           │
+                    │      │    ▼                      ▼           │
+                    │      │  ┌────────────────────────────┐       │
+                    │      │  │            DONE            │       │
+                    │      │  └────────────────────────────┘       │
+                    │      │                   ▲                   │
+                    │      │ CodeBlocks        │ MaxIterations     │
+                    │      ▼                   │ or FinalAnswer    │
+                    │  ┌──────────┐            │                   │
+                    │  │EXECUTING │────────────┘                   │
+                    │  └──────────┘                                │
+                    │      │  ▲                                    │
+                    │      │  │ CodeExecuted                       │
+                    │      └──┘                                    │
                     │                                              │
                     └──────────────────────────────────────────────┘
 ```
@@ -209,29 +209,29 @@ if final_ctx.final_answer:
 
 ### State Flow Diagram
 
-```
+```bash
                     ┌─────────────────────────────────────────┐
                     │                                         │
-                    │  ┌──────┐  LLMResponse  ┌──────────┐   │
-                    │  │ INIT │ ─────────────▶│ PROMPTING│   │
-                    │  └──────┘               └──────────┘   │
-                    │                             │    │     │
-                    │                   ToolCalls │    │     │
-                    │                             ▼    │     │
-                    │                     ┌────────────┐│    │
-                    │                     │ EXECUTING  ││    │
-                    │                     │   TOOLS    ││    │
-                    │                     └────────────┘│    │
-                    │                       │    │      │    │
-                    │            ToolsExec  │    │      │    │
-                    │            ┌──────────┘    │      │    │
-                    │            │               │      │    │
-                    │            ▼               │      │    │
-                    │        ┌───────┐           │NoTool│    │
-                    │        │       │ PolicyStop│Calls │    │
-                    │        │ DONE  │◀──────────┴──────┘    │
-                    │        │       │                       │
-                    │        └───────┘                       │
+                    │  ┌──────┐  LLMResponse  ┌──────────┐    │
+                    │  │ INIT │ ─────────────▶│ PROMPTING│    │
+                    │  └──────┘               └──────────┘    │
+                    │                             │     │     │
+                    │                   ToolCalls │     │     │
+                    │                             ▼     │     │
+                    │                     ┌────────────┐│     │
+                    │                     │ EXECUTING  ││     │
+                    │                     │   TOOLS    ││     │
+                    │                     └────────────┘│     │
+                    │                       │    │      │     │
+                    │            ToolsExec  │    │      │     │
+                    │            ┌──────────┘    │      │     │
+                    │            │               │      │     │
+                    │            ▼               │      │     │
+                    │        ┌───────┐           │NoTool│     │
+                    │        │       │ PolicyStop│Calls │     │
+                    │        │ DONE  │◀──────────┴──────┘     │
+                    │        │       │                        │
+                    │        └───────┘                        │
                     │                                         │
                     └─────────────────────────────────────────┘
 ```

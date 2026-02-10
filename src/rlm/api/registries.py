@@ -4,7 +4,7 @@ import math
 import subprocess  # nosec B404 - required for Docker daemon health check
 from dataclasses import dataclass
 from shutil import which
-from typing import TYPE_CHECKING, Protocol, TypeGuard
+from typing import TYPE_CHECKING, Protocol, TypeGuard, cast
 
 from rlm.adapters.tools import InMemoryToolRegistry
 from rlm.domain.models.result import Err
@@ -21,7 +21,13 @@ if TYPE_CHECKING:
 
     from rlm.application.config import EnvironmentConfig, LLMConfig, LoggerConfig
     from rlm.application.use_cases.run_completion import EnvironmentFactory
-    from rlm.domain.ports import BrokerPort, EnvironmentPort, LLMPort, LoggerPort
+    from rlm.domain.ports import (
+        BrokerPort,
+        EnvironmentPort,
+        LLMPort,
+        LoggerPort,
+        NestedCallHandlerPort,
+    )
 
 
 # =============================================================================
@@ -282,6 +288,7 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
             broker: BrokerPort | None,
             broker_address: tuple[str, int],
             correlation_id: str | None,
+            nested_call_handler: NestedCallHandlerPort | None,
             /,
         ) -> EnvironmentPort:
             match env_name:
@@ -292,6 +299,7 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
                         broker=broker,
                         broker_address=broker_address,
                         correlation_id=correlation_id,
+                        nested_call_handler=nested_call_handler,
                         **env_kwargs,  # type: ignore[arg-type]  # validated by _validate_environment_kwargs
                     )
                 case "docker":
@@ -303,6 +311,7 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
                         broker=broker,
                         broker_address=broker_address,
                         correlation_id=correlation_id,
+                        nested_call_handler=nested_call_handler,
                         **env_kwargs,  # type: ignore[arg-type]  # validated by _validate_environment_kwargs
                     )
                 case "modal":
@@ -328,16 +337,25 @@ class DefaultEnvironmentRegistry(EnvironmentRegistry):
                 """
                 match args:
                     case ((str() as host, int() as port),):
-                        return _build(None, (host, port), None)
+                        return _build(None, (host, port), None, None)
                     case (broker, (str() as host, int() as port)):
-                        return _build(broker, (host, port), None)  # type: ignore[arg-type]
+                        return _build(broker, (host, port), None, None)  # type: ignore[arg-type]
                     case (broker, (str() as host, int() as port), cid) if cid is None or isinstance(
                         cid,
                         str,
                     ):
-                        return _build(broker, (host, port), cid)  # type: ignore[arg-type]
+                        return _build(broker, (host, port), cid, None)  # type: ignore[arg-type]
                     case ((str() as host, int() as port), cid) if isinstance(cid, str):
-                        return _build(None, (host, port), cid)
+                        return _build(None, (host, port), cid, None)
+                    case (broker, (str() as host, int() as port), cid, handler) if (
+                        cid is None or isinstance(cid, str)
+                    ):
+                        return _build(  # type: ignore[arg-type]
+                            cast("BrokerPort | None", broker),
+                            (host, port),
+                            cid,
+                            cast("NestedCallHandlerPort | None", handler),
+                        )
                     case _:
                         raise TypeError(
                             "EnvironmentFactory.build() expects (broker_address) or (broker, broker_address[, correlation_id])",

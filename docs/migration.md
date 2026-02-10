@@ -155,7 +155,7 @@ The orchestrator's internal control flow was rewritten from nested `while True` 
 
 **None for most users**. This is an internal refactor that:
 
-- Reduces cyclomatic complexity (C901 violations eliminated)
+- Reduces cyclomatic complexity
 - Makes control flow explicit and testable
 - Enables future extensions (custom states, transitions)
 
